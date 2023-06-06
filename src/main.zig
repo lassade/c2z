@@ -89,6 +89,40 @@ fn resolveReturnType(decl: json.Value, self_ptr: *[]const u8, allocator: mem.All
     return try transpileType(type_iter.first(), allocator);
 }
 
+fn transpileTypeArgs(in: []const u8, i: *usize, out: *std.ArrayList(u8)) anyerror!void {
+    var j = i.*;
+    while (i.* < in.len) {
+        const ch = in[i.*];
+        if (ch == '<') {
+            try out.*.appendSlice(in[j..i.*]);
+            try out.*.append('(');
+            i.* += 1;
+
+            try transpileTypeArgs(in, i, out);
+            j = i.*;
+            continue;
+        } else if (ch == '>') {
+            const name = try transpileType(in[j..i.*], out.*.allocator);
+            defer out.*.allocator.free(name);
+            try out.*.appendSlice(name);
+            try out.*.append(')');
+            i.* += 1;
+            return;
+        } else if (ch == ',') {
+            if (i.* > j) {
+                const name = try transpileType(in[j..i.*], out.*.allocator);
+                defer out.*.allocator.free(name);
+                try out.*.appendSlice(name);
+                try out.*.append(',');
+                j = i.* + 1;
+            } else {
+                j = i.*;
+            }
+        }
+        i.* += 1;
+    }
+}
+
 // i think I really need a
 fn transpileType(in: []const u8, allocator: mem.Allocator) ![]u8 {
     var name = mem.trim(u8, in, " ");
@@ -111,24 +145,29 @@ fn transpileType(in: []const u8, allocator: mem.Allocator) ![]u8 {
         defer allocator.free(inner_name);
         return try fmt.allocPrint(allocator, "{s}{s}", .{ name[len..], inner_name });
     } else if (ch == ')') {
-        // todo: handle pointers to functions
-        name = "*anyopaque";
-        // } else if (ch == '>') {
-        //     // todo: handle generic types
-        //     const i = mem.indexOf(u8, name, "<").?;
-        //     var buf = try std.ArrayList(u8).init(allocator);
+        if (mem.indexOf(u8, name, "(*)")) |ptr| {
+            const raw = mem.trim(u8, name[(ptr + "(*)".len)..], " ");
+            var i: usize = 0;
+            var args = std.ArrayList(u8).init(allocator);
+            defer args.deinit();
+            try transpileTypeArgs(raw[1 .. raw.len - 1], &i, &args);
 
-        //     var iter = mem.split(u8, name, ",");
-        //     mem.copyForwards(u8, buf, name);
-        //     // prep for zig generics
-        //     for (0..buf.len) |i| {
-        //         if (buf[i] == '<') {
-        //             buf[i] = '(';
-        //         } else if (buf[i] == '>') {
-        //             buf[i] = ')';
-        //         }
-        //     }
-        //     return buf;
+            const ret = try transpileType(name[0..ptr], allocator);
+            defer allocator.free(ret);
+
+            return try fmt.allocPrint(allocator, "*const fn({s}) {s}", .{ args.items, ret });
+        } else {
+            log.err("??? {s}", .{name});
+            name = "*anyopaque";
+        }
+    } else if (ch == '>') {
+        var i: usize = 0;
+        var args = std.ArrayList(u8).init(allocator);
+        defer args.deinit();
+        try transpileTypeArgs(in, &i, &args);
+        var buf = try allocator.alloc(u8, args.items.len);
+        mem.copyForwards(u8, buf, args.items);
+        return buf;
     } else {
         // common primitives
         if (primitives.get(name)) |pname| {
@@ -349,6 +388,12 @@ pub fn main() !void {
                 log.err("unhandled {s}", .{kind});
             }
         }
+
+        // var index: usize = 0;
+        // var a = std.ArrayList(u8).init(allocator);
+        // defer a.deinit();
+        // try transpileTypeArgs("a<b>, c<d, e>", &index, &a);
+        // log.info("{s}", .{a.items});
 
         // var a = smol.Vec2{ .x = 1, .y = 0 };
         // const b = smol.Vec2{ .x = 1, .y = 1 };
