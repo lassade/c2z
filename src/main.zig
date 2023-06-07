@@ -32,7 +32,8 @@ const fmt = std.fmt;
 const primitives = std.ComptimeStringMap([]const u8, .{
     .{ "bool", "bool" },
 
-    .{ "char", "i8" },
+    .{ "char", "u8" },
+    .{ "signed char", "i8" },
     .{ "unsigned char", "u8" },
     .{ "short", "c_short" },
     .{ "unsigned short", "c_ushort" },
@@ -356,10 +357,16 @@ pub fn main() !void {
                     continue;
                 }
 
-                // todo: figure out the it's type
-                try writer.print("pub const {s} = extern enum {{\n", .{name});
+                // handling this crap is throuble some ...
+                if (decl.get("fixedUnderlyingType")) |type_object| {
+                    var enum_type = try transpileType(type_object.object.get("qualType").?.string, allocator);
+                    defer allocator.free(enum_type);
+                    try writer.print("pub const {s} = enum({s}) {{\n", .{ name, enum_type });
+                } else {
+                    // todo: still need to figure out the it's type
+                    try writer.print("pub const {s} = enum {{\n", .{name});
+                }
 
-                //log.info("enum {s}", .{name});
                 for (inner.?.array.items) |inner_val| {
                     if (inner_val.object.get("isImplicit")) |is_implicit| {
                         if (is_implicit.bool) continue;
@@ -384,6 +391,27 @@ pub fn main() !void {
                 }
 
                 try writer.print("}};\n\n", .{});
+            } else if (mem.eql(u8, kind, "TypedefDecl")) {
+                const name = decl.get("name").?.string;
+                const type_alised = try resolveType(val, allocator);
+                defer allocator.free(type_alised);
+                try writer.print("pub const {s} = {s};\n", .{ name, type_alised });
+            } else if (mem.eql(u8, kind, "NamespaceDecl")) {
+                const name = decl.get("name").?.string;
+                for (decl.get("inner").?.array.items) |inner_val| {
+                    var inner_decl = inner_val.object;
+
+                    // ignore implicit declarations, because they are basically garbage right now
+                    if (inner_decl.get("isImplicit")) |is_implicit| {
+                        if (is_implicit.bool) continue;
+                    }
+
+                    const inner_kind = inner_val.object.get("kind").?.string;
+                    //const inner_name = inner_val.object.get("name").?.string;
+                    log.err("unhandled {s} in namespace {s}", .{ inner_kind, name });
+
+                    // these inner types needed to be handled recursivelly
+                }
             } else {
                 log.err("unhandled {s}", .{kind});
             }
