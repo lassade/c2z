@@ -1,3 +1,5 @@
+pub const backends = @import("imgui_backends.zig");
+
 pub const ImGuiCol = c_int;
 pub const ImGuiCond = c_int;
 pub const ImGuiDataType = c_int;

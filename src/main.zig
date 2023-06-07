@@ -141,6 +141,14 @@ const Transpiler = struct {
             const kind_tag = inner_item.object.get("kind").?.string;
             if (mem.eql(u8, kind_tag, "FieldDecl")) {
                 const field_name = inner_item.object.get("name").?.string;
+
+                if (inner_item.object.get("isInvalid")) |invalid| {
+                    if (invalid.bool) {
+                        log.err("invalid field {s}.{s}", .{ name, field_name });
+                        continue;
+                    }
+                }
+
                 var field_type = try self.transpileType(typeOf(inner_item).?);
                 defer self.allocator.free(field_type);
                 try self.out.print("    {s}: {s},\n", .{ field_name, field_type });
@@ -149,6 +157,13 @@ const Transpiler = struct {
                 if (operators.get(method_name)) |_| {
                     // todo: handle operators
                     continue;
+                }
+
+                if (inner_item.object.get("isInvalid")) |invalid| {
+                    if (invalid.bool) {
+                        log.err("invalid method {s}.{s}", .{ name, method_name });
+                        continue;
+                    }
                 }
 
                 var qself: []const u8 = undefined;
@@ -202,7 +217,7 @@ const Transpiler = struct {
         }
 
         // todo: use "fixedUnderlyingType" or figure out the type by himself
-        try self.out.print("pub const {s} = enum {{\n", .{name});
+        try self.out.print("pub const {s} = enum(c_int) {{\n", .{name});
 
         for (inner.?.array.items) |inner_item| {
             if (inner_item.object.get("isImplicit")) |is_implicit| {
@@ -272,6 +287,13 @@ const Transpiler = struct {
         if (mem.startsWith(u8, function_name, "operator ")) {
             // todo: handle global operators
             return;
+        }
+
+        if (value.*.object.get("isInvalid")) |invalid| {
+            if (invalid.bool) {
+                log.err("invalid function {s}", .{function_name});
+                return;
+            }
         }
 
         const function_mangled_name = value.*.object.get("mangledName").?.string;
@@ -460,6 +482,7 @@ const Transpiler = struct {
 
         const ch = ttname[ttname.len - 1];
         if (ch == '*' or ch == '&') {
+            // todo: aliased pointers do not support null, right?
             // cursed c++ pointer or alised pointer
             var buf: [7]u8 = undefined;
             var template = try fmt.bufPrint(&buf, "const {c}", .{ch});
@@ -474,10 +497,10 @@ const Transpiler = struct {
                 // mutable pointer case
                 var inner_name = try self.transpileType(ttname[0..(ttname.len - 1)]);
                 defer self.allocator.free(inner_name);
-                return try fmt.allocPrint(self.allocator, "*{s}", .{inner_name});
+                return try fmt.allocPrint(self.allocator, "?*{s}", .{inner_name});
             }
             defer self.allocator.free(n);
-            return try fmt.allocPrint(self.allocator, "*const {s}", .{n});
+            return try fmt.allocPrint(self.allocator, "?*const {s}", .{n});
         } else if (ch == ']') {
             // fixed sized array
             const len = mem.lastIndexOf(u8, ttname, "[").?;
@@ -557,18 +580,6 @@ const Transpiler = struct {
         }
     }
 
-    // fn transpileOptionalEnumValue(self: *Transpiler, decl: json.Value, allocator: Allocator) !?[]const u8 {
-    //     _ = self;
-    //     _ = allocator;
-    //     if (decl.object.get("inner")) |inner_val| {
-    //         _ = inner_val;
-    //         //log.err("unparsed enum value {s}", .{inner_val.object.get("kind").?.string});
-    //     }
-    //
-    //     // nothing to transpile
-    //     return null;
-    // }
-
     pub fn deinit(self: *Transpiler) void {
         _ = self;
     }
@@ -639,7 +650,6 @@ pub fn main() !void {
         var file = try std.fs.cwd().createFile(path.items, .{});
         defer file.close();
 
-        log.debug("bytes: {}", .{buffer.items.len});
         try file.writeAll(buffer.items);
     }
 }
