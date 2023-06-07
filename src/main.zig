@@ -69,16 +69,11 @@ const operators = std.ComptimeStringMap([]const u8, .{
 
 const Transpiler = struct {
     allocator: Allocator,
-
-    buffer: std.ArrayList(u8),
     out: std.ArrayList(u8).Writer,
 
-    pub fn init(allocator: Allocator) Transpiler {
-        // segfauts GPA with `zig build run -- .\libs\imgui\imgui.h`
-        var buffer = std.ArrayList(u8).init(allocator);
+    pub fn init(buffer: *std.ArrayList(u8), allocator: Allocator) Transpiler {
         return Transpiler{
             .allocator = allocator,
-            .buffer = buffer,
             .out = buffer.writer(),
         };
     }
@@ -203,7 +198,6 @@ const Transpiler = struct {
                             // no args
                         }
 
-                        // firgure out return type
                         try declw.print(") {s};\n", .{method_tret});
                     },
                 }
@@ -221,62 +215,48 @@ const Transpiler = struct {
     }
 
     fn visitEnumDecl(self: *Transpiler, value: *const json.Value) !void {
-        _ = value;
-        _ = self;
+        const name = value.*.object.get("name").?.string;
+        var inner = value.*.object.get("inner");
+        if (inner == null) {
+            log.warn("typedef {s};", .{name});
+            return;
+        }
 
-        // // enum
-        // const name = decl.get("name").?.string;
+        // todo: use "fixedUnderlyingType" or figure out the type by himself
+        try self.out.print("pub const {s} = enum {{\n", .{name});
 
-        // var inner = decl.get("inner");
-        // if (inner == null) {
-        //     log.warn("typedef {s};", .{name});
-        //     continue;
-        // }
+        for (inner.?.array.items) |inner_item| {
+            if (inner_item.object.get("isImplicit")) |is_implicit| {
+                if (is_implicit.bool) continue;
+            }
 
-        // // handling this crap is throuble some ...
-        // if (decl.get("fixedUnderlyingType")) |type_object| {
-        //     var enum_type = try transpileType(type_object.object.get("qualType").?.string, allocator);
-        //     defer allocator.free(enum_type);
-        //     try writer.print("pub const {s} = enum({s}) {{\n", .{ name, enum_type });
-        // } else {
-        //     // todo: still need to figure out the it's type
-        //     try writer.print("pub const {s} = enum {{\n", .{name});
-        // }
+            var variant_name = inner_item.object.get("name").?.string;
+            if (mem.startsWith(u8, variant_name, name)) {
+                variant_name = variant_name[name.len..];
+            }
 
-        // for (inner.?.array.items) |inner_val| {
-        //     if (inner_val.object.get("isImplicit")) |is_implicit| {
-        //         if (is_implicit.bool) continue;
-        //     }
-        //     const inner_kind = inner_val.object.get("kind").?.string;
+            const variant_tag = inner_item.object.get("kind").?.string;
+            if (mem.eql(u8, variant_tag, "EnumConstantDecl")) {
+                try self.out.print("    {s}", .{variant_name});
+                // todo: figure out enum constexp
+                // if (try transpileOptionalEnumValue(inner_val, allocator)) |enum_value| {
+                //     try self.out.print("{s}", .{enum_value});
+                //     allocator.free(enum_value);
+                // }
+                try self.out.print(",\n", .{});
+            } else {
+                log.err("unhandled {s} in enum {s}.{s}", .{ variant_tag, name, variant_name });
+            }
+        }
 
-        //     var inner_name = inner_val.object.get("name").?.string;
-        //     if (mem.startsWith(u8, inner_name, name)) {
-        //         inner_name = inner_name[name.len..];
-        //     }
-
-        //     if (mem.eql(u8, inner_kind, "EnumConstantDecl")) {
-        //         try writer.print("    {s}", .{inner_name});
-        //         if (try transpileOptionalEnumValue(inner_val, allocator)) |enum_value| {
-        //             try writer.print("{s}", .{enum_value});
-        //             allocator.free(enum_value);
-        //         }
-        //         try writer.print(",\n", .{});
-        //     } else {
-        //         log.err("unhandled {s} in enum {s}.{s}", .{ inner_kind, name, inner_name });
-        //     }
-        // }
-
-        // try writer.print("}};\n\n", .{});
+        try self.out.print("}};\n\n", .{});
     }
 
     fn visitTypedefDecl(self: *Transpiler, value: *const json.Value) !void {
-        _ = value;
-        _ = self;
-
-        // const name = decl.get("name").?.string;
-        // const type_alised = try resolveType(val, allocator);
-        // defer allocator.free(type_alised);
-        // try writer.print("pub const {s} = {s};\n", .{ name, type_alised });
+        const name = value.*.object.get("name").?.string;
+        const type_alised = try self.transpileType(typeOf(value.*).?);
+        defer self.allocator.free(type_alised);
+        try self.out.print("pub const {s} = {s};\n", .{ name, type_alised });
     }
 
     fn visitNamespaceDecl(self: *Transpiler, value: *const json.Value) !void {
@@ -288,19 +268,64 @@ const Transpiler = struct {
             return;
         }
 
-        // namespace merging
+        // todo: namespace merging
         try self.out.print("pub const {s} = struct {{\n", .{namespace_name});
+
+        // const pw = self.out;
+        // var buffer = std.ArrayList(u8).init(u8);
+        // self.out = buffer.writer();
 
         for (inner.?.array.items) |inner_item| {
             try self.visit(&inner_item);
         }
 
+        //self.out = pw;
+
         try self.out.print("}};\n\n", .{});
     }
 
     fn visitFunctionDecl(self: *Transpiler, value: *const json.Value) !void {
-        _ = value;
-        _ = self;
+        var qself: []const u8 = undefined;
+        const method_tret = try self.transpileType(returnTypeOf(value.*, &qself).?);
+        defer self.allocator.free(method_tret);
+
+        var function_name = value.*.object.get("name").?.string;
+        if (mem.startsWith(u8, function_name, "operator ")) {
+            // todo: handle global operators
+            return;
+        }
+
+        const function_mangled_name = value.*.object.get("mangledName").?.string;
+        try self.out.print("    pub const {s} = {s};\n", .{ function_name, function_mangled_name });
+        try self.out.print("    extern fn {s}(", .{function_mangled_name});
+
+        // function args
+        if (value.*.object.get("inner")) |args| {
+            var comma = false;
+            for (args.array.items) |arg| {
+                const arg_tag = arg.object.get("kind").?.string;
+                if (mem.eql(u8, arg_tag, "ParmVarDecl")) {
+                    if (comma) {
+                        try self.out.print(", ", .{});
+                    }
+                    comma = true;
+
+                    var arg_type = try self.transpileType(typeOf(arg).?);
+                    defer self.allocator.free(arg_type);
+                    if (arg.object.get("name")) |arg_name| {
+                        try self.out.print("{s}: {s}", .{ arg_name.string, arg_type });
+                    } else {
+                        try self.out.print("_: {s}", .{arg_type});
+                    }
+                } else {
+                    log.err("unhandled arg kind {s} in function {s}", .{ arg_tag, function_name });
+                }
+            }
+        } else {
+            // no args
+        }
+
+        try self.out.print(") {s};\n", .{method_tret});
     }
 
     fn typeOf(value: json.Value) ?[]const u8 {
@@ -436,7 +461,7 @@ const Transpiler = struct {
     // }
 
     pub fn deinit(self: *Transpiler) void {
-        self.buffer.deinit();
+        _ = self;
     }
 };
 
@@ -492,7 +517,9 @@ pub fn main() !void {
         var tree = try parser.parse(process.stdout);
         defer tree.deinit();
 
-        var transpiler = Transpiler.init(allocator);
+        var buffer = std.ArrayList(u8).init(allocator);
+        defer buffer.deinit();
+        var transpiler = Transpiler.init(&buffer, allocator);
         defer transpiler.deinit();
         try transpiler.visit(&tree.root);
 
@@ -503,6 +530,7 @@ pub fn main() !void {
         var file = try std.fs.cwd().createFile(path.items, .{});
         defer file.close();
 
-        try file.writeAll(transpiler.buffer.items);
+        log.debug("bytes: {}", .{buffer.items.len});
+        try file.writeAll(buffer.items);
     }
 }
