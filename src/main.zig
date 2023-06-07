@@ -89,6 +89,7 @@ const Transpiler = struct {
             TypedefDecl,
             NamespaceDecl,
             FunctionDecl,
+            //ClassTemplateDecl,
         };
         const kind_branch = std.ComptimeStringMap(Kind, .{
             .{ "TranslationUnitDecl", .TranslationUnitDecl },
@@ -97,6 +98,7 @@ const Transpiler = struct {
             .{ "TypedefDecl", .TypedefDecl },
             .{ "NamespaceDecl", .NamespaceDecl },
             .{ "FunctionDecl", .FunctionDecl },
+            //.{ "ClassTemplateDecl", .ClassTemplateDecl },
         });
         var kind_tag = value.*.object.get("kind").?.string;
         if (kind_branch.get(kind_tag)) |kind| {
@@ -107,6 +109,7 @@ const Transpiler = struct {
                 .TypedefDecl => try self.visitTypedefDecl(value),
                 .NamespaceDecl => try self.visitNamespaceDecl(value),
                 .FunctionDecl => try self.visitFunctionDecl(value),
+                //.ClassTemplateDecl => try self.visitClassTemplateDecl(value),
             }
         } else {
             log.err("unhandled {s}", .{kind_tag});
@@ -328,6 +331,19 @@ const Transpiler = struct {
         try self.out.print(") {s};\n", .{method_tret});
     }
 
+    fn visitClassTemplateDecl(self: *Transpiler, value: *const json.Value) !void {
+        _ = value;
+        _ = self;
+
+        // todo: only supports fields
+
+        // const Generic = fn(comptime T: type, ...){
+        //    return struct {
+        //
+        //    };
+        //};
+    }
+
     fn typeOf(value: json.Value) ?[]const u8 {
         if (value.object.get("type")) |tval| {
             if (tval.object.get("qualType")) |qval| {
@@ -357,18 +373,32 @@ const Transpiler = struct {
     // self described pointers to functions: void (*)(Object*, int)
     pub fn transpileType(self: *Transpiler, tname: []const u8) ![]u8 {
         var ttname = mem.trim(u8, tname, " ");
+
+        // remove struct from C style definition
+        if (mem.startsWith(u8, ttname, "struct ")) {
+            ttname = ttname["struct ".len..];
+        }
+
         const ch = ttname[ttname.len - 1];
         if (ch == '*' or ch == '&') {
-            // pointer or alised pointer
-            if (mem.startsWith(u8, ttname, "const ")) {
-                var inner_name = try self.transpileType(ttname[("const ".len)..(ttname.len - 1)]);
-                defer self.allocator.free(inner_name);
-                return try fmt.allocPrint(self.allocator, "*const {s}", .{inner_name});
+            // cursed c++ pointer or alised pointer
+            var buf: [7]u8 = undefined;
+            var template = try fmt.bufPrint(&buf, "const {c}", .{ch});
+            var n: []u8 = undefined;
+            if (mem.endsWith(u8, ttname, template)) {
+                // const pointer of pointers
+                n = try self.transpileType(ttname[0..(ttname.len - template.len)]);
+            } else if (mem.startsWith(u8, ttname, "const ")) {
+                // const pointer
+                n = try self.transpileType(ttname[("const ".len)..(ttname.len - 1)]);
             } else {
+                // mutable pointer case
                 var inner_name = try self.transpileType(ttname[0..(ttname.len - 1)]);
                 defer self.allocator.free(inner_name);
                 return try fmt.allocPrint(self.allocator, "*{s}", .{inner_name});
             }
+            defer self.allocator.free(n);
+            return try fmt.allocPrint(self.allocator, "*const {s}", .{n});
         } else if (ch == ']') {
             // fixed sized array
             const len = mem.lastIndexOf(u8, ttname, "[").?;
