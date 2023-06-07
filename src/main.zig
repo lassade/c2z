@@ -82,35 +82,21 @@ const Transpiler = struct {
         if (value.*.object.get("isImplicit")) |implicit| {
             if (implicit.bool) return;
         }
-        const Kind = enum {
-            TranslationUnitDecl,
-            CXXRecordDecl,
-            EnumDecl,
-            TypedefDecl,
-            NamespaceDecl,
-            FunctionDecl,
-            //ClassTemplateDecl,
-        };
-        const kind_branch = std.ComptimeStringMap(Kind, .{
-            .{ "TranslationUnitDecl", .TranslationUnitDecl },
-            .{ "CXXRecordDecl", .CXXRecordDecl },
-            .{ "EnumDecl", .EnumDecl },
-            .{ "TypedefDecl", .TypedefDecl },
-            .{ "NamespaceDecl", .NamespaceDecl },
-            .{ "FunctionDecl", .FunctionDecl },
-            //.{ "ClassTemplateDecl", .ClassTemplateDecl },
-        });
         var kind_tag = value.*.object.get("kind").?.string;
-        if (kind_branch.get(kind_tag)) |kind| {
-            switch (kind) {
-                .TranslationUnitDecl => try self.visitTranslationUnitDecl(value),
-                .CXXRecordDecl => try self.visitCXXRecordDecl(value),
-                .EnumDecl => try self.visitEnumDecl(value),
-                .TypedefDecl => try self.visitTypedefDecl(value),
-                .NamespaceDecl => try self.visitNamespaceDecl(value),
-                .FunctionDecl => try self.visitFunctionDecl(value),
-                //.ClassTemplateDecl => try self.visitClassTemplateDecl(value),
-            }
+        if (mem.eql(u8, kind_tag, "TranslationUnitDecl")) {
+            try self.visitTranslationUnitDecl(value);
+        } else if (mem.eql(u8, kind_tag, "CXXRecordDecl")) {
+            try self.visitCXXRecordDecl(value);
+        } else if (mem.eql(u8, kind_tag, "EnumDecl")) {
+            try self.visitEnumDecl(value);
+        } else if (mem.eql(u8, kind_tag, "TypedefDecl")) {
+            try self.visitTypedefDecl(value);
+        } else if (mem.eql(u8, kind_tag, "NamespaceDecl")) {
+            try self.visitNamespaceDecl(value);
+        } else if (mem.eql(u8, kind_tag, "FunctionDecl")) {
+            try self.visitFunctionDecl(value);
+        } else if (mem.eql(u8, kind_tag, "ClassTemplateDecl")) {
+            try self.visitClassTemplateDecl(value);
         } else {
             log.err("unhandled {s}", .{kind_tag});
         }
@@ -138,6 +124,7 @@ const Transpiler = struct {
         var inner = value.*.object.get("inner");
         if (inner == null) {
             log.warn("typedef {s};", .{name});
+            // try self.out.print("pub const {s} = anyopaque;\n", .{name});
             return;
         }
 
@@ -147,63 +134,52 @@ const Transpiler = struct {
         var declw = declbuf.writer();
         defer declbuf.deinit();
 
-        const Kind = enum {
-            FieldDecl,
-            CXXMethodDecl,
-        };
-        const kind_branch = std.ComptimeStringMap(Kind, .{
-            .{ "FieldDecl", .FieldDecl },
-            .{ "CXXMethodDecl", .CXXMethodDecl },
-        });
-
         for (inner.?.array.items) |inner_item| {
             if (inner_item.object.get("isImplicit")) |implicit| {
                 if (implicit.bool) continue;
             }
             const kind_tag = inner_item.object.get("kind").?.string;
-            if (kind_branch.get(kind_tag)) |kind| {
-                switch (kind) {
-                    .FieldDecl => {
-                        const field_name = inner_item.object.get("name").?.string;
-                        var field_type = try self.transpileType(typeOf(inner_item).?);
-                        defer self.allocator.free(field_type);
-                        try self.out.print("    {s}: {s},\n", .{ field_name, field_type });
-                    },
-                    .CXXMethodDecl => {
-                        var method_name = inner_item.object.get("name").?.string;
-                        if (operators.get(method_name)) |_| {
-                            // todo: handle operators
-                            continue;
-                        }
-
-                        var qself: []const u8 = undefined;
-                        const method_tret = try self.transpileType(returnTypeOf(inner_item, &qself).?);
-                        defer self.allocator.free(method_tret);
-
-                        const method_mangled_name = inner_item.object.get("mangledName").?.string;
-                        try declw.print("    pub const {s} = {s};\n", .{ method_name, method_mangled_name });
-                        try declw.print("    extern fn {s}(self: *{s} {s}", .{ method_mangled_name, qself, name });
-
-                        // method args
-                        if (inner_item.object.get("inner")) |args| {
-                            for (args.array.items) |arg| {
-                                const arg_tag = arg.object.get("kind").?.string;
-                                if (mem.eql(u8, arg_tag, "ParmVarDecl")) {
-                                    var arg_type = try self.transpileType(typeOf(arg).?);
-                                    defer self.allocator.free(arg_type);
-                                    const arg_name = arg.object.get("name").?.string;
-                                    try declw.print(", {s}: {s}", .{ arg_name, arg_type });
-                                } else {
-                                    log.err("unhandled arg kind {s} in method {s}.{s}", .{ arg_tag, name, method_name });
-                                }
-                            }
-                        } else {
-                            // no args
-                        }
-
-                        try declw.print(") {s};\n", .{method_tret});
-                    },
+            if (mem.eql(u8, kind_tag, "FieldDecl")) {
+                const field_name = inner_item.object.get("name").?.string;
+                var field_type = try self.transpileType(typeOf(inner_item).?);
+                defer self.allocator.free(field_type);
+                try self.out.print("    {s}: {s},\n", .{ field_name, field_type });
+            } else if (mem.eql(u8, kind_tag, "CXXMethodDecl")) {
+                var method_name = inner_item.object.get("name").?.string;
+                if (operators.get(method_name)) |_| {
+                    // todo: handle operators
+                    continue;
                 }
+
+                var qself: []const u8 = undefined;
+                const method_tret = try self.transpileType(returnTypeOf(inner_item, &qself).?);
+                defer self.allocator.free(method_tret);
+
+                const method_mangled_name = inner_item.object.get("mangledName").?.string;
+                try declw.print("    pub const {s} = {s};\n", .{ method_name, method_mangled_name });
+                try declw.print("    extern fn {s}(self: *{s} {s}", .{ method_mangled_name, qself, name });
+
+                // method args
+                if (inner_item.object.get("inner")) |args| {
+                    for (args.array.items) |arg| {
+                        const arg_tag = arg.object.get("kind").?.string;
+                        if (mem.eql(u8, arg_tag, "ParmVarDecl")) {
+                            var arg_type = try self.transpileType(typeOf(arg).?);
+                            defer self.allocator.free(arg_type);
+                            const arg_name = arg.object.get("name").?.string;
+                            try declw.print(", {s}: {s}", .{ arg_name, arg_type });
+                        } else {
+                            log.err("unhandled arg kind {s} in method {s}.{s}", .{ arg_tag, name, method_name });
+                        }
+                    }
+                } else {
+                    // no args
+                }
+
+                try declw.print(") {s};\n", .{method_tret});
+            } else if (mem.eql(u8, kind_tag, "CXXRecordDecl")) {
+                // nested stucts
+                try self.visitCXXRecordDecl(&inner_item);
             } else {
                 log.err("unhandled {s} in struct {s}", .{ kind_tag, name });
             }
@@ -302,9 +278,16 @@ const Transpiler = struct {
         try self.out.print("    pub const {s} = {s};\n", .{ function_name, function_mangled_name });
         try self.out.print("    extern fn {s}(", .{function_mangled_name});
 
+        const VaMode = enum {
+            none,
+            ppp,
+            va_list,
+        };
+        var va_mode = VaMode.none;
+
         // function args
+        var comma = false;
         if (value.*.object.get("inner")) |args| {
-            var comma = false;
             for (args.array.items) |arg| {
                 const arg_tag = arg.object.get("kind").?.string;
                 if (mem.eql(u8, arg_tag, "ParmVarDecl")) {
@@ -313,12 +296,27 @@ const Transpiler = struct {
                     }
                     comma = true;
 
-                    var arg_type = try self.transpileType(typeOf(arg).?);
+                    const v_type = arg.object.get("type").?;
+                    var v_qual = v_type.object.get("qualType").?.string;
+
+                    if (mem.eql(u8, v_qual, "va_list")) {
+                        va_mode = .va_list;
+                        if (v_type.object.get("desugaredQualType")) |v_desurgared| {
+                            v_qual = v_desurgared.string;
+                        }
+                    }
+
+                    var arg_type = try self.transpileType(v_qual);
                     defer self.allocator.free(arg_type);
                     if (arg.object.get("name")) |arg_name| {
                         try self.out.print("{s}: {s}", .{ arg_name.string, arg_type });
                     } else {
                         try self.out.print("_: {s}", .{arg_type});
+                    }
+                } else if (mem.eql(u8, arg_tag, "FormatAttr")) {
+                    // varidatic function with the same properties as printf
+                    if (va_mode == .none) {
+                        va_mode = .ppp;
                     }
                 } else {
                     log.err("unhandled arg kind {s} in function {s}", .{ arg_tag, function_name });
@@ -328,20 +326,101 @@ const Transpiler = struct {
             // no args
         }
 
-        try self.out.print(") {s};\n", .{method_tret});
+        switch (va_mode) {
+            .none, .va_list => try self.out.print(") {s};\n", .{method_tret}),
+            .ppp => {
+                if (comma) {
+                    try self.out.print(", ...) callconv(.C) {s};\n", .{method_tret});
+                } else {
+                    try self.out.print("...) callconv(.C) {s};\n", .{method_tret});
+                }
+            },
+        }
     }
 
     fn visitClassTemplateDecl(self: *Transpiler, value: *const json.Value) !void {
-        _ = value;
-        _ = self;
+        var name: []const u8 = undefined;
+        if (value.*.object.get("name")) |v| {
+            name = v.string;
+        } else {
+            log.err("unnamed \"ClassTemplateDecl\"", .{});
+            return;
+        }
 
-        // todo: only supports fields
+        var inner = value.*.object.get("inner");
+        if (inner == null) {
+            log.warn("typedef {s};", .{name});
+            return;
+        }
 
-        // const Generic = fn(comptime T: type, ...){
+        // pub fn Generic(comptime T: type, ...) {
         //    return struct {
-        //
         //    };
-        //};
+        // };
+
+        try self.out.print("pub fn {s}(", .{name});
+
+        // template param
+        var tp_comma = false;
+        for (inner.?.array.items) |item| {
+            const item_kind = item.object.get("kind").?.string;
+            if (mem.eql(u8, item_kind, "TemplateTypeParmDecl")) {
+                var v_item_name = item.object.get("name");
+                if (v_item_name == null) {
+                    log.err("unnamed template param in {s}", .{name});
+                    continue;
+                }
+
+                var v_item_tag = item.object.get("tagUsed");
+                if (v_item_tag == null) {
+                    log.err("untaged template param in {s}", .{name});
+                    continue;
+                }
+
+                const item_name = v_item_name.?.string;
+                const item_tag = v_item_tag.?.string;
+
+                if (tp_comma) {
+                    try self.out.print(", ", .{});
+                }
+                tp_comma = true;
+
+                if (mem.eql(u8, item_tag, "typename")) {
+                    try self.out.print("comptime {s}: type", .{item_name});
+                } else {
+                    log.err("unknown template param \"{s} {s}\" in {s}", .{ item_tag, item_name, name });
+                }
+            } else if (mem.eql(u8, item_kind, "CXXRecordDecl")) {
+                // template definition
+                try self.out.print(") type {{\n    return extern struct {{\n", .{});
+
+                var inner_inner = item.object.get("inner");
+                if (inner_inner == null) {
+                    log.warn("blank {s} template", .{name});
+                    return;
+                }
+
+                for (inner_inner.?.array.items) |inner_item| {
+                    const inner_item_kind = inner_item.object.get("kind").?.string;
+                    if (mem.eql(u8, inner_item_kind, "CXXRecordDecl")) {
+                        // class or struct
+                    } else if (mem.eql(u8, inner_item_kind, "FieldDecl")) {
+                        const field_name = inner_item.object.get("name").?.string;
+                        var field_type = try self.transpileType(typeOf(inner_item).?);
+                        defer self.allocator.free(field_type);
+                        try self.out.print("        {s}: {s},\n", .{ field_name, field_type });
+                    } else {
+                        log.err("unhandled {s} in template {s}", .{ inner_item_kind, name });
+                    }
+                }
+
+                try self.out.print("    }};\n}}\n\n", .{});
+
+                return;
+            }
+        }
+
+        // todo: error ?!?!
     }
 
     fn typeOf(value: json.Value) ?[]const u8 {
