@@ -1,22 +1,19 @@
-// typedef struct {
-//     float x;
-//     float y;
-// } cVec2;
-
-// cVec2 vec2_add(cVec2 a, cVec2 b);
-// cVec2 vec2_sub(cVec2 a, cVec2 b);
-
-struct Vec2 {
+typedef struct {
     float x;
     float y;
-    Vec2 add(Vec2 other);
-    Vec2 sub(Vec2 other);
+} Vec2;
+
+struct f32x2 {
+    float x;
+    float y;
+    f32x2 add(f32x2 other);
 };
 
-// template<typename T>
-// struct Vec2T {
-//     T x;
-//     T y;
-//     Vec2T<T> add(Vec2T<T> other);
-//     Vec2T<T> sub(Vec2T<T> other);
-// };
+typedef f32x2 F32x2;
+
+template<typename T>
+struct Tx2 {
+    T x;
+    T y;
+    inline Tx2<T> add(Tx2<T> other) {  Tx2<T> v; v.x = x + other.x; v.y = y + other.y; return v; }
+};

@@ -221,6 +221,17 @@ const Transpiler = struct {
             }
         }
 
+        // todo: deal with inlined methods
+        // var inlined = false;
+        // if (value.*.object.get("inline")) |v_inline| {
+        //     inlined = v_inline.bool;
+        //     if (inlined) {
+        //         //
+        //         log.err("unhandled inlined method `{?s}::{s}`", .{ parent, method_name });
+        //         return;
+        //     }
+        // }
+
         const method_tret = try self.transpileType(sig.ret_type);
         defer self.allocator.free(method_tret);
 
