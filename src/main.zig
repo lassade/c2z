@@ -189,8 +189,11 @@ const Transpiler = struct {
                         if (mem.eql(u8, arg_tag, "ParmVarDecl")) {
                             var arg_type = try self.transpileType(typeOf(arg).?);
                             defer self.allocator.free(arg_type);
-                            const arg_name = arg.object.get("name").?.string;
-                            try declw.print(", {s}: {s}", .{ arg_name, arg_type });
+                            if (arg.object.get("name")) |v_arg_name| {
+                                try declw.print(", {s}: {s}", .{ v_arg_name.string, arg_type });
+                            } else {
+                                try declw.print(", _: {s}", .{arg_type});
+                            }
                         } else {
                             log.err("unhandled arg kind {s} in method {s}.{s}", .{ arg_tag, name, method_name });
                         }
@@ -225,7 +228,8 @@ const Transpiler = struct {
         if (value.*.object.get("name")) |v| {
             name = v.string;
         } else {
-            log.err("unnamed \"EnumDecl\"", .{});
+            // todo: yes you can have valid unanmed enum declarations
+            log.err("unhandled unnamed \"EnumDecl\"", .{});
             return;
         }
 
@@ -243,13 +247,12 @@ const Transpiler = struct {
                 if (is_implicit.bool) continue;
             }
 
-            var variant_name = inner_item.object.get("name").?.string;
-            if (mem.startsWith(u8, variant_name, name)) {
-                variant_name = variant_name[name.len..];
-            }
-
             const variant_tag = inner_item.object.get("kind").?.string;
             if (mem.eql(u8, variant_tag, "EnumConstantDecl")) {
+                var variant_name = inner_item.object.get("name").?.string;
+                if (mem.startsWith(u8, variant_name, name)) {
+                    variant_name = variant_name[name.len..];
+                }
                 try self.out.print("    {s}", .{variant_name});
                 // todo: figure out enum constexp
                 // if (try transpileOptionalEnumValue(inner_val, allocator)) |enum_value| {
@@ -258,7 +261,7 @@ const Transpiler = struct {
                 // }
                 try self.out.print(",\n", .{});
             } else {
-                log.err("unhandled {s} in enum {s}.{s}", .{ variant_tag, name, variant_name });
+                log.err("unhandled {s} in enum {s}", .{ variant_tag, name });
             }
         }
 
@@ -281,16 +284,24 @@ const Transpiler = struct {
             return;
         }
 
-        const namespace_name = value.*.object.get("name").?.string;
+        const v_name = value.*.object.get("name");
 
         var inner = value.*.object.get("inner");
         if (inner == null) {
-            log.warn("empty namespace {s}", .{namespace_name});
+            if (v_name) |name| {
+                log.warn("empty namespace {s}", .{name.string});
+            } else {
+                // super cursed edge case
+                log.warn("empty and unamed namespace", .{});
+            }
             return;
         }
 
         // todo: namespace merging
-        try self.out.print("pub const {s} = struct {{\n", .{namespace_name});
+
+        if (v_name) |name| {
+            try self.out.print("pub const {s} = struct {{\n", .{name.string});
+        }
 
         // const pw = self.out;
         // var buffer = std.ArrayList(u8).init(u8);
@@ -302,7 +313,9 @@ const Transpiler = struct {
 
         //self.out = pw;
 
-        try self.out.print("}};\n\n", .{});
+        if (v_name) |_| {
+            try self.out.print("}};\n\n", .{});
+        }
     }
 
     fn visitFunctionDecl(self: *Transpiler, value: *const json.Value) !void {
@@ -445,6 +458,7 @@ const Transpiler = struct {
                 if (mem.eql(u8, item_tag, "typename")) {
                     try self.out.print("comptime {s}: type", .{item_name});
                 } else {
+                    // todo: use anytype to handle untyped template params
                     log.err("unknown template param \"{s} {s}\" in {s}", .{ item_tag, item_name, name });
                 }
             } else if (mem.eql(u8, item_kind, "CXXRecordDecl")) {
