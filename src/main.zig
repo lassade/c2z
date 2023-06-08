@@ -67,9 +67,14 @@ const operators = std.ComptimeStringMap([]const u8, .{
     .{ "operator[]", "get" },
 });
 
+// todo: "inline" methods and functions
 const Transpiler = struct {
     allocator: Allocator,
     out: std.ArrayList(u8).Writer,
+
+    // options
+    transpile_includes: bool = false,
+    zigify: bool = false,
 
     pub fn init(buffer: *std.ArrayList(u8), allocator: Allocator) Transpiler {
         return Transpiler{
@@ -112,6 +117,9 @@ const Transpiler = struct {
 
     fn visitCXXRecordDecl(self: *Transpiler, value: *const json.Value) !void {
         // c++ class or struct
+        if (self.shouldSkip(value)) {
+            return;
+        }
 
         var name: []const u8 = undefined;
         if (value.*.object.get("name")) |v| {
@@ -209,7 +217,18 @@ const Transpiler = struct {
     }
 
     fn visitEnumDecl(self: *Transpiler, value: *const json.Value) !void {
-        const name = value.*.object.get("name").?.string;
+        if (self.shouldSkip(value)) {
+            return;
+        }
+
+        var name: []const u8 = undefined;
+        if (value.*.object.get("name")) |v| {
+            name = v.string;
+        } else {
+            log.err("unnamed \"EnumDecl\"", .{});
+            return;
+        }
+
         var inner = value.*.object.get("inner");
         if (inner == null) {
             log.warn("typedef {s};", .{name});
@@ -247,6 +266,10 @@ const Transpiler = struct {
     }
 
     fn visitTypedefDecl(self: *Transpiler, value: *const json.Value) !void {
+        if (self.shouldSkip(value)) {
+            return;
+        }
+
         const name = value.*.object.get("name").?.string;
         const type_alised = try self.transpileType(typeOf(value.*).?);
         defer self.allocator.free(type_alised);
@@ -254,6 +277,10 @@ const Transpiler = struct {
     }
 
     fn visitNamespaceDecl(self: *Transpiler, value: *const json.Value) !void {
+        if (self.shouldSkip(value)) {
+            return;
+        }
+
         const namespace_name = value.*.object.get("name").?.string;
 
         var inner = value.*.object.get("inner");
@@ -279,6 +306,10 @@ const Transpiler = struct {
     }
 
     fn visitFunctionDecl(self: *Transpiler, value: *const json.Value) !void {
+        if (self.shouldSkip(value)) {
+            return;
+        }
+
         var qself: []const u8 = undefined;
         const method_tret = try self.transpileType(returnTypeOf(value.*, &qself).?);
         defer self.allocator.free(method_tret);
@@ -297,8 +328,8 @@ const Transpiler = struct {
         }
 
         const function_mangled_name = value.*.object.get("mangledName").?.string;
-        try self.out.print("    pub const {s} = {s};\n", .{ function_name, function_mangled_name });
-        try self.out.print("    extern fn {s}(", .{function_mangled_name});
+        try self.out.print("pub const {s} = {s};\n", .{ function_name, function_mangled_name });
+        try self.out.print("extern fn {s}(", .{function_mangled_name});
 
         const VaMode = enum {
             none,
@@ -361,6 +392,10 @@ const Transpiler = struct {
     }
 
     fn visitClassTemplateDecl(self: *Transpiler, value: *const json.Value) !void {
+        if (self.shouldSkip(value)) {
+            return;
+        }
+
         var name: []const u8 = undefined;
         if (value.*.object.get("name")) |v| {
             name = v.string;
@@ -467,12 +502,21 @@ const Transpiler = struct {
         return null;
     }
 
+    inline fn shouldSkip(self: *Transpiler, value: *const json.Value) bool {
+        if (!self.transpile_includes) {
+            if (value.*.object.get("loc")) |loc| {
+                return loc.object.get("includedFrom") != null;
+            }
+        }
+        return false;
+    }
+
     // primitives
     // pointers and aliased pointers
     // fixed sized arrays
     // templated types
     // self described pointers to functions: void (*)(Object*, int)
-    pub fn transpileType(self: *Transpiler, tname: []const u8) ![]u8 {
+    fn transpileType(self: *Transpiler, tname: []const u8) ![]u8 {
         var ttname = mem.trim(u8, tname, " ");
 
         // remove struct from C style definition
@@ -578,6 +622,10 @@ const Transpiler = struct {
             }
             index.* += 1;
         }
+
+        if (buffer.items.len > 0 and buffer.items[buffer.items.len - 1] == ',') {
+            _ = buffer.pop();
+        }
     }
 
     pub fn deinit(self: *Transpiler) void {
@@ -591,8 +639,11 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const params = comptime clap.parseParamsComptime(
-        \\-h, --help             Display this help and exit.
-        \\--std <str>            C++ version, default c++11.
+        \\-h, --help                   Display this help and exit.
+        \\--std <str>                  C++ version, default c++11.
+        \\--cargs <str>                Clang args.
+        \\--transpile-includes         By default includes are excluded from final output, use this options to include them.
+        //\\--zigify                     Aliases in the zig code style.
         \\<str>...
         \\
     );
@@ -621,9 +672,24 @@ pub fn main() !void {
         log.info("binding \"{s}\"", .{input_file});
 
         // zig cc -x c++ -std=c++11 -Xclang -ast-dump=json {input_file}
+        var args = std.ArrayList([]const u8).init(allocator);
+        defer args.deinit();
+
+        try args.append("zig");
+        try args.append("cc");
+        try args.append("-x");
+        try args.append("c++");
+        try args.append(c_ver);
+        try args.append("-Xclang");
+        try args.append("-ast-dump=json");
+        if (res.args.cargs) |cargs| {
+            try args.append(cargs);
+        }
+        try args.append(input_file);
+
         var process = try std.ChildProcess.exec(.{
             .allocator = allocator,
-            .argv = &.{ "zig", "cc", "-x", "c++", c_ver, "-Xclang", "-ast-dump=json", input_file },
+            .argv = args.items,
             .max_output_bytes = 512 * 1024 * 1024,
         });
         defer {
@@ -640,6 +706,8 @@ pub fn main() !void {
         var buffer = std.ArrayList(u8).init(allocator);
         defer buffer.deinit();
         var transpiler = Transpiler.init(&buffer, allocator);
+        transpiler.transpile_includes = res.args.@"transpile-includes" != 0;
+        //transpiler.zigify = res.args.zigify != 0;
         defer transpiler.deinit();
         try transpiler.visit(&tree.root);
 
