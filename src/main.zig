@@ -341,7 +341,6 @@ const Transpiler = struct {
         }
 
         const function_mangled_name = value.*.object.get("mangledName").?.string;
-        try self.out.print("pub const {s} = {s};\n", .{ function_name, function_mangled_name });
         try self.out.print("extern fn {s}(", .{function_mangled_name});
 
         const VaMode = enum {
@@ -396,12 +395,13 @@ const Transpiler = struct {
             .none, .va_list => try self.out.print(") {s};\n", .{method_tret}),
             .ppp => {
                 if (comma) {
-                    try self.out.print(", ...) callconv(.C) {s};\n", .{method_tret});
-                } else {
-                    try self.out.print("...) callconv(.C) {s};\n", .{method_tret});
+                    try self.out.print(",", .{});
                 }
+                try self.out.print("...) callconv(.C) {s};\n", .{method_tret});
             },
         }
+
+        try self.out.print("pub const {s} = {s};\n", .{ function_name, function_mangled_name });
     }
 
     fn visitClassTemplateDecl(self: *Transpiler, value: *const json.Value) !void {
