@@ -3,16 +3,20 @@ struct vec2_t {
     float y;
 };
 
-class shape_t {
+struct shape_t {
 public:
     vec2_t aabb;
     virtual float area() const = 0;
 };
 
-class circle_t: public shape_t {
+struct circle_t: public shape_t {
 public:
-    virtual float area() const = 0;
+    circle_t(float radius);
+    virtual float area() const;
 
 private:
     float radius;
 };
+
+circle_t circle(float radius);
+float area(const shape_t &shape);

@@ -37,7 +37,7 @@ pub fn build(b: *std.Build) void {
     // smol_lib.addIncludePath("./use_cases/common_cases/include");
     // //smol_lib.linkLibC();
     // smol_lib.linkLibCpp();
-    // smol_lib.addCSourceFile("./use_cases/common_cases/include/c002_cpp_structs.cpp", cflags);
+    // smol_lib.addCSourceFile("./use_cases/common_cases/include/c005_inheritance.cpp", cflags);
     // exe.linkLibrary(smol_lib);
 
     // This declares intent for the executable to be installed into the
