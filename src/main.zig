@@ -712,10 +712,10 @@ const Transpiler = struct {
                 // mutable pointer case
                 var inner_name = try self.transpileType(ttname[0..(ttname.len - 1)]);
                 defer self.allocator.free(inner_name);
-                return try fmt.allocPrint(self.allocator, "?*{s}", .{inner_name});
+                return try fmt.allocPrint(self.allocator, "[*c]{s}", .{inner_name});
             }
             defer self.allocator.free(n);
-            return try fmt.allocPrint(self.allocator, "?*const {s}", .{n});
+            return try fmt.allocPrint(self.allocator, "[*c]const {s}", .{n});
         } else if (ch == ']') {
             // fixed sized array
             const len = mem.lastIndexOf(u8, ttname, "[").?;
@@ -733,7 +733,7 @@ const Transpiler = struct {
                 const tret = try self.transpileType(ttname[0..ptr]);
                 defer self.allocator.free(tret);
 
-                return try fmt.allocPrint(self.allocator, "*const fn({s}) {s}", .{ targs.items, tret });
+                return try fmt.allocPrint(self.allocator, "[*c]const fn({s}) {s}", .{ targs.items, tret });
             } else {
                 log.err("unknow type `{s}`, falling back to `*anyopaque`", .{ttname});
                 ttname = "*anyopaque";
