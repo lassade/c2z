@@ -8,28 +8,6 @@ const mem = std.mem;
 const fmt = std.fmt;
 const Allocator = mem.Allocator;
 
-// const smol = @import("smol.zig");
-
-// prim_defaults = {
-//     'int':          '0',
-//     'bool':         'false',
-//     'int8_t':       '0',
-//     'uint8_t':      '0',
-//     'int16_t':      '0',
-//     'uint16_t':     '0',
-//     'int32_t':      '0',
-//     'uint32_t':     '0',
-//     'int64_t':      '0',
-//     'uint64_t':     '0',
-//     'float':        '0.0',
-//     'double':       '0.0',
-//     'uintptr_t':    '0',
-//     'intptr_t':     '0',
-//     'size_t':       '0'
-// }
-
-// https://github.com/floooh/sokol/blob/master/bindgen/gen_ir.py
-
 // const Color = union {
 //     mU32: u32,
 //     _: struct {
@@ -38,46 +16,13 @@ const Allocator = mem.Allocator;
 //         b: u8,
 //         a: u8,
 //     },
-
+//
 //     const sWhite = Color{ .mU32 = 0xFF_FF_FF_FF };
-
+//
 //     fn rg(self: *Color) [2]u8 {
 //         return .{ self._.r, self._.g };
 //     }
 // };
-
-const primitives = std.ComptimeStringMap([]const u8, .{
-    .{ "bool", "bool" },
-
-    .{ "char", "u8" },
-    .{ "signed char", "i8" },
-    .{ "unsigned char", "u8" },
-    .{ "short", "c_short" },
-    .{ "unsigned short", "c_ushort" },
-    .{ "int", "c_int" },
-    .{ "unsigned int", "c_uint" },
-    .{ "long", "c_long" },
-    .{ "unsigned long", "c_ulong" },
-    .{ "long long", "c_longlong" },
-    .{ "unsigned long long", "c_ulonglong" },
-
-    .{ "float", "f32" },
-    .{ "double", "f64" },
-
-    .{ "int8_t", "i8" },
-    .{ "uint8_t", "u8" },
-    .{ "int16_t", "i16" },
-    .{ "uint16_t", "u16" },
-    .{ "int32_t", "i32" },
-    .{ "uint32_t", "u32" },
-    .{ "int64_t", "i64" },
-    .{ "uint64_t", "u64" },
-    .{ "uintptr_t", "usize" },
-    .{ "intptr_t", "isize" },
-    .{ "size_t", "usize" },
-
-    .{ "void *", "*anyopaque" },
-});
 
 const operators = std.ComptimeStringMap([]const u8, .{
     .{ "operator[]", "get" },
@@ -107,16 +52,6 @@ const Transpiler = struct {
             .visited = 0,
             .nodes = std.AutoHashMap(u64, json.Value).init(allocator),
         };
-    }
-
-    pub fn nodeCount(value: *const json.Value) usize {
-        var count: usize = 1;
-        if (value.object.get("inner")) |inner| {
-            for (inner.array.items) |v_item| {
-                count += nodeCount(&v_item);
-            }
-        }
-        return count;
     }
 
     pub fn visit(self: *Transpiler, value: *const json.Value) anyerror!void {
@@ -248,6 +183,8 @@ const Transpiler = struct {
             } else if (mem.eql(u8, kind_tag, "CXXRecordDecl")) {
                 // nested stucts
                 try self.visitCXXRecordDecl(&inner_item);
+            } else if (mem.eql(u8, kind_tag, "VarDecl")) {
+                try self.visitVarDecl(&inner_item);
             } else {
                 self.visited -= 1;
                 log.err("unhandled `{s}` in struct `{s}`", .{ kind_tag, name });
@@ -260,6 +197,37 @@ const Transpiler = struct {
         }
 
         try self.out.print("}};\n\n", .{});
+    }
+
+    fn visitVarDecl(self: *Transpiler, value: *const json.Value) !void {
+        const var_name = value.*.object.get("name").?.string;
+        const var_storage = value.*.object.get("storageClass").?.string;
+        if (mem.eql(u8, var_storage, "static")) {
+            // ok
+        } else {
+            log.err("unhandled storage class `{s}` in var `{s}`", .{ var_storage, var_name });
+        }
+
+        self.visited += 1;
+
+        var var_taw_type = typeQualifier(value).?;
+        var is_const = false;
+        if (mem.startsWith(u8, var_taw_type, "const ")) {
+            is_const = true;
+            var_taw_type = var_taw_type["const ".len..];
+        }
+
+        var var_type = try self.transpileType(var_taw_type);
+        defer self.allocator.free(var_type);
+
+        const var_mangled_name = value.*.object.get("mangledName").?.string;
+        if (is_const) {
+            try self.out.print("extern const {s}: {s};\n", .{ var_mangled_name, var_type });
+            try self.out.print("pub inline fn {s}() {s} {{\n    return {s};\n}}\n\n", .{ var_name, var_type, var_mangled_name });
+        } else {
+            try self.out.print("extern var {s}: {s};\n", .{ var_mangled_name, var_type });
+            try self.out.print("pub inline fn {s}() *{s} {{\n    return &{s};\n}}\n\n", .{ var_name, var_type, var_mangled_name });
+        }
     }
 
     fn visitCXXMethodDecl(self: *Transpiler, value: *const json.Value, parent: ?[]const u8) !void {
@@ -652,6 +620,8 @@ const Transpiler = struct {
                 try self.out.print("    }};\n}}\n\n", .{});
 
                 return;
+            } else {
+                log.err("unhandled `{s}` in template `{s}`", .{ item_kind, name });
             }
         }
 
@@ -688,12 +658,28 @@ const Transpiler = struct {
     }
 
     inline fn shouldSkip(self: *Transpiler, value: *const json.Value) bool {
+        // todo: incorporate this?
+        // if (value.*.object.get("isImplicit")) |implicit| {
+        //     if (implicit.bool) {
+        //         return true;
+        //     }
+        // }
         if (!self.transpile_includes) {
             if (value.*.object.get("loc")) |loc| {
                 return loc.object.get("includedFrom") != null;
             }
         }
         return false;
+    }
+
+    fn nodeCount(value: *const json.Value) usize {
+        var count: usize = 1;
+        if (value.object.get("inner")) |inner| {
+            for (inner.array.items) |v_item| {
+                count += nodeCount(&v_item);
+            }
+        }
+        return count;
     }
 
     // primitives
@@ -763,6 +749,39 @@ const Transpiler = struct {
             mem.copyForwards(u8, buf, targs.items);
             return buf;
         } else {
+            const primitives = std.ComptimeStringMap([]const u8, .{
+                .{ "bool", "bool" },
+
+                .{ "char", "u8" },
+                .{ "signed char", "i8" },
+                .{ "unsigned char", "u8" },
+                .{ "short", "c_short" },
+                .{ "unsigned short", "c_ushort" },
+                .{ "int", "c_int" },
+                .{ "unsigned int", "c_uint" },
+                .{ "long", "c_long" },
+                .{ "unsigned long", "c_ulong" },
+                .{ "long long", "c_longlong" },
+                .{ "unsigned long long", "c_ulonglong" },
+
+                .{ "float", "f32" },
+                .{ "double", "f64" },
+
+                .{ "int8_t", "i8" },
+                .{ "uint8_t", "u8" },
+                .{ "int16_t", "i16" },
+                .{ "uint16_t", "u16" },
+                .{ "int32_t", "i32" },
+                .{ "uint32_t", "u32" },
+                .{ "int64_t", "i64" },
+                .{ "uint64_t", "u64" },
+                .{ "uintptr_t", "usize" },
+                .{ "intptr_t", "isize" },
+                .{ "size_t", "usize" },
+
+                .{ "void *", "*anyopaque" },
+            });
+
             // common primitives
             if (primitives.get(ttname)) |pname| {
                 ttname = pname;

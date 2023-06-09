@@ -27,17 +27,17 @@ pub fn build(b: *std.Build) void {
     const clap_mod = b.addModule("clap", .{ .source_file = .{ .path = "libs/zig-clap/clap.zig" } });
     exe.addModule("clap", clap_mod);
 
-    // // build smol
+    // // build use cases
     // const cflags = &.{"-fno-sanitize=undefined"};
     // const smol_lib = b.addStaticLibrary(.{
-    //     .name = "smol",
+    //     .name = "useCases",
     //     .target = target,
     //     .optimize = optimize,
     // });
-    // smol_lib.addIncludePath("./test");
+    // smol_lib.addIncludePath("./use_cases/common_cases/include");
     // //smol_lib.linkLibC();
     // smol_lib.linkLibCpp();
-    // smol_lib.addCSourceFile("./test/smol.cpp", cflags);
+    // smol_lib.addCSourceFile("./use_cases/common_cases/include/c002_cpp_structs.cpp", cflags);
     // exe.linkLibrary(smol_lib);
 
     // This declares intent for the executable to be installed into the

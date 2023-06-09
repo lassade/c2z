@@ -1,9 +1,9 @@
 
 template<typename T>
 struct Vector {
-    T* data;
-    int size;
-    int capacity;
+    T* Data;
+    int Size;
+    int Capacity;
 
     inline bool         empty() const                       { return Size == 0; }
     inline int          size() const                        { return Size; }
