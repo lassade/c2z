@@ -93,6 +93,7 @@ const Transpiler = struct {
 
     allocator: Allocator,
     out: std.ArrayList(u8).Writer,
+    visited: usize,
     nodes: std.AutoHashMap(u64, json.Value),
 
     // options
@@ -103,14 +104,33 @@ const Transpiler = struct {
         return Transpiler{
             .allocator = allocator,
             .out = buffer.writer(),
+            .visited = 0,
             .nodes = std.AutoHashMap(u64, json.Value).init(allocator),
         };
     }
 
+    pub fn nodeCount(value: *const json.Value) usize {
+        var count: usize = 1;
+        if (value.object.get("inner")) |inner| {
+            for (inner.array.items) |v_item| {
+                count += nodeCount(&v_item);
+            }
+        }
+        return count;
+    }
+
     pub fn visit(self: *Transpiler, value: *const json.Value) anyerror!void {
         if (value.*.object.get("isImplicit")) |implicit| {
-            if (implicit.bool) return;
+            if (implicit.bool) {
+                self.visited += nodeCount(value);
+                return;
+            }
         }
+        if (self.shouldSkip(value)) {
+            self.visited += nodeCount(value);
+            return;
+        }
+
         var kind_tag = value.*.object.get("kind").?.string;
         if (mem.eql(u8, kind_tag, "TranslationUnitDecl")) {
             try self.visitTranslationUnitDecl(value);
@@ -134,6 +154,8 @@ const Transpiler = struct {
     }
 
     fn visitLinkageSpecDecl(self: *Transpiler, value: *const json.Value) !void {
+        self.visited += 1;
+
         if (value.*.object.get("language")) |v_lang| {
             if (mem.eql(u8, v_lang.string, "C")) {
                 // c lang, basically tells the compiler no function overload so don't mangle
@@ -154,6 +176,8 @@ const Transpiler = struct {
     }
 
     fn visitTranslationUnitDecl(self: *Transpiler, value: *const json.Value) !void {
+        self.visited += 1;
+
         if (value.object.get("inner")) |inner| {
             for (inner.array.items) |inner_item| {
                 try self.visit(&inner_item);
@@ -164,17 +188,19 @@ const Transpiler = struct {
     fn visitCXXRecordDecl(self: *Transpiler, value: *const json.Value) !void {
         // c++ class or struct
         if (self.shouldSkip(value)) {
+            self.visited += nodeCount(value);
             return;
         }
+        self.visited += 1;
 
         var name: []const u8 = undefined;
         if (value.*.object.get("name")) |v| {
             name = v.string;
         } else {
+            // referenced by someone else
             const id_name = value.*.object.get("id").?.string;
             const id = try std.fmt.parseInt(u64, id_name, 0);
             _ = try self.nodes.put(id, value.*);
-            //log.err("unhandled unnamed `CXXRecordDecl` with id `{s}`", .{id_name});
             return;
         }
 
@@ -192,10 +218,16 @@ const Transpiler = struct {
 
         for (inner.?.array.items) |inner_item| {
             if (inner_item.object.get("isImplicit")) |implicit| {
-                if (implicit.bool) continue;
+                if (implicit.bool) {
+                    self.visited += nodeCount(&inner_item);
+                    continue;
+                }
             }
+
             const kind_tag = inner_item.object.get("kind").?.string;
             if (mem.eql(u8, kind_tag, "FieldDecl")) {
+                self.visited += 1;
+
                 const field_name = inner_item.object.get("name").?.string;
 
                 if (inner_item.object.get("isInvalid")) |invalid| {
@@ -217,6 +249,7 @@ const Transpiler = struct {
                 // nested stucts
                 try self.visitCXXRecordDecl(&inner_item);
             } else {
+                self.visited -= 1;
                 log.err("unhandled `{s}` in struct `{s}`", .{ kind_tag, name });
             }
         }
@@ -230,6 +263,8 @@ const Transpiler = struct {
     }
 
     fn visitCXXMethodDecl(self: *Transpiler, value: *const json.Value, parent: ?[]const u8) !void {
+        self.visited += 1;
+
         const sig = parseFnSignature(value).?;
 
         var method_name = value.*.object.get("name").?.string;
@@ -251,6 +286,7 @@ const Transpiler = struct {
                     // } else if (mem.eql(u8, op, " new")) {
                     // } else if (mem.eql(u8, op, " delete")) {
                 } else {
+                    self.visited -= 1;
                     log.err("unhandled operator `{s}` in `{?s}`", .{ op[1..], parent });
                     return;
                 }
@@ -259,6 +295,7 @@ const Transpiler = struct {
 
         if (value.*.object.get("isInvalid")) |invalid| {
             if (invalid.bool) {
+                self.visited -= 1;
                 log.err("invalid method `{?s}::{s}`", .{ parent, method_name });
                 return;
             }
@@ -300,6 +337,8 @@ const Transpiler = struct {
         // method args
         if (value.*.object.get("inner")) |args| {
             for (args.array.items) |v_arg| {
+                self.visited += 1;
+
                 const arg_tag = v_arg.object.get("kind").?.string;
                 if (mem.eql(u8, arg_tag, "ParmVarDecl")) {
                     const v_type = v_arg.object.get("type").?;
@@ -329,6 +368,7 @@ const Transpiler = struct {
                 } else if (mem.eql(u8, arg_tag, "FormatAttr")) {
                     // varidatic function with the same properties as printf
                 } else {
+                    self.visited -= 1;
                     log.err("unhandled `{s}` in function `{?s}::{s}`", .{ arg_tag, parent, method_name });
                 }
             }
@@ -352,20 +392,25 @@ const Transpiler = struct {
 
     fn visitEnumDecl(self: *Transpiler, value: *const json.Value) !void {
         if (self.shouldSkip(value)) {
+            self.visited += nodeCount(value);
             return;
         }
+
+        self.visited += 1;
 
         var name: []const u8 = undefined;
         if (value.*.object.get("name")) |v| {
             name = v.string;
         } else {
             // todo: solved by id inside a ElaboratedType.ownedTagDecl.id
+            self.visited -= 1;
             log.err("unhandled unnamed `EnumDecl`", .{});
             return;
         }
 
         var inner = value.*.object.get("inner");
         if (inner == null) {
+            self.visited -= 1;
             log.warn("typedef `{s}`", .{name});
             return;
         }
@@ -375,8 +420,12 @@ const Transpiler = struct {
 
         for (inner.?.array.items) |inner_item| {
             if (inner_item.object.get("isImplicit")) |is_implicit| {
-                if (is_implicit.bool) continue;
+                if (is_implicit.bool) {
+                    self.visited += nodeCount(&inner_item);
+                    continue;
+                }
             }
+            self.visited += 1;
 
             const variant_tag = inner_item.object.get("kind").?.string;
             if (mem.eql(u8, variant_tag, "EnumConstantDecl")) {
@@ -392,6 +441,8 @@ const Transpiler = struct {
                 // }
                 try self.out.print(",\n", .{});
             } else {
+                self.visited -= 1;
+
                 log.err("unhandled `{s}` in enum `{s}`", .{ variant_tag, name });
             }
         }
@@ -401,8 +452,10 @@ const Transpiler = struct {
 
     fn visitTypedefDecl(self: *Transpiler, value: *const json.Value) !void {
         if (self.shouldSkip(value)) {
+            self.visited += nodeCount(value);
             return;
         }
+        self.visited += 1;
 
         const name = value.*.object.get("name").?.string;
 
@@ -416,6 +469,7 @@ const Transpiler = struct {
             const tag = v_item.*.object.get("kind").?.string;
             if (mem.eql(u8, tag, "BuiltinType") or mem.eql(u8, tag, "TypedefType")) {
                 // type alias
+                self.visited += nodeCount(v_item);
             } else if (mem.eql(u8, tag, "ElaboratedType")) {
                 // c style simplified struct definition
                 if (v_item.*.object.get("ownedTagDecl")) |v_owned| {
@@ -424,6 +478,7 @@ const Transpiler = struct {
                     if (self.nodes.get(id)) |node| {
                         const n_tag = node.object.get("kind").?.string;
                         if (mem.eql(u8, n_tag, "CXXRecordDecl")) {
+                            self.visited += 1;
                             var object = try node.object.clone();
                             defer object.deinit();
                             // rename the object
@@ -435,12 +490,14 @@ const Transpiler = struct {
                         }
                     } else {
                         // currenly been triggered by: `typedef struct Point { float x, y; } Point;`
-                        log.err("missing node `{s}` of `ElaboratedType` in typedef `{s}`", .{ id_name, name });
+                        self.visited += nodeCount(v_item);
+                        log.warn("missing node `{s}` of `ElaboratedType` in typedef `{s}`", .{ id_name, name });
                     }
                     return;
                 } else {
                     // other kind of type alias
                     // todo: use the inner "RecordType"
+                    self.visited += nodeCount(v_item);
                 }
             } else {
                 log.err("unhandled `{s}` in typedef `{s}`", .{ tag, name });
@@ -456,8 +513,10 @@ const Transpiler = struct {
 
     fn visitNamespaceDecl(self: *Transpiler, value: *const json.Value) !void {
         if (self.shouldSkip(value)) {
+            self.visited += nodeCount(value);
             return;
         }
+        self.visited += 1;
 
         const v_name = value.*.object.get("name");
 
@@ -500,13 +559,16 @@ const Transpiler = struct {
 
     fn visitClassTemplateDecl(self: *Transpiler, value: *const json.Value) !void {
         if (self.shouldSkip(value)) {
+            self.visited += nodeCount(value);
             return;
         }
+        self.visited += 1;
 
         var name: []const u8 = undefined;
         if (value.*.object.get("name")) |v| {
             name = v.string;
         } else {
+            self.visited -= 1;
             log.err("unnamed `ClassTemplateDecl`", .{});
             return;
         }
@@ -527,16 +589,20 @@ const Transpiler = struct {
         // template param
         var tp_comma = false;
         for (inner.?.array.items) |item| {
+            self.visited += 1;
+
             const item_kind = item.object.get("kind").?.string;
             if (mem.eql(u8, item_kind, "TemplateTypeParmDecl")) {
                 var v_item_name = item.object.get("name");
                 if (v_item_name == null) {
+                    self.visited -= 1;
                     log.err("unnamed template param in `{s}`", .{name});
                     continue;
                 }
 
                 var v_item_tag = item.object.get("tagUsed");
                 if (v_item_tag == null) {
+                    self.visited -= 1;
                     log.err("untaged template param in `{s}`", .{name});
                     continue;
                 }
@@ -553,6 +619,7 @@ const Transpiler = struct {
                     try self.out.print("comptime {s}: type", .{item_name});
                 } else {
                     // todo: use anytype to handle untyped template params
+                    self.visited -= 1;
                     log.err("unknown template param `{s} {s}` in `{s}`", .{ item_tag, item_name, name });
                 }
             } else if (mem.eql(u8, item_kind, "CXXRecordDecl")) {
@@ -566,6 +633,8 @@ const Transpiler = struct {
                 }
 
                 for (inner_inner.?.array.items) |inner_item| {
+                    self.visited += 1;
+
                     const inner_item_kind = inner_item.object.get("kind").?.string;
                     if (mem.eql(u8, inner_item_kind, "CXXRecordDecl")) {
                         // class or struct
@@ -575,6 +644,7 @@ const Transpiler = struct {
                         defer self.allocator.free(field_type);
                         try self.out.print("        {s}: {s},\n", .{ field_name, field_type });
                     } else {
+                        self.visited -= 1;
                         log.err("unhandled `{s}` in template `{s}`", .{ inner_item_kind, name });
                     }
                 }
@@ -817,6 +887,7 @@ pub fn main() !void {
 
         var tree = try parser.parse(process.stdout);
         defer tree.deinit();
+        const node_count = Transpiler.nodeCount(&tree.root);
 
         var buffer = std.ArrayList(u8).init(allocator);
         defer buffer.deinit();
@@ -825,6 +896,12 @@ pub fn main() !void {
         //transpiler.zigify = res.args.zigify != 0;
         defer transpiler.deinit();
         try transpiler.visit(&tree.root);
+
+        log.info("transpiled {d}/{d} ({d:.2} %)", .{
+            transpiler.visited,
+            node_count,
+            (100.0 * @intToFloat(f64, transpiler.visited) / @intToFloat(f64, node_count)),
+        });
 
         var path = std.ArrayList(u8).init(allocator);
         try path.writer().print("{s}.zig", .{std.fs.path.stem(input_file)});
