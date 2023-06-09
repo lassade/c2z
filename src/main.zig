@@ -30,6 +30,22 @@ const Allocator = mem.Allocator;
 
 // https://github.com/floooh/sokol/blob/master/bindgen/gen_ir.py
 
+// const Color = union {
+//     mU32: u32,
+//     _: struct {
+//         r: u8,
+//         g: u8,
+//         b: u8,
+//         a: u8,
+//     },
+
+//     const sWhite = Color{ .mU32 = 0xFF_FF_FF_FF };
+
+//     fn rg(self: *Color) [2]u8 {
+//         return .{ self._.r, self._.g };
+//     }
+// };
+
 const primitives = std.ComptimeStringMap([]const u8, .{
     .{ "bool", "bool" },
 
@@ -77,6 +93,7 @@ const Transpiler = struct {
 
     allocator: Allocator,
     out: std.ArrayList(u8).Writer,
+    nodes: std.AutoHashMap(u64, json.Value),
 
     // options
     transpile_includes: bool = false,
@@ -86,6 +103,7 @@ const Transpiler = struct {
         return Transpiler{
             .allocator = allocator,
             .out = buffer.writer(),
+            .nodes = std.AutoHashMap(u64, json.Value).init(allocator),
         };
     }
 
@@ -131,13 +149,16 @@ const Transpiler = struct {
         if (value.*.object.get("name")) |v| {
             name = v.string;
         } else {
-            log.err("unnamed `CXXRecordDecl`", .{});
+            const id_name = value.*.object.get("id").?.string;
+            const id = try std.fmt.parseInt(u64, id_name, 0);
+            _ = try self.nodes.put(id, value.*);
+            //log.err("unhandled unnamed `CXXRecordDecl` with id `{s}`", .{id_name});
             return;
         }
 
         var inner = value.*.object.get("inner");
         if (inner == null) {
-            log.warn("typedef `{s}`", .{name});
+            log.warn("opaque `{s}`", .{name});
             // try self.out.print("pub const {s} = anyopaque;\n", .{name});
             return;
         }
@@ -309,7 +330,7 @@ const Transpiler = struct {
         if (value.*.object.get("name")) |v| {
             name = v.string;
         } else {
-            // todo: yes you can have valid unanmed enum declarations
+            // todo: solved by id inside a ElaboratedType.ownedTagDecl.id
             log.err("unhandled unnamed `EnumDecl`", .{});
             return;
         }
@@ -355,9 +376,52 @@ const Transpiler = struct {
         }
 
         const name = value.*.object.get("name").?.string;
-        const type_alised = try self.transpileType(typeQualifier(value).?);
-        defer self.allocator.free(type_alised);
-        try self.out.print("pub const {s} = {s};\n", .{ name, type_alised });
+
+        if (value.*.object.get("inner")) |v_inner| {
+            if (v_inner.array.items.len != 1) {
+                log.err("complex typedef `{s}`", .{name});
+                return;
+            }
+
+            const v_item = &v_inner.array.items[0];
+            const tag = v_item.*.object.get("kind").?.string;
+            if (mem.eql(u8, tag, "BuiltinType") or mem.eql(u8, tag, "TypedefType")) {
+                // type alias
+            } else if (mem.eql(u8, tag, "ElaboratedType")) {
+                // c style simplified struct definition
+                if (v_item.*.object.get("ownedTagDecl")) |v_owned| {
+                    const id_name = v_owned.object.get("id").?.string;
+                    const id = try std.fmt.parseInt(u64, id_name, 0);
+                    if (self.nodes.get(id)) |node| {
+                        const n_tag = node.object.get("kind").?.string;
+                        if (mem.eql(u8, n_tag, "CXXRecordDecl")) {
+                            var object = try node.object.clone();
+                            defer object.deinit();
+                            // rename the object
+                            _ = try object.put("name", json.Value{ .string = name });
+                            // todo: impl the union or struct or whatever using `name`
+                            try self.visitCXXRecordDecl(&json.Value{ .object = object });
+                        } else {
+                            log.err("unhandled `ElaboratedType` `{s}` in typedef `{s}`", .{ n_tag, name });
+                        }
+                    } else {
+                        log.err("missing node `{s}` of `ElaboratedType` in typedef `{s}`", .{ id_name, name });
+                    }
+                    return;
+                } else {
+                    // other kind of type alias
+                    // todo: use the inner "RecordType"
+                }
+            } else {
+                log.err("unhandled `{s}` in typedef `{s}`", .{ tag, name });
+                return;
+            }
+
+            // default type alias behaviour
+            const type_alised = try self.transpileType(typeQualifier(v_item).?);
+            defer self.allocator.free(type_alised);
+            try self.out.print("pub const {s} = {s};\n\n", .{ name, type_alised });
+        }
     }
 
     fn visitNamespaceDecl(self: *Transpiler, value: *const json.Value) !void {
@@ -419,7 +483,7 @@ const Transpiler = struct {
 
         var inner = value.*.object.get("inner");
         if (inner == null) {
-            log.warn("typedef `{s}`", .{name});
+            log.warn("opaque `{s}`", .{name});
             return;
         }
 
@@ -650,7 +714,7 @@ const Transpiler = struct {
     }
 
     pub fn deinit(self: *Transpiler) void {
-        _ = self;
+        self.nodes.deinit();
     }
 };
 
