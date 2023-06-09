@@ -114,6 +114,8 @@ const Transpiler = struct {
         var kind_tag = value.*.object.get("kind").?.string;
         if (mem.eql(u8, kind_tag, "TranslationUnitDecl")) {
             try self.visitTranslationUnitDecl(value);
+        } else if (mem.eql(u8, kind_tag, "LinkageSpecDecl")) {
+            try self.visitLinkageSpecDecl(value);
         } else if (mem.eql(u8, kind_tag, "CXXRecordDecl")) {
             try self.visitCXXRecordDecl(value);
         } else if (mem.eql(u8, kind_tag, "EnumDecl")) {
@@ -128,6 +130,26 @@ const Transpiler = struct {
             try self.visitClassTemplateDecl(value);
         } else {
             log.err("unhandled `{s}`", .{kind_tag});
+        }
+    }
+
+    fn visitLinkageSpecDecl(self: *Transpiler, value: *const json.Value) !void {
+        if (value.*.object.get("language")) |v_lang| {
+            if (mem.eql(u8, v_lang.string, "C")) {
+                // c lang, basically tells the compiler no function overload so don't mangle
+            } else {
+                log.err("unknow language `{s}` in  `LinkageSpecDecl`", .{v_lang.string});
+                return;
+            }
+        } else {
+            log.err("unspecified language in  `LinkageSpecDecl`", .{});
+            return;
+        }
+
+        if (value.object.get("inner")) |inner| {
+            for (inner.array.items) |inner_item| {
+                try self.visit(&inner_item);
+            }
         }
     }
 
@@ -257,7 +279,12 @@ const Transpiler = struct {
         defer self.allocator.free(method_tret);
 
         const method_mangled_name = value.*.object.get("mangledName").?.string;
-        try self.out.print("    extern fn {s}(", .{method_mangled_name});
+
+        // functions decorated with `extern "C"` won't be mangled
+        const is_mangled = !mem.eql(u8, method_mangled_name, method_name);
+
+        if (!is_mangled) try self.out.print("pub ", .{});
+        try self.out.print("extern fn {s}(", .{method_mangled_name});
 
         var comma = false;
 
@@ -318,7 +345,9 @@ const Transpiler = struct {
             try self.out.print(") {s};\n", .{method_tret});
         }
 
-        try self.out.print("    pub const {s} = {s};\n\n", .{ method_name, method_mangled_name });
+        if (is_mangled) {
+            try self.out.print("pub const {s} = {s};\n\n", .{ method_name, method_mangled_name });
+        }
     }
 
     fn visitEnumDecl(self: *Transpiler, value: *const json.Value) !void {
@@ -405,6 +434,7 @@ const Transpiler = struct {
                             log.err("unhandled `ElaboratedType` `{s}` in typedef `{s}`", .{ n_tag, name });
                         }
                     } else {
+                        // currenly been triggered by: `typedef struct Point { float x, y; } Point;`
                         log.err("missing node `{s}` of `ElaboratedType` in typedef `{s}`", .{ id_name, name });
                     }
                     return;
