@@ -139,8 +139,8 @@ const Transpiler = struct {
             return;
         }
 
-        var inner = value.*.object.get("inner");
-        if (inner == null) {
+        var ov_inner = value.*.object.get("inner");
+        if (ov_inner == null) {
             log.warn("opaque `{s}`", .{name});
             // try self.out.print("pub const {s} = anyopaque;\n", .{name});
             return;
@@ -148,10 +148,21 @@ const Transpiler = struct {
 
         try self.out.print("pub const {s} = extern struct {{\n", .{name});
 
+        if (value.*.object.get("bases")) |v_bases| {
+            if (v_bases.array.items.len > 1) {
+                log.warn("multiple inheritance in `{s}`", .{name});
+            }
+            for (v_bases.array.items, 0..) |v_base, i| {
+                const parent_type = try self.transpileType(typeQualifier(&v_base).?);
+                defer self.allocator.free(parent_type);
+                try self.out.print("    base{d}: {s},\n\n", .{ i, parent_type });
+            }
+        }
+
         var declbuf = std.ArrayList(u8).init(self.allocator);
         defer declbuf.deinit();
 
-        for (inner.?.array.items) |inner_item| {
+        for (ov_inner.?.array.items) |inner_item| {
             if (inner_item.object.get("isImplicit")) |implicit| {
                 if (implicit.bool) {
                     self.visited += nodeCount(&inner_item);
@@ -172,10 +183,17 @@ const Transpiler = struct {
                     }
                 }
 
-                var field_type = try self.transpileType(typeQualifier(&inner_item).?);
+                const field_type = try self.transpileType(typeQualifier(&inner_item).?);
                 defer self.allocator.free(field_type);
                 try self.out.print("    {s}: {s},\n", .{ field_name, field_type });
             } else if (mem.eql(u8, kind_tag, "CXXMethodDecl")) {
+                if (inner_item.object.get("virtual")) |virtual| {
+                    if (virtual.bool) {
+                        // todo: handle virtual methods, add a `vtable: *const anyopaque,` in every other struct connected to this one
+                        log.err("unhandleded vtable of virtual method in struct `{s}`", .{name});
+                    }
+                }
+
                 const tmp = self.out;
                 self.out = declbuf.writer();
                 try self.visitCXXMethodDecl(&inner_item, name);
@@ -268,6 +286,8 @@ const Transpiler = struct {
                 return;
             }
         }
+
+        // note: if the function has a `= 0` at the end it will have "pure" = true attribute
 
         // todo: deal with inlined methods
         // var inlined = false;
