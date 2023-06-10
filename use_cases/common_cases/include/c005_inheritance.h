@@ -12,11 +12,11 @@ public:
 struct circle_t: public shape_t {
 public:
     circle_t(float radius);
+    ~circle_t();
     virtual float area() const;
 
 private:
     float radius;
 };
 
-circle_t circle(float radius);
 float area(const shape_t &shape);

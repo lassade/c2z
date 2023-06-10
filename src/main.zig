@@ -40,6 +40,7 @@ const Transpiler = struct {
     out: std.ArrayList(u8).Writer,
     visited: usize,
     nodes: std.AutoHashMap(u64, json.Value),
+    definition_data: std.StringArrayHashMap(bool),
 
     // options
     transpile_includes: bool = false,
@@ -51,7 +52,13 @@ const Transpiler = struct {
             .out = buffer.writer(),
             .visited = 0,
             .nodes = std.AutoHashMap(u64, json.Value).init(allocator),
+            .definition_data = std.StringArrayHashMap(bool).init(allocator),
         };
+    }
+
+    pub fn deinit(self: *Transpiler) void {
+        self.nodes.deinit();
+        self.definition_data.deinit();
     }
 
     pub fn visit(self: *Transpiler, value: *const json.Value) anyerror!void {
@@ -133,8 +140,7 @@ const Transpiler = struct {
             name = v.string;
         } else {
             // referenced by someone else
-            const id_name = value.*.object.get("id").?.string;
-            const id = try std.fmt.parseInt(u64, id_name, 0);
+            const id = try std.fmt.parseInt(u64, value.*.object.get("id").?.string, 0);
             _ = try self.nodes.put(id, value.*);
             return;
         }
@@ -146,17 +152,49 @@ const Transpiler = struct {
             return;
         }
 
+        var polymorphic = false;
+        if (value.*.object.get("definitionData")) |v_def_data| {
+            if (v_def_data.object.get("isPolymorphic")) |v_is_polymorphic| {
+                polymorphic = v_is_polymorphic.bool;
+            }
+        }
+
         try self.out.print("pub const {s} = extern struct {{\n", .{name});
 
-        if (value.*.object.get("bases")) |v_bases| {
-            if (v_bases.array.items.len > 1) {
-                log.warn("multiple inheritance in `{s}`", .{name});
+        const v_bases = value.*.object.get("bases");
+
+        if (polymorphic and v_bases != null) {
+            if (v_bases.?.array.items.len == 1) {
+                const parent_type_name = typeQualifier(&v_bases.?.array.items[0]).?;
+                if (self.definition_data.get(parent_type_name)) |parent_polymorphic| {
+                    if (parent_polymorphic) {
+                        // when the parent is polymorphic don't add the vtable pointer in the base class
+                        polymorphic = false;
+                    }
+                } else {
+                    log.warn("base class of `{s}` might not be polymorphic", .{name});
+                }
             }
-            for (v_bases.array.items, 0..) |v_base, i| {
+        }
+
+        if (polymorphic) {
+            try self.out.print("    vtable: *const anyopaque,\n\n", .{});
+        }
+
+        _ = try self.definition_data.put(name, polymorphic);
+
+        if (v_bases != null) {
+            if (v_bases.?.array.items.len > 1) {
+                log.err("multiple inheritance not supported in `{s}`", .{name});
+            }
+            // generate a non working code on purpose in case of many bases,
+            // because the user must manually fix it
+            for (v_bases.?.array.items) |v_base| {
                 const parent_type = try self.transpileType(typeQualifier(&v_base).?);
                 defer self.allocator.free(parent_type);
-                try self.out.print("    base{d}: {s},\n\n", .{ i, parent_type });
+                try self.out.print("    base: {s},\n", .{parent_type});
             }
+            try self.out.print("\n", .{});
         }
 
         var declbuf = std.ArrayList(u8).init(self.allocator);
@@ -187,13 +225,6 @@ const Transpiler = struct {
                 defer self.allocator.free(field_type);
                 try self.out.print("    {s}: {s},\n", .{ field_name, field_type });
             } else if (mem.eql(u8, kind_tag, "CXXMethodDecl")) {
-                if (inner_item.object.get("virtual")) |virtual| {
-                    if (virtual.bool) {
-                        // todo: handle virtual methods, add a `vtable: *const anyopaque,` in every other struct connected to this one
-                        log.err("unhandleded vtable of virtual method in struct `{s}`", .{name});
-                    }
-                }
-
                 const tmp = self.out;
                 self.out = declbuf.writer();
                 try self.visitCXXMethodDecl(&inner_item, name);
@@ -203,6 +234,13 @@ const Transpiler = struct {
                 try self.visitCXXRecordDecl(&inner_item);
             } else if (mem.eql(u8, kind_tag, "VarDecl")) {
                 try self.visitVarDecl(&inner_item);
+            } else if (mem.eql(u8, kind_tag, "CXXDestructorDecl")) {
+                const dtor_name = inner_item.object.get("mangledName").?.string;
+                var w = declbuf.writer();
+                try w.print("    extern fn {s}(self: *{s}) void;\n", .{ dtor_name, name });
+                try w.print("    pub inline fn deinit(self: *{s}) void {{ self.{s}(); }}\n\n", .{ name, dtor_name });
+            } else if (mem.eql(u8, kind_tag, "AccessSpecDecl")) {
+                // ignore, all fields are public in zig
             } else {
                 self.visited -= 1;
                 log.err("unhandled `{s}` in struct `{s}`", .{ kind_tag, name });
@@ -850,10 +888,6 @@ const Transpiler = struct {
         if (buffer.items.len > 0 and buffer.items[buffer.items.len - 1] == ',') {
             _ = buffer.pop();
         }
-    }
-
-    pub fn deinit(self: *Transpiler) void {
-        self.nodes.deinit();
     }
 };
 
