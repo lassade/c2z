@@ -12,6 +12,23 @@ pub const shape_t = extern struct {
     pub const area = _ZNK7shape_t4areaEv;
 };
 
+// use to extend shape_t on sig side
+pub const shape_tZimpl = extern struct {
+    base: shape_t,
+
+    area_callback: [*c]fn (*const anyopaque) f32,
+
+    extern fn _ZN8circle_tC1Ev(self: *shape_tZimpl) void;
+    pub inline fn init() shape_tZimpl {
+        var self: shape_tZimpl = undefined;
+        _ZN8circle_tC1Ev(&self);
+        return self;
+    }
+
+    extern fn _ZNK7shape_tZimpl_t4areaEv(self: *const shape_tZimpl) f32;
+    pub const area = _ZNK7shape_tZimpl_t4areaEv;
+};
+
 pub const circle_t = extern struct {
     base: shape_t,
 

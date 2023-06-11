@@ -36,11 +36,31 @@ const Transpiler = struct {
         ret_type: []const u8 = "",
     };
 
+    const Parent = enum {
+        none,
+        cxx_translation_unit_decl,
+        cxx_namespace,
+        cxx_record_decl,
+    };
+
+    const State = struct {
+        parent: Parent = .none,
+        parent_name: ?[]const u8 = null,
+        ctors: usize = 0,
+        fields: usize = 0,
+        fields_out: ?std.ArrayList(u8).Writer = null,
+    };
+
+    const DefData = struct {
+        is_polymorphic: bool,
+    };
+
     allocator: Allocator,
     out: std.ArrayList(u8).Writer,
     visited: usize,
     nodes: std.AutoHashMap(u64, json.Value),
-    definition_data: std.StringArrayHashMap(bool),
+    definition_data: std.StringArrayHashMap(DefData),
+    state: State = .{},
 
     // options
     transpile_includes: bool = false,
@@ -52,7 +72,7 @@ const Transpiler = struct {
             .out = buffer.writer(),
             .visited = 0,
             .nodes = std.AutoHashMap(u64, json.Value).init(allocator),
-            .definition_data = std.StringArrayHashMap(bool).init(allocator),
+            .definition_data = std.StringArrayHashMap(DefData).init(allocator),
         };
     }
 
@@ -73,25 +93,25 @@ const Transpiler = struct {
             return;
         }
 
-        var kind_tag = value.*.object.get("kind").?.string;
-        if (mem.eql(u8, kind_tag, "TranslationUnitDecl")) {
+        var kind = value.*.object.get("kind").?.string;
+        if (mem.eql(u8, kind, "TranslationUnitDecl")) {
             try self.visitTranslationUnitDecl(value);
-        } else if (mem.eql(u8, kind_tag, "LinkageSpecDecl")) {
+        } else if (mem.eql(u8, kind, "LinkageSpecDecl")) {
             try self.visitLinkageSpecDecl(value);
-        } else if (mem.eql(u8, kind_tag, "CXXRecordDecl")) {
+        } else if (mem.eql(u8, kind, "CXXRecordDecl")) {
             try self.visitCXXRecordDecl(value);
-        } else if (mem.eql(u8, kind_tag, "EnumDecl")) {
+        } else if (mem.eql(u8, kind, "EnumDecl")) {
             try self.visitEnumDecl(value);
-        } else if (mem.eql(u8, kind_tag, "TypedefDecl")) {
+        } else if (mem.eql(u8, kind, "TypedefDecl")) {
             try self.visitTypedefDecl(value);
-        } else if (mem.eql(u8, kind_tag, "NamespaceDecl")) {
+        } else if (mem.eql(u8, kind, "NamespaceDecl")) {
             try self.visitNamespaceDecl(value);
-        } else if (mem.eql(u8, kind_tag, "FunctionDecl")) {
+        } else if (mem.eql(u8, kind, "FunctionDecl")) {
             try self.visitFunctionDecl(value);
-        } else if (mem.eql(u8, kind_tag, "ClassTemplateDecl")) {
+        } else if (mem.eql(u8, kind, "ClassTemplateDecl")) {
             try self.visitClassTemplateDecl(value);
         } else {
-            log.err("unhandled `{s}`", .{kind_tag});
+            log.err("unhandled `{s}`", .{kind});
         }
     }
 
@@ -135,41 +155,58 @@ const Transpiler = struct {
         }
         self.visited += 1;
 
+        const tag = value.*.object.get("tagUsed").?.string;
+
+        // nested unamed strucs or unions are treated as implicit fields
+        var is_field = false;
+
+        var free_name = false;
         var name: []const u8 = undefined;
         if (value.*.object.get("name")) |v| {
             name = v.string;
+        } else if (self.state.parent == .cxx_record_decl) {
+            is_field = true;
+            free_name = true;
+            name = try fmt.allocPrint(self.allocator, "field{d}", .{self.state.fields});
+            self.state.fields += 1;
+            self.out = self.state.fields_out.?;
         } else {
             // referenced by someone else
             const id = try std.fmt.parseInt(u64, value.*.object.get("id").?.string, 0);
             _ = try self.nodes.put(id, value.*);
             return;
         }
+        defer if (free_name) self.allocator.free(name);
 
         var ov_inner = value.*.object.get("inner");
         if (ov_inner == null) {
-            log.warn("opaque `{s}`", .{name});
+            log.warn("opaque `{s} {s}`", .{ tag, name });
             // try self.out.print("pub const {s} = anyopaque;\n", .{name});
             return;
         }
 
-        var polymorphic = false;
+        var is_polymorphic = false;
         if (value.*.object.get("definitionData")) |v_def_data| {
             if (v_def_data.object.get("isPolymorphic")) |v_is_polymorphic| {
-                polymorphic = v_is_polymorphic.bool;
+                is_polymorphic = v_is_polymorphic.bool;
             }
         }
 
-        try self.out.print("pub const {s} = extern struct {{\n", .{name});
+        if (is_field) {
+            try self.out.print("{s}: extern {s} {{\n", .{ name, tag });
+        } else {
+            try self.out.print("pub const {s} = extern {s} {{\n", .{ name, tag });
+        }
 
         const v_bases = value.*.object.get("bases");
 
-        if (polymorphic and v_bases != null) {
+        if (is_polymorphic and v_bases != null) {
             if (v_bases.?.array.items.len == 1) {
                 const parent_type_name = typeQualifier(&v_bases.?.array.items[0]).?;
-                if (self.definition_data.get(parent_type_name)) |parent_polymorphic| {
-                    if (parent_polymorphic) {
+                if (self.definition_data.get(parent_type_name)) |def_data| {
+                    if (def_data.is_polymorphic) {
                         // when the parent is polymorphic don't add the vtable pointer in the base class
-                        polymorphic = false;
+                        is_polymorphic = false;
                     }
                 } else {
                     log.warn("base class of `{s}` might not be polymorphic", .{name});
@@ -177,11 +214,11 @@ const Transpiler = struct {
             }
         }
 
-        if (polymorphic) {
+        if (is_polymorphic) {
             try self.out.print("    vtable: *const anyopaque,\n\n", .{});
         }
 
-        _ = try self.definition_data.put(name, polymorphic);
+        _ = try self.definition_data.put(name, .{ .is_polymorphic = is_polymorphic });
 
         if (v_bases != null) {
             if (v_bases.?.array.items.len > 1) {
@@ -200,7 +237,14 @@ const Transpiler = struct {
         var declbuf = std.ArrayList(u8).init(self.allocator);
         defer declbuf.deinit();
 
-        var ctor_count: usize = 0;
+        var prev_state = self.state;
+        self.state = .{
+            .parent = .cxx_record_decl,
+            .parent_name = name,
+            .ctors = 0,
+            .fields = 0,
+            .fields_out = self.out,
+        };
 
         for (ov_inner.?.array.items) |inner_item| {
             if (inner_item.object.get("isImplicit")) |implicit| {
@@ -210,8 +254,8 @@ const Transpiler = struct {
                 }
             }
 
-            const kind_tag = inner_item.object.get("kind").?.string;
-            if (mem.eql(u8, kind_tag, "FieldDecl")) {
+            const kind = inner_item.object.get("kind").?.string;
+            if (mem.eql(u8, kind, "FieldDecl")) {
                 self.visited += 1;
 
                 const field_name = inner_item.object.get("name").?.string;
@@ -226,41 +270,49 @@ const Transpiler = struct {
                 const field_type = try self.transpileType(typeQualifier(&inner_item).?);
                 defer self.allocator.free(field_type);
                 try self.out.print("    {s}: {s},\n", .{ field_name, field_type });
-            } else if (mem.eql(u8, kind_tag, "CXXMethodDecl")) {
+            } else if (mem.eql(u8, kind, "CXXMethodDecl")) {
                 const tmp = self.out;
                 self.out = declbuf.writer();
                 try self.visitCXXMethodDecl(&inner_item, name);
                 self.out = tmp;
-            } else if (mem.eql(u8, kind_tag, "CXXRecordDecl")) {
-                // nested stucts
+            } else if (mem.eql(u8, kind, "CXXRecordDecl")) {
+                // nested stucts, classes and unions
                 try self.visitCXXRecordDecl(&inner_item);
-            } else if (mem.eql(u8, kind_tag, "VarDecl")) {
-                try self.visitVarDecl(&inner_item);
-            } else if (mem.eql(u8, kind_tag, "CXXConstructorDecl")) {
+            } else if (mem.eql(u8, kind, "VarDecl")) {
                 const tmp = self.out;
                 self.out = declbuf.writer();
-                try self.visitCXXConstructorDecl(&inner_item, name, ctor_count);
+                try self.visitVarDecl(&inner_item);
                 self.out = tmp;
-                ctor_count += 1;
-            } else if (mem.eql(u8, kind_tag, "CXXDestructorDecl")) {
+            } else if (mem.eql(u8, kind, "CXXConstructorDecl")) {
+                const tmp = self.out;
+                self.out = declbuf.writer();
+                try self.visitCXXConstructorDecl(&inner_item, name);
+                self.out = tmp;
+            } else if (mem.eql(u8, kind, "CXXDestructorDecl")) {
                 const dtor_name = inner_item.object.get("mangledName").?.string;
                 var w = declbuf.writer();
                 try w.print("    extern fn {s}(self: *{s}) void;\n", .{ dtor_name, name });
                 try w.print("    pub inline fn deinit(self: *{s}) void {{ self.{s}(); }}\n\n", .{ name, dtor_name });
-            } else if (mem.eql(u8, kind_tag, "AccessSpecDecl")) {
+            } else if (mem.eql(u8, kind, "AccessSpecDecl")) {
                 // ignore, all fields are public in zig
             } else {
                 self.visited -= 1;
-                log.err("unhandled `{s}` in struct `{s}`", .{ kind_tag, name });
+                log.err("unhandled `{s}` in `{s} {s}`", .{ kind, tag, name });
             }
         }
+
+        self.state = prev_state;
 
         // delcarations must be after fields
         if (declbuf.items.len > 0) {
             try self.out.print("\n{s}", .{declbuf.items});
         }
 
-        try self.out.print("}};\n\n", .{});
+        if (is_field) {
+            try self.out.print("}},\n\n", .{});
+        } else {
+            try self.out.print("}};\n\n", .{});
+        }
     }
 
     fn visitVarDecl(self: *Transpiler, value: *const json.Value) !void {
@@ -294,7 +346,7 @@ const Transpiler = struct {
         }
     }
 
-    fn visitCXXConstructorDecl(self: *Transpiler, value: *const json.Value, parent: []const u8, index: usize) !void {
+    fn visitCXXConstructorDecl(self: *Transpiler, value: *const json.Value, parent: []const u8) !void {
         self.visited += 1;
 
         const sig = parseFnSignature(value).?;
@@ -356,15 +408,15 @@ const Transpiler = struct {
                     var arg_type = try self.transpileType(v_qual);
                     defer self.allocator.free(arg_type);
 
-                    var arg_name_owned = false;
+                    var free_arg_name = false;
                     var arg_name: []const u8 = undefined;
                     if (v_arg.object.get("name")) |v_arg_name| {
                         arg_name = v_arg_name.string;
                     } else {
-                        arg_name_owned = true;
+                        free_arg_name = true;
                         arg_name = try fmt.allocPrint(self.allocator, "arg{d}", .{i});
                     }
-                    defer if (arg_name_owned) self.allocator.free(arg_name);
+                    defer if (free_arg_name) self.allocator.free(arg_name);
 
                     if (comma) try init_args.writer().print(", ", .{});
                     comma = true;
@@ -391,13 +443,15 @@ const Transpiler = struct {
 
         // sig
         try self.out.print("pub inline fn init", .{});
-        if (index != 0) try self.out.print("{d}", .{index}); // avoid name conflict
+        if (self.state.ctors != 0) try self.out.print("{d}", .{self.state.ctors}); // avoid name conflict
         try self.out.print("({s}) {s} {{\n", .{ init_args.items, parent });
         // body
         try self.out.print("    var self: {s} = undefined;\n", .{parent});
         try self.out.print("    {s}(&self{s});", .{ method_mangled_name, forward_init_args.items });
         try self.out.print("    return self;\n", .{});
         try self.out.print("}}\n\n", .{});
+
+        self.state.ctors += 1;
     }
 
     fn visitCXXMethodDecl(self: *Transpiler, value: *const json.Value, parent: ?[]const u8) !void {
