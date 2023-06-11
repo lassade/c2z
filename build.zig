@@ -27,19 +27,6 @@ pub fn build(b: *std.Build) void {
     const clap_mod = b.addModule("clap", .{ .source_file = .{ .path = "libs/zig-clap/clap.zig" } });
     exe.addModule("clap", clap_mod);
 
-    // // build use cases
-    // const cflags = &.{"-fno-sanitize=undefined"};
-    // const smol_lib = b.addStaticLibrary(.{
-    //     .name = "useCases",
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    // smol_lib.addIncludePath("./use_cases/common_cases/include");
-    // //smol_lib.linkLibC();
-    // smol_lib.linkLibCpp();
-    // smol_lib.addCSourceFile("./use_cases/common_cases/include/c005_inheritance.cpp", cflags);
-    // exe.linkLibrary(smol_lib);
-
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
@@ -71,10 +58,23 @@ pub fn build(b: *std.Build) void {
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = .{ .path = "./use_cases/tests.zig" },
         .target = target,
         .optimize = optimize,
     });
+
+    // build and link use cases
+    const cflags = &.{"-fno-sanitize=undefined"};
+    const lib = b.addStaticLibrary(.{
+        .name = "use_cases",
+        .target = target,
+        .optimize = optimize,
+    });
+    lib.addIncludePath("./use_cases/common_cases/include");
+    //lib.linkLibC();
+    lib.linkLibCpp();
+    lib.addCSourceFile("./use_cases/common_cases/include/c005_inheritance.cpp", cflags);
+    unit_tests.linkLibrary(lib);
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
