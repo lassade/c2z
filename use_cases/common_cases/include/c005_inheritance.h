@@ -11,6 +11,7 @@ public:
 
 struct circle_t: public shape_t {
 public:
+    circle_t();
     circle_t(float radius);
     ~circle_t();
     virtual float area() const;

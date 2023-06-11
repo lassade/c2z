@@ -17,13 +17,19 @@ pub const circle_t = extern struct {
 
     radius: f32,
 
-    // extern fn _ZN8circle_tC1Ef(self: *circle_t) void;
-    // pub inline fn init() circle_t {
-    //     // might cause UB if the ctor takes refereces to self
-    //     var self: circle_t = undefined;
-    //     _ZN8circle_tC1Ef(&self);
-    //     return self;
-    // }
+    extern fn _ZN8circle_tC1Ev(self: *circle_t) void;
+    pub inline fn init() circle_t {
+        var self: circle_t = undefined;
+        _ZN8circle_tC1Ev(&self);
+        return self;
+    }
+
+    extern fn _ZN8circle_tC1Ef(self: *circle_t, radius: f32) void;
+    pub inline fn initRadius(radius: f32) circle_t {
+        var self: circle_t = undefined;
+        _ZN8circle_tC1Ef(&self, radius);
+        return self;
+    }
 
     extern fn _ZN8circle_tD1Ev(self: *circle_t) void;
     pub inline fn deinit(self: *circle_t) void {

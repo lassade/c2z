@@ -200,6 +200,8 @@ const Transpiler = struct {
         var declbuf = std.ArrayList(u8).init(self.allocator);
         defer declbuf.deinit();
 
+        var ctor_count: usize = 0;
+
         for (ov_inner.?.array.items) |inner_item| {
             if (inner_item.object.get("isImplicit")) |implicit| {
                 if (implicit.bool) {
@@ -234,6 +236,12 @@ const Transpiler = struct {
                 try self.visitCXXRecordDecl(&inner_item);
             } else if (mem.eql(u8, kind_tag, "VarDecl")) {
                 try self.visitVarDecl(&inner_item);
+            } else if (mem.eql(u8, kind_tag, "CXXConstructorDecl")) {
+                const tmp = self.out;
+                self.out = declbuf.writer();
+                try self.visitCXXConstructorDecl(&inner_item, name, ctor_count);
+                self.out = tmp;
+                ctor_count += 1;
             } else if (mem.eql(u8, kind_tag, "CXXDestructorDecl")) {
                 const dtor_name = inner_item.object.get("mangledName").?.string;
                 var w = declbuf.writer();
@@ -284,6 +292,112 @@ const Transpiler = struct {
             try self.out.print("extern var {s}: {s};\n", .{ var_mangled_name, var_type });
             try self.out.print("pub inline fn {s}() *{s} {{\n    return &{s};\n}}\n\n", .{ var_name, var_type, var_mangled_name });
         }
+    }
+
+    fn visitCXXConstructorDecl(self: *Transpiler, value: *const json.Value, parent: []const u8, index: usize) !void {
+        self.visited += 1;
+
+        const sig = parseFnSignature(value).?;
+
+        if (value.*.object.get("isInvalid")) |invalid| {
+            if (invalid.bool) {
+                self.visited -= 1;
+                log.err("invalid ctor `{s}`", .{parent});
+                return;
+            }
+        }
+
+        // note: if the function has a `= 0` at the end it will have "pure" = true attribute
+
+        // todo: deal with inlined methods
+        // var inlined = false;
+        // if (value.*.object.get("inline")) |v_inline| {
+        //     inlined = v_inline.bool;
+        //     if (inlined) {
+        //         //
+        //         log.err("unhandled inlined method `{?s}::{s}`", .{ parent, method_name });
+        //         return;
+        //     }
+        // }
+
+        const method_mangled_name = value.*.object.get("mangledName").?.string;
+
+        try self.out.print("extern fn {s}(", .{method_mangled_name});
+
+        if (sig.const_self) {
+            try self.out.print("self: *const {s}", .{parent});
+        } else {
+            try self.out.print("self: *{s}", .{parent});
+        }
+
+        var comma = false;
+        var init_args = std.ArrayList(u8).init(self.allocator);
+        defer init_args.deinit();
+        var forward_init_args = std.ArrayList(u8).init(self.allocator);
+        defer forward_init_args.deinit();
+
+        // method args
+        if (value.*.object.get("inner")) |args| {
+            for (args.array.items, 0..) |v_arg, i| {
+                self.visited += 1;
+
+                const arg_tag = v_arg.object.get("kind").?.string;
+                if (mem.eql(u8, arg_tag, "ParmVarDecl")) {
+                    const v_type = v_arg.object.get("type").?;
+                    var v_qual = v_type.object.get("qualType").?.string;
+
+                    // va_list is in practice a `char*`, but we can double check this by verifing the desugared type
+                    if (mem.eql(u8, v_qual, "va_list")) {
+                        if (v_type.object.get("desugaredQualType")) |v_desurgared| {
+                            v_qual = v_desurgared.string;
+                        }
+                    }
+
+                    var arg_type = try self.transpileType(v_qual);
+                    defer self.allocator.free(arg_type);
+
+                    var arg_name_owned = false;
+                    var arg_name: []const u8 = undefined;
+                    if (v_arg.object.get("name")) |v_arg_name| {
+                        arg_name = v_arg_name.string;
+                    } else {
+                        arg_name_owned = true;
+                        arg_name = try fmt.allocPrint(self.allocator, "arg{d}", .{i});
+                    }
+                    defer if (arg_name_owned) self.allocator.free(arg_name);
+
+                    if (comma) try init_args.writer().print(", ", .{});
+                    comma = true;
+                    try init_args.writer().print("{s}: {s}", .{ arg_name, arg_type });
+                    try forward_init_args.writer().print(", {s}", .{arg_name});
+
+                    try self.out.print(", {s}: {s}", .{ arg_name, arg_type });
+                } else if (mem.eql(u8, arg_tag, "FormatAttr")) {
+                    // varidatic function with the same properties as printf
+                } else {
+                    self.visited -= 1;
+                    log.err("unhandled `{s}` in ctor `{s}`", .{ arg_tag, parent });
+                }
+            }
+        } else {
+            // no args
+        }
+
+        if (sig.varidatic) {
+            try self.out.print(", ...) callconv(.C) void;\n", .{});
+        } else {
+            try self.out.print(") void;\n", .{});
+        }
+
+        // sig
+        try self.out.print("pub inline fn init", .{});
+        if (index != 0) try self.out.print("{d}", .{index}); // avoid name conflict
+        try self.out.print("({s}) {s} {{\n", .{ init_args.items, parent });
+        // body
+        try self.out.print("    var self: {s} = undefined;\n", .{parent});
+        try self.out.print("    {s}(&self{s});", .{ method_mangled_name, forward_init_args.items });
+        try self.out.print("    return self;\n", .{});
+        try self.out.print("}}\n\n", .{});
     }
 
     fn visitCXXMethodDecl(self: *Transpiler, value: *const json.Value, parent: ?[]const u8) !void {
