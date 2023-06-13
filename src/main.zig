@@ -110,6 +110,24 @@ const Transpiler = struct {
             try self.visitFunctionDecl(value);
         } else if (mem.eql(u8, kind, "ClassTemplateDecl")) {
             try self.visitClassTemplateDecl(value);
+        } else if (mem.eql(u8, kind, "CompoundStmt")) {
+            try self.visitCompoundStmt(value);
+        } else if (mem.eql(u8, kind, "ReturnStmt")) {
+            try self.visitReturnStmt(value);
+        } else if (mem.eql(u8, kind, "BinaryOperator")) {
+            try self.visitBinaryOperator(value);
+        } else if (mem.eql(u8, kind, "ImplicitCastExpr")) {
+            try self.visitImplicitCastExpr(value);
+        } else if (mem.eql(u8, kind, "MemberExpr")) {
+            try self.visitMemberExpr(value);
+        } else if (mem.eql(u8, kind, "IntegerLiteral")) {
+            try self.visitIntegerLiteral(value);
+        } else if (mem.eql(u8, kind, "CStyleCastExpr")) {
+            try self.visitCStyleCastExpr(value);
+        } else if (mem.eql(u8, kind, "ArraySubscriptExpr")) {
+            try self.visitArraySubscriptExpr(value);
+        } else if (mem.eql(u8, kind, "UnaryExprOrTypeTraitExpr")) {
+            try self.visitUnaryExprOrTypeTraitExpr(value);
         } else {
             log.err("unhandled `{s}`", .{kind});
         }
@@ -234,8 +252,8 @@ const Transpiler = struct {
             try self.out.print("\n", .{});
         }
 
-        var declbuf = std.ArrayList(u8).init(self.allocator);
-        defer declbuf.deinit();
+        var fns = std.ArrayList(u8).init(self.allocator);
+        defer fns.deinit();
 
         var prev_state = self.state;
         self.state = .{
@@ -245,6 +263,7 @@ const Transpiler = struct {
             .fields = 0,
             .fields_out = self.out,
         };
+        defer self.state = prev_state;
 
         for (ov_inner.?.array.items) |inner_item| {
             if (inner_item.object.get("isImplicit")) |implicit| {
@@ -272,7 +291,7 @@ const Transpiler = struct {
                 try self.out.print("    {s}: {s},\n", .{ field_name, field_type });
             } else if (mem.eql(u8, kind, "CXXMethodDecl")) {
                 const tmp = self.out;
-                self.out = declbuf.writer();
+                self.out = fns.writer();
                 try self.visitCXXMethodDecl(&inner_item, name);
                 self.out = tmp;
             } else if (mem.eql(u8, kind, "CXXRecordDecl")) {
@@ -280,17 +299,17 @@ const Transpiler = struct {
                 try self.visitCXXRecordDecl(&inner_item);
             } else if (mem.eql(u8, kind, "VarDecl")) {
                 const tmp = self.out;
-                self.out = declbuf.writer();
+                self.out = fns.writer();
                 try self.visitVarDecl(&inner_item);
                 self.out = tmp;
             } else if (mem.eql(u8, kind, "CXXConstructorDecl")) {
                 const tmp = self.out;
-                self.out = declbuf.writer();
+                self.out = fns.writer();
                 try self.visitCXXConstructorDecl(&inner_item, name);
                 self.out = tmp;
             } else if (mem.eql(u8, kind, "CXXDestructorDecl")) {
                 const dtor_name = inner_item.object.get("mangledName").?.string;
-                var w = declbuf.writer();
+                var w = fns.writer();
                 try w.print("    extern fn {s}(self: *{s}) void;\n", .{ dtor_name, name });
                 try w.print("    pub inline fn deinit(self: *{s}) void {{ self.{s}(); }}\n\n", .{ name, dtor_name });
             } else if (mem.eql(u8, kind, "AccessSpecDecl")) {
@@ -301,11 +320,9 @@ const Transpiler = struct {
             }
         }
 
-        self.state = prev_state;
-
         // delcarations must be after fields
-        if (declbuf.items.len > 0) {
-            try self.out.print("\n{s}", .{declbuf.items});
+        if (fns.items.len > 0) {
+            try self.out.print("\n{s}", .{fns.items});
         }
 
         if (is_field) {
@@ -359,6 +376,8 @@ const Transpiler = struct {
             }
         }
 
+        // todo: copy code from visitCXXMethodDecl
+
         // note: if the function has a `= 0` at the end it will have "pure" = true attribute
 
         // todo: deal with inlined methods
@@ -389,13 +408,13 @@ const Transpiler = struct {
         defer forward_init_args.deinit();
 
         // method args
-        if (value.*.object.get("inner")) |args| {
-            for (args.array.items, 0..) |v_arg, i| {
+        if (value.*.object.get("inner")) |v_inner| {
+            for (v_inner.array.items, 0..) |v_item, i| {
                 self.visited += 1;
 
-                const arg_tag = v_arg.object.get("kind").?.string;
-                if (mem.eql(u8, arg_tag, "ParmVarDecl")) {
-                    const v_type = v_arg.object.get("type").?;
+                const arg_kind = v_item.object.get("kind").?.string;
+                if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
+                    const v_type = v_item.object.get("type").?;
                     var v_qual = v_type.object.get("qualType").?.string;
 
                     // va_list is in practice a `char*`, but we can double check this by verifing the desugared type
@@ -410,8 +429,8 @@ const Transpiler = struct {
 
                     var free_arg_name = false;
                     var arg_name: []const u8 = undefined;
-                    if (v_arg.object.get("name")) |v_arg_name| {
-                        arg_name = v_arg_name.string;
+                    if (v_item.object.get("name")) |v_item_name| {
+                        arg_name = v_item_name.string;
                     } else {
                         free_arg_name = true;
                         arg_name = try fmt.allocPrint(self.allocator, "arg{d}", .{i});
@@ -424,15 +443,13 @@ const Transpiler = struct {
                     try forward_init_args.writer().print(", {s}", .{arg_name});
 
                     try self.out.print(", {s}: {s}", .{ arg_name, arg_type });
-                } else if (mem.eql(u8, arg_tag, "FormatAttr")) {
+                } else if (mem.eql(u8, arg_kind, "FormatAttr")) {
                     // varidatic function with the same properties as printf
                 } else {
                     self.visited -= 1;
-                    log.err("unhandled `{s}` in ctor `{s}`", .{ arg_tag, parent });
+                    log.err("unhandled `{s}` in ctor `{s}`", .{ arg_kind, parent });
                 }
             }
-        } else {
-            // no args
         }
 
         if (sig.varidatic) {
@@ -470,10 +487,10 @@ const Transpiler = struct {
                 if (mem.eql(u8, op, "[]")) {
                     if (!sig.const_self and mem.endsWith(u8, sig.ret_type, "&")) {
                         // class[i] = value;
-                        method_name = "getRef";
+                        method_name = "getPointer";
                     } else {
                         // value = class[i];
-                        method_name = "get";
+                        method_name = "getValue";
                     }
                     // } else if (mem.eql(u8, op, " new")) {
                     // } else if (mem.eql(u8, op, " delete")) {
@@ -495,27 +512,38 @@ const Transpiler = struct {
 
         // note: if the function has a `= 0` at the end it will have "pure" = true attribute
 
-        // todo: deal with inlined methods
-        // var inlined = false;
-        // if (value.*.object.get("inline")) |v_inline| {
-        //     inlined = v_inline.bool;
-        //     if (inlined) {
-        //         //
-        //         log.err("unhandled inlined method `{?s}::{s}`", .{ parent, method_name });
-        //         return;
-        //     }
-        // }
-
         const method_tret = try self.transpileType(sig.ret_type);
         defer self.allocator.free(method_tret);
 
-        const method_mangled_name = value.*.object.get("mangledName").?.string;
+        var is_mangled: bool = undefined;
+        var method_mangled_name: []const u8 = undefined;
+        // template function doent have the `mangledName` field
+        if (value.*.object.get("mangledName")) |v_mangled_name| {
+            method_mangled_name = v_mangled_name.string;
+            // functions decorated with `extern "C"` won't be mangled
+            is_mangled = !mem.eql(u8, method_mangled_name, method_name);
+        } else {
+            method_mangled_name = method_name;
+            is_mangled = false;
+        }
 
-        // functions decorated with `extern "C"` won't be mangled
-        const is_mangled = !mem.eql(u8, method_mangled_name, method_name);
+        const v_inner = value.*.object.get("inner");
+        var has_body = false;
+        if (v_inner != null and v_inner.?.array.items.len > 0) {
+            const item_kind = v_inner.?.array.items[v_inner.?.array.items.len - 1].object.get("kind").?.string;
+            has_body = mem.eql(u8, item_kind, "CompoundStmt");
+        }
 
-        if (!is_mangled) try self.out.print("pub ", .{});
-        try self.out.print("extern fn {s}(", .{method_mangled_name});
+        if (has_body) {
+            try self.out.print("pub ", .{});
+            if (value.*.object.get("inline")) |v_inline| {
+                if (v_inline.bool) try self.out.print("inline ", .{});
+            }
+            try self.out.print("fn {s}(", .{method_name});
+        } else {
+            if (!is_mangled) try self.out.print("pub ", .{});
+            try self.out.print("extern fn {s}(", .{method_mangled_name});
+        }
 
         var comma = false;
 
@@ -528,55 +556,67 @@ const Transpiler = struct {
             }
         }
 
+        var body = std.ArrayList(u8).init(self.allocator);
+        defer body.deinit();
+
         // method args
-        if (value.*.object.get("inner")) |args| {
-            for (args.array.items) |v_arg| {
-                self.visited += 1;
 
-                const arg_tag = v_arg.object.get("kind").?.string;
-                if (mem.eql(u8, arg_tag, "ParmVarDecl")) {
-                    const v_type = v_arg.object.get("type").?;
-                    var v_qual = v_type.object.get("qualType").?.string;
+        for (v_inner.?.array.items) |v_item| {
+            self.visited += 1;
 
-                    // va_list is in practice a `char*`, but we can double check this by verifing the desugared type
-                    if (mem.eql(u8, v_qual, "va_list")) {
-                        if (v_type.object.get("desugaredQualType")) |v_desurgared| {
-                            v_qual = v_desurgared.string;
-                        }
+            const arg_kind = v_item.object.get("kind").?.string;
+            if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
+                const v_type = v_item.object.get("type").?;
+                var v_qual = v_type.object.get("qualType").?.string;
+
+                // va_list is in practice a `char*`, but we can double check this by verifing the desugared type
+                if (mem.eql(u8, v_qual, "va_list")) {
+                    if (v_type.object.get("desugaredQualType")) |v_desurgared| {
+                        v_qual = v_desurgared.string;
                     }
-
-                    var arg_type = try self.transpileType(v_qual);
-                    defer self.allocator.free(arg_type);
-
-                    var arg_name: []const u8 = "_";
-                    if (v_arg.object.get("name")) |v_arg_name| {
-                        arg_name = v_arg_name.string;
-                    }
-
-                    if (comma) {
-                        try self.out.print(", ", .{});
-                    }
-                    comma = true;
-
-                    try self.out.print("{s}: {s}", .{ arg_name, arg_type });
-                } else if (mem.eql(u8, arg_tag, "FormatAttr")) {
-                    // varidatic function with the same properties as printf
-                } else {
-                    self.visited -= 1;
-                    log.err("unhandled `{s}` in function `{?s}::{s}`", .{ arg_tag, parent, method_name });
                 }
+
+                var arg_type = try self.transpileType(v_qual);
+                defer self.allocator.free(arg_type);
+
+                var arg_name: []const u8 = "_";
+                if (v_item.object.get("name")) |v_item_name| {
+                    arg_name = v_item_name.string;
+                }
+
+                if (comma) {
+                    try self.out.print(", ", .{});
+                }
+                comma = true;
+
+                try self.out.print("{s}: {s}", .{ arg_name, arg_type });
+            } else if (mem.eql(u8, arg_kind, "FormatAttr")) {
+                // varidatic function with the same properties as printf
+            } else if (mem.eql(u8, arg_kind, "CompoundStmt")) {
+                const tmp = self.out;
+                self.out = body.writer();
+                try self.visitCompoundStmt(&v_item);
+                self.out = tmp;
+            } else {
+                self.visited -= 1;
+                log.err("unhandled `{s}` in function `{?s}::{s}`", .{ arg_kind, parent, method_name });
             }
-        } else {
-            // no args
         }
 
         if (sig.varidatic) {
             if (comma) {
                 try self.out.print(", ", .{});
             }
-            try self.out.print("...) callconv(.C) {s};\n", .{method_tret});
+            try self.out.print("...) callconv(.C) {s}", .{method_tret});
         } else {
-            try self.out.print(") {s};\n", .{method_tret});
+            try self.out.print(") {s}", .{method_tret});
+        }
+
+        // body must be after fields
+        if (has_body) {
+            try self.out.print(" {s}\n", .{body.items});
+        } else {
+            try self.out.print(";\n", .{});
         }
 
         if (is_mangled) {
@@ -780,6 +820,19 @@ const Transpiler = struct {
 
         try self.out.print("pub fn {s}(", .{name});
 
+        var fns = std.ArrayList(u8).init(self.allocator);
+        defer fns.deinit();
+
+        var prev_state = self.state;
+        self.state = .{
+            .parent = .cxx_record_decl,
+            .parent_name = "Self",
+            .ctors = 0,
+            .fields = 0,
+            .fields_out = self.out,
+        };
+        defer self.state = prev_state;
+
         // template param
         var tp_comma = false;
         for (inner.?.array.items) |item| {
@@ -819,6 +872,7 @@ const Transpiler = struct {
             } else if (mem.eql(u8, item_kind, "CXXRecordDecl")) {
                 // template definition
                 try self.out.print(") type {{\n    return extern struct {{\n", .{});
+                try self.out.print("        const Self = @This();\n\n", .{});
 
                 var inner_inner = item.object.get("inner");
                 if (inner_inner == null) {
@@ -837,10 +891,20 @@ const Transpiler = struct {
                         var field_type = try self.transpileType(typeQualifier(&inner_item).?);
                         defer self.allocator.free(field_type);
                         try self.out.print("        {s}: {s},\n", .{ field_name, field_type });
+                    } else if (mem.eql(u8, inner_item_kind, "CXXMethodDecl")) {
+                        const tmp = self.out;
+                        self.out = fns.writer();
+                        try self.visitCXXMethodDecl(&inner_item, "Self");
+                        self.out = tmp;
                     } else {
                         self.visited -= 1;
                         log.err("unhandled `{s}` in template `{s}`", .{ inner_item_kind, name });
                     }
+                }
+
+                // delcarations must be after fields
+                if (fns.items.len > 0) {
+                    try self.out.print("\n{s}", .{fns.items});
                 }
 
                 try self.out.print("    }};\n}}\n\n", .{});
@@ -852,6 +916,111 @@ const Transpiler = struct {
         }
 
         // todo: error ?!?!
+    }
+
+    fn visitCompoundStmt(self: *Transpiler, value: *const json.Value) !void {
+        var inner = value.*.object.get("inner");
+        if (inner == null) {
+            return;
+        }
+
+        self.visited += 1;
+
+        try self.out.print("{{\n", .{});
+
+        for (inner.?.array.items) |inner_item| {
+            try self.visit(&inner_item);
+        }
+
+        try self.out.print("}}", .{});
+    }
+
+    fn visitReturnStmt(self: *Transpiler, value: *const json.Value) !void {
+        const v_inner = value.*.object.get("inner");
+        if (v_inner == null or v_inner.?.array.items.len == 0) {
+            try self.out.print("return;", .{});
+            return;
+        } else if (v_inner.?.array.items.len > 1) {
+            log.err("multiple inner nodes in `ReturnStmt`", .{});
+        }
+
+        self.visited += 1;
+
+        try self.out.print("return ", .{});
+        try self.visit(&v_inner.?.array.items[0]);
+        try self.out.print(";\n", .{});
+    }
+
+    fn visitBinaryOperator(self: *Transpiler, value: *const json.Value) !void {
+        const v_opcode = value.*.object.get("opcode");
+        if (v_opcode == null) {
+            log.err("no opcode in `BinaryOperator`", .{});
+            return;
+        }
+
+        const v_inner = value.*.object.get("inner");
+        if (v_inner == null or v_inner.?.array.items.len != 2) {
+            log.err("worng number of operands in `BinaryOperator`", .{});
+            return;
+        }
+
+        self.visited += 1;
+
+        try self.out.print("(", .{});
+        try self.visit(&v_inner.?.array.items[0]);
+        try self.out.print(" {s} ", .{v_opcode.?.string});
+        try self.visit(&v_inner.?.array.items[1]);
+        try self.out.print(")", .{});
+    }
+
+    inline fn visitImplicitCastExpr(self: *Transpiler, value: *const json.Value) !void {
+        return self.visitCStyleCastExpr(value);
+    }
+
+    fn visitMemberExpr(self: *Transpiler, value: *const json.Value) !void {
+        self.visited += 1;
+        const name = value.*.object.get("name").?.string;
+        try self.out.print("self.{s}", .{name});
+    }
+
+    fn visitIntegerLiteral(self: *Transpiler, value: *const json.Value) !void {
+        self.visited += 1;
+        const literal = value.*.object.get("value").?.string;
+        try self.out.print("{s}", .{literal});
+    }
+
+    fn visitCStyleCastExpr(self: *Transpiler, value: *const json.Value) !void {
+        self.visited += 1;
+
+        const cast_type = try self.transpileType(typeQualifier(value).?);
+        defer self.allocator.free(cast_type);
+
+        try self.out.print("@as({s}, ", .{cast_type});
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.out.print(")", .{});
+    }
+
+    fn visitArraySubscriptExpr(self: *Transpiler, value: *const json.Value) !void {
+        self.visited += 1;
+        var v_inner = value.*.object.get("inner");
+        try self.visit(&v_inner.?.array.items[0]);
+        try self.out.print("[", .{});
+        try self.visit(&v_inner.?.array.items[1]);
+        try self.out.print("]", .{});
+    }
+
+    fn visitUnaryExprOrTypeTraitExpr(self: *Transpiler, value: *const json.Value) !void {
+        const name = value.*.object.get("name").?.string;
+        if (mem.eql(u8, name, "sizeof")) {
+            const size_of = try self.transpileType(value.*.object.get("argType").?.object.get("qualType").?.string);
+            defer self.allocator.free(size_of);
+            try self.out.print("@sizeOf({s})", .{size_of});
+        } else {
+            log.err("unknonw `UnaryExprOrTypeTraitExpr` `{s}`", .{name});
+            return;
+        }
+
+        self.visited += 1;
     }
 
     inline fn typeQualifier(value: *const json.Value) ?[]const u8 {
