@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub fn Vector(comptime T: type) type {
     return extern struct {
         const Self = @This();
@@ -16,10 +18,21 @@ pub fn Vector(comptime T: type) type {
             return (@as(c_int, self.Size) * @as(c_int, @sizeOf(T)));
         }
         pub inline fn getPointer(self: *Self, i: c_int) [*c]T {
-            return &self.Data[i];
+            // todo: this is an invalid c++ code
+            return self.Data[i];
         }
         pub inline fn getValue(self: *const Self, i: c_int) [*c]const T {
-            return &self.Data[i];
+            // todo: this is an invalid c++ code
+            return self.Data[i];
         }
     };
+}
+
+test "size" {
+    var arr = [1]u32{0xAF};
+    var v = Vector(u32){ .Data = @ptrCast([*c]u32, &arr), .Size = 1, .Capacity = 1 };
+    try std.testing.expectEqual(v.size(), 1);
+    try std.testing.expectEqual(v.size_in_bytes(), @sizeOf(u32));
+    try std.testing.expectEqual(v.getValue(0).*, 0xAF);
+    try std.testing.expectEqual(v.getPointer(0).*, 0xAF);
 }

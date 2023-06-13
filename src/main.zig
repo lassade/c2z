@@ -128,6 +128,8 @@ const Transpiler = struct {
             try self.visitArraySubscriptExpr(value);
         } else if (mem.eql(u8, kind, "UnaryExprOrTypeTraitExpr")) {
             try self.visitUnaryExprOrTypeTraitExpr(value);
+        } else if (mem.eql(u8, kind, "DeclRefExpr")) {
+            try self.visitDeclRefExpr(value);
         } else {
             log.err("unhandled `{s}`", .{kind});
         }
@@ -1017,6 +1019,20 @@ const Transpiler = struct {
             try self.out.print("@sizeOf({s})", .{size_of});
         } else {
             log.err("unknonw `UnaryExprOrTypeTraitExpr` `{s}`", .{name});
+            return;
+        }
+
+        self.visited += 1;
+    }
+
+    fn visitDeclRefExpr(self: *Transpiler, value: *const json.Value) !void {
+        const v_ref = value.*.object.get("referencedDecl").?;
+        const kind = v_ref.object.get("kind").?.string;
+        if (mem.eql(u8, kind, "ParmVarDecl")) {
+            const name = v_ref.object.get("name").?.string;
+            _ = try self.out.write(name);
+        } else {
+            log.err("unhandled `{s}` in `DeclRefExpr`", .{kind});
             return;
         }
 
