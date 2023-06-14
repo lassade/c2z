@@ -5,7 +5,6 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 # todo
 
-- fix bad node count in c004
 - fix value to alias implicit cast (not represented in the ast)
 - auto resolve naming conflics by adding a counter at the end of the function name
 - handle typedefs of named structs
