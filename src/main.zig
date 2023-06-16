@@ -64,20 +64,20 @@ pub fn main() !void {
         }
         try args.append(input_file);
 
-        var process = try std.ChildProcess.exec(.{
+        var astdump = try std.ChildProcess.exec(.{
             .allocator = allocator,
             .argv = args.items,
             .max_output_bytes = 512 * 1024 * 1024,
         });
         defer {
-            allocator.free(process.stdout);
-            allocator.free(process.stderr);
+            allocator.free(astdump.stdout);
+            allocator.free(astdump.stderr);
         }
 
         var parser = json.Parser.init(allocator, .alloc_if_needed);
         defer parser.deinit();
 
-        var tree = try parser.parse(process.stdout);
+        var tree = try parser.parse(astdump.stdout);
         defer tree.deinit();
         const node_count = Transpiler.nodeCount(&tree.root);
 
@@ -100,8 +100,17 @@ pub fn main() !void {
         defer path.deinit();
 
         var file = try std.fs.cwd().createFile(path.items, .{});
-        defer file.close();
-
         try file.writeAll(buffer.items);
+        file.close();
+
+        log.info("formating `{s}`", .{path.items});
+        args.clearRetainingCapacity();
+        try args.append("zig");
+        try args.append("fmt");
+        try args.append(path.items);
+        var zfmt = std.ChildProcess.init(args.items, args.allocator);
+        zfmt.stderr_behavior = .Ignore;
+        zfmt.stdout_behavior = .Ignore;
+        _ = try zfmt.spawnAndWait();
     }
 }
