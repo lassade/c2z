@@ -12,3 +12,23 @@ test "c005_inheritance" {
     try expect(c005_inheritance.circle_t.area(&circle) == 3.14 * 10 * 10);
     circle.deinit();
 }
+
+test "c009_enum_flags" {
+    const cpp = @import("c009_enum_flags.zig");
+
+    var wflags: cpp.ImGuiWindowFlags = .{};
+    wflags = cpp.ImGuiWindowFlags.merge(wflags, .{ .NoTitleBar = true });
+
+    var cflags: cpp.ConfigFlags = .{};
+    cflags = cpp.ConfigFlags.merge(cflags, .{ .vsync_hint = true });
+}
+
+const c011_index_this = @import("c011_index_this.zig");
+
+test "c011_index_this" {
+    var p: c011_index_this.ImVec2 = .{ .x = 1, .y = 2 };
+    try expect(p.get(0) == 1);
+    try expect(p.get(1) == 2);
+    p.getRef(0).* = 2;
+    try expect(p.get(0) == 2);
+}

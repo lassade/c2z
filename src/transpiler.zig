@@ -144,6 +144,11 @@ pub fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitUnaryOperator(value);
     } else if (mem.eql(u8, kind, "CXXThisExpr")) {
         try self.visitCXXThisExpr(value);
+    } else if (mem.eql(u8, kind, "ConstantExpr")) {
+        try self.visitConstantExpr(value);
+
+        // } else if (mem.eql(u8, kind, "CallExpr")) {
+        //     try self.visitCallExpr(value);
     } else {
         log.err("unhandled `{s}`", .{kind});
     }
@@ -662,8 +667,9 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
     if (value.*.object.get("name")) |v| {
         name = v.string;
     } else {
-        // todo: solved by id inside a ElaboratedType.ownedTagDecl.id
-        log.err("unhandled unnamed `EnumDecl`", .{});
+        // referenced by someone else
+        const id = try std.fmt.parseInt(u64, value.*.object.get("id").?.string, 0);
+        _ = try self.nodes.put(id, value.*);
         return;
     }
 
@@ -688,16 +694,15 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
 
         const variant_tag = inner_item.object.get("kind").?.string;
         if (mem.eql(u8, variant_tag, "EnumConstantDecl")) {
-            var variant_name = inner_item.object.get("name").?.string;
-            if (mem.startsWith(u8, variant_name, name)) {
-                variant_name = variant_name[name.len..];
-            }
+            const variant_name = resolveEnumVariantName(name, inner_item.object.get("name").?.string);
             try self.out.print("    {s}", .{variant_name});
-            // todo: figure out enum constexp
-            // if (try transpileOptionalEnumValue(inner_val, allocator)) |enum_value| {
-            //     try self.out.print("{s}", .{enum_value});
-            //     allocator.free(enum_value);
-            // }
+            // transpile enum value
+            if (inner_item.object.get("inner")) |j_value| {
+                try self.out.print(" = ", .{});
+                for (j_value.array.items) |j_value_item| {
+                    try self.visit(&j_value_item);
+                }
+            }
             try self.out.print(",\n", .{});
         } else {
             log.err("unhandled `{s}` in enum `{s}`", .{ variant_tag, name });
@@ -745,6 +750,14 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
                         _ = try object.put("name", json.Value{ .string = name });
                         // todo: impl the union or struct or whatever using `name`
                         try self.visitCXXRecordDecl(&json.Value{ .object = object });
+                    } else if (mem.eql(u8, n_tag, "EnumDecl")) {
+                        self.visited += 1;
+                        var object = try node.object.clone();
+                        defer object.deinit();
+                        // rename the object
+                        _ = try object.put("name", json.Value{ .string = name });
+                        // todo: impl the union or struct or whatever using `name`
+                        try self.visitEnumDecl(&json.Value{ .object = object });
                     } else {
                         log.err("unhandled `ElaboratedType` `{s}` in typedef `{s}`", .{ n_tag, name });
                     }
@@ -1075,11 +1088,15 @@ fn visitUnaryExprOrTypeTraitExpr(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitDeclRefExpr(self: *Self, value: *const json.Value) !void {
-    const v_ref = value.*.object.get("referencedDecl").?;
-    const kind = v_ref.object.get("kind").?.string;
+    const j_ref = value.*.object.get("referencedDecl").?;
+    const kind = j_ref.object.get("kind").?.string;
     if (mem.eql(u8, kind, "ParmVarDecl")) {
-        const name = v_ref.object.get("name").?.string;
-        _ = try self.out.write(name);
+        const param = j_ref.object.get("name").?.string;
+        _ = try self.out.write(param);
+    } else if (mem.eql(u8, kind, "EnumConstantDecl")) {
+        const base = typeQualifier(&j_ref).?;
+        const variant = resolveEnumVariantName(base, j_ref.object.get("name").?.string);
+        try self.out.print("{s}.{s}", .{ base, variant });
     } else {
         log.err("unhandled `{s}` in `DeclRefExpr`", .{kind});
         return;
@@ -1123,9 +1140,25 @@ fn visitCallExpr(self: *Self, value: *const json.Value) !void {
     _ = self;
 }
 
-fn visitCXXThisExpr(self: *Self, _: *const json.Value) !void {
+fn visitCXXThisExpr(self: *Self, value: *const json.Value) !void {
+    _ = value;
+
     try self.out.print("self", .{});
     self.visited += 1;
+}
+
+fn visitConstantExpr(self: *Self, value: *const json.Value) !void {
+    self.visited += 1;
+
+    for (value.*.object.get("inner").?.array.items) |j_stmt| {
+        // todo: handle edge cases, if any
+        // const kind = j_stmt.object.get("kind").?.string;
+        // if (mem.eql(u8, kind, "IntegerLiteral")) {
+        //     try self.visitIntegerLiteral(value);
+        // } else {
+        try self.visit(&j_stmt);
+        // }
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1137,6 +1170,10 @@ inline fn typeQualifier(value: *const json.Value) ?[]const u8 {
         }
     }
     return null;
+}
+
+inline fn resolveEnumVariantName(base: []const u8, variant: []const u8) []const u8 {
+    return if (mem.startsWith(u8, variant, base)) variant[base.len..] else variant;
 }
 
 fn parseFnSignature(value: *const json.Value) ?FnSig {
