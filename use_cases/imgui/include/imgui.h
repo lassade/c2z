@@ -1,3 +1,7 @@
+// custom defines and other configurations
+void ImAssert(bool);
+#define IM_ASSERT(exp) ImAssert(exp)
+
 // dear imgui, v1.89.5
 // (headers)
 

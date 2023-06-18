@@ -1194,21 +1194,25 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         // note: references pointer types can't be null
         const ptr = if (ch == '&') "*" else "[*c]";
 
-        // cursed c++ pointer type format
-        var n: []u8 = undefined;
-        if (mem.endsWith(u8, ttname[0..(ttname.len - 2)], "const ")) {
+        var buf: [7]u8 = undefined;
+        var template = try fmt.bufPrint(&buf, "const {c}", .{ch});
+
+        var inner: []u8 = undefined;
+        if (mem.endsWith(u8, ttname, template)) {
             // const pointer of pointers
-            n = try self.transpileType(ttname[0..(ttname.len - 7)]);
+            inner = try self.transpileType(ttname[0..(ttname.len - template.len)]);
         } else if (mem.startsWith(u8, ttname, "const ")) {
             // const pointer
-            n = try self.transpileType(ttname[6..(ttname.len - 1)]);
+            inner = try self.transpileType(ttname[("const ".len)..(ttname.len - 1)]);
         } else {
-            var inner_name = try self.transpileType(ttname[0..(ttname.len - 1)]);
-            defer self.allocator.free(inner_name);
-            return try fmt.allocPrint(self.allocator, "{s}{s}", .{ ptr, inner_name });
+            // mutable pointer case
+            inner = try self.transpileType(ttname[0..(ttname.len - 1)]);
+            defer self.allocator.free(inner);
+            return try fmt.allocPrint(self.allocator, "{s}{s}", .{ ptr, inner });
         }
-        defer self.allocator.free(n);
-        return try fmt.allocPrint(self.allocator, "{s}const {s}", .{ ptr, n });
+
+        defer self.allocator.free(inner);
+        return try fmt.allocPrint(self.allocator, "{s}const {s}", .{ ptr, inner });
     } else if (ch == ']') {
         // fixed sized array
         const len = mem.lastIndexOf(u8, ttname, "[").?;
