@@ -3,7 +3,15 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 `zig cc -x c++ -std=c++11 -Xclang -ast-dump=json {input_file}`
 
 
-# todo
+## Notes
+
+- No need of `extern C` functions
+- Manual adjustments are required
+- Not all transpiled code should compile, but all code that does compile should work
+- No C-style pointers `[*c]`, by default `?*` is used so you can later change to one of: `*`, `[*]`, `?[*]`, `[*:0]`, `?[*:0]`
+- Meant to work libraries that follow the *C with classes* coding style
+
+## Todo
 
 - fix value to alias implicit cast (not represented in the ast)
 - auto resolve naming conflics by adding a counter at the end of the function name

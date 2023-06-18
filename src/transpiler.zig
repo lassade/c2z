@@ -15,22 +15,22 @@ const FnSig = struct {
     ret_type: []const u8 = "",
 };
 
-const Parent = enum {
+const NodeType = enum {
     none,
-    cxx_translation_unit_decl,
-    cxx_namespace,
-    cxx_record_decl,
+    include,
+    namespace,
+    class,
+    function,
 };
 
 const State = struct {
-    parent: Parent = .none,
+    parent: NodeType = .none,
     parent_name: ?[]const u8 = null,
     ctors: usize = 0,
     fields: usize = 0,
-    fields_out: ?std.ArrayList(u8).Writer = null,
 };
 
-const DefData = struct {
+const ClassInfo = struct {
     is_polymorphic: bool,
 };
 
@@ -38,7 +38,7 @@ allocator: Allocator,
 out: std.ArrayList(u8).Writer,
 visited: usize,
 nodes: std.AutoHashMap(u64, json.Value),
-definition_data: std.StringArrayHashMap(DefData),
+definition_data: std.StringArrayHashMap(ClassInfo),
 state: State = .{},
 
 // options
@@ -51,7 +51,7 @@ pub fn init(buffer: *std.ArrayList(u8), allocator: Allocator) Self {
         .out = buffer.writer(),
         .visited = 0,
         .nodes = std.AutoHashMap(u64, json.Value).init(allocator),
-        .definition_data = std.StringArrayHashMap(DefData).init(allocator),
+        .definition_data = std.StringArrayHashMap(ClassInfo).init(allocator),
     };
 }
 
@@ -163,12 +163,12 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     var name: []const u8 = undefined;
     if (value.*.object.get("name")) |v| {
         name = v.string;
-    } else if (self.state.parent == .cxx_record_decl) {
+    } else if (self.state.parent == .class) {
+        // unamed struct/class/union field
         is_field = true;
         free_name = true;
         name = try fmt.allocPrint(self.allocator, "field{d}", .{self.state.fields});
         self.state.fields += 1;
-        self.out = self.state.fields_out.?;
     } else {
         // referenced by someone else
         const id = try std.fmt.parseInt(u64, value.*.object.get("id").?.string, 0);
@@ -238,11 +238,10 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
 
     var prev_state = self.state;
     self.state = .{
-        .parent = .cxx_record_decl,
+        .parent = .class,
         .parent_name = name,
         .ctors = 0,
         .fields = 0,
-        .fields_out = self.out,
     };
     defer self.state = prev_state;
 
@@ -805,11 +804,10 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
 
     var prev_state = self.state;
     self.state = .{
-        .parent = .cxx_record_decl,
+        .parent = .class,
         .parent_name = "Self",
         .ctors = 0,
         .fields = 0,
-        .fields_out = self.out,
     };
     defer self.state = prev_state;
 
@@ -914,17 +912,16 @@ fn visitCompoundStmt(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitReturnStmt(self: *Self, value: *const json.Value) !void {
-    const v_inner = value.*.object.get("inner");
-    if (v_inner == null or v_inner.?.array.items.len == 0) {
-        try self.out.print("return;", .{});
-        return;
-    } else if (v_inner.?.array.items.len > 1) {
-        log.err("multiple inner nodes in `ReturnStmt`", .{});
-    }
-
     self.visited += 1;
 
+    const v_inner = value.*.object.get("inner");
+    if (v_inner == null) {
+        try self.out.print("return;", .{});
+        return;
+    }
+
     _ = try self.out.write("return ");
+    // todo: must check if is returning an aliesed pointer, if so it must add the referece operator '&'
     try self.visit(&v_inner.?.array.items[0]);
     _ = try self.out.write(";\n");
 }
@@ -937,10 +934,6 @@ fn visitBinaryOperator(self: *Self, value: *const json.Value) !void {
     }
 
     const v_inner = value.*.object.get("inner");
-    if (v_inner == null or v_inner.?.array.items.len != 2) {
-        log.err("worng number of operands in `BinaryOperator`", .{});
-        return;
-    }
 
     self.visited += 1;
 
@@ -1018,9 +1011,9 @@ fn visitDeclRefExpr(self: *Self, value: *const json.Value) !void {
 ///////////////////////////////////////////////////////////////////////////////
 
 inline fn typeQualifier(value: *const json.Value) ?[]const u8 {
-    if (value.*.object.get("type")) |tval| {
-        if (tval.object.get("qualType")) |qval| {
-            return qval.string;
+    if (value.*.object.get("type")) |j_type| {
+        if (j_type.object.get("qualType")) |j_qualifier| {
+            return j_qualifier.string;
         }
     }
     return null;
@@ -1031,12 +1024,8 @@ fn parseFnSignature(value: *const json.Value) ?FnSig {
         var meta: FnSig = undefined;
 
         var lp = mem.lastIndexOf(u8, sig, ")").?;
-        if (mem.endsWith(u8, sig[lp..], ") const")) {
-            meta.const_self = true;
-        }
-        if (mem.endsWith(u8, sig[0 .. lp + 1], "... )")) {
-            meta.varidatic = true;
-        }
+        meta.const_self = mem.endsWith(u8, sig[lp..], ") const");
+        meta.varidatic = mem.endsWith(u8, sig[0 .. lp + 1], "... )");
 
         var s = mem.split(u8, sig, "(");
         meta.ret_type = s.first();
@@ -1071,11 +1060,7 @@ pub fn nodeCount(value: *const json.Value) usize {
     return count;
 }
 
-// primitives
-// pointers and aliased pointers
-// fixed sized arrays
-// templated types
-// self described pointers to functions: void (*)(Object*, int)
+// note: avoid c-style pointers `[*c]` because is too error prone when transpiling c++ code
 fn transpileType(self: *Self, tname: []const u8) ![]u8 {
     var ttname = mem.trim(u8, tname, " ");
 
@@ -1101,10 +1086,10 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
             // mutable pointer case
             var inner_name = try self.transpileType(ttname[0..(ttname.len - 1)]);
             defer self.allocator.free(inner_name);
-            return try fmt.allocPrint(self.allocator, "[*c]{s}", .{inner_name});
+            return try fmt.allocPrint(self.allocator, "?*{s}", .{inner_name});
         }
         defer self.allocator.free(n);
-        return try fmt.allocPrint(self.allocator, "[*c]const {s}", .{n});
+        return try fmt.allocPrint(self.allocator, "?*const {s}", .{n});
     } else if (ch == ']') {
         // fixed sized array
         const len = mem.lastIndexOf(u8, ttname, "[").?;
@@ -1112,6 +1097,7 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         defer self.allocator.free(inner_name);
         return try fmt.allocPrint(self.allocator, "{s}{s}", .{ ttname[len..], inner_name });
     } else if (ch == ')') {
+        // todo: handle named function pointers `typedef int (*ImGuiInputTextCallback)(ImGuiInputTextCallbackData* data);`
         // function pointer or invalid type name
         if (mem.indexOf(u8, ttname, "(*)")) |ptr| {
             var index: usize = 0;
@@ -1122,7 +1108,7 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
             const tret = try self.transpileType(ttname[0..ptr]);
             defer self.allocator.free(tret);
 
-            return try fmt.allocPrint(self.allocator, "[*c]const fn({s}) {s}", .{ targs.items, tret });
+            return try fmt.allocPrint(self.allocator, "?*const fn({s}) {s}", .{ targs.items, tret });
         } else {
             log.err("unknow type `{s}`, falling back to `*anyopaque`", .{ttname});
             ttname = "*anyopaque";

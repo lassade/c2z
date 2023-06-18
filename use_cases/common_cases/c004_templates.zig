@@ -4,7 +4,7 @@ pub fn Vector(comptime T: type) type {
     return extern struct {
         const Self = @This();
 
-        Data: [*c]T,
+        Data: ?[*]T,
         Size: c_int,
         Capacity: c_int,
 
@@ -17,13 +17,11 @@ pub fn Vector(comptime T: type) type {
         pub inline fn size_in_bytes(self: *const Self) c_int {
             return (@as(c_int, self.Size) * @as(c_int, @sizeOf(T)));
         }
-        pub inline fn getPointer(self: *Self, i: c_int) [*c]T {
-            // todo: this is an invalid c++ code
-            return self.Data[i];
+        pub inline fn getPointer(self: *Self, i: c_int) *T {
+            return &self.Data.?[i];
         }
-        pub inline fn getValue(self: *const Self, i: c_int) [*c]const T {
-            // todo: this is an invalid c++ code
-            return self.Data[i];
+        pub inline fn getValue(self: *const Self, i: c_int) *const T {
+            return &self.Data.?[i];
         }
     };
 }
