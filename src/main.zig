@@ -83,6 +83,9 @@ pub fn main() !void {
 
         var buffer = std.ArrayList(u8).init(allocator);
         defer buffer.deinit();
+
+        _ = try buffer.writer().write("const std = @import(\"std\");\n\n");
+
         var transpiler = Transpiler.init(&buffer, allocator);
         transpiler.transpile_includes = res.args.@"transpile-includes" != 0;
         //transpiler.zigify = res.args.zigify != 0;

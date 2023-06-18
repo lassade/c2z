@@ -15,6 +15,35 @@ const FnSig = struct {
     ret_type: []const u8 = "",
 };
 
+const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
+    .{ "bool", "bool" },
+    .{ "char", "u8" },
+    .{ "signed char", "i8" },
+    .{ "unsigned char", "u8" },
+    .{ "short", "c_short" },
+    .{ "unsigned short", "c_ushort" },
+    .{ "int", "c_int" },
+    .{ "unsigned int", "c_uint" },
+    .{ "long", "c_long" },
+    .{ "unsigned long", "c_ulong" },
+    .{ "long long", "c_longlong" },
+    .{ "unsigned long long", "c_ulonglong" },
+    .{ "float", "f32" },
+    .{ "double", "f64" },
+    .{ "int8_t", "i8" },
+    .{ "uint8_t", "u8" },
+    .{ "int16_t", "i16" },
+    .{ "uint16_t", "u16" },
+    .{ "int32_t", "i32" },
+    .{ "uint32_t", "u32" },
+    .{ "int64_t", "i64" },
+    .{ "uint64_t", "u64" },
+    .{ "uintptr_t", "usize" },
+    .{ "intptr_t", "isize" },
+    .{ "size_t", "usize" },
+    .{ "void *", "*anyopaque" },
+});
+
 const NodeType = enum {
     none,
     include,
@@ -109,6 +138,12 @@ pub fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitUnaryExprOrTypeTraitExpr(value);
     } else if (mem.eql(u8, kind, "DeclRefExpr")) {
         try self.visitDeclRefExpr(value);
+    } else if (mem.eql(u8, kind, "ParenExpr")) {
+        try self.visitParenExpr(value);
+    } else if (mem.eql(u8, kind, "UnaryOperator")) {
+        try self.visitUnaryOperator(value);
+    } else if (mem.eql(u8, kind, "CXXThisExpr")) {
+        try self.visitCXXThisExpr(value);
     } else {
         log.err("unhandled `{s}`", .{kind});
     }
@@ -344,17 +379,23 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []const u8) !void {
-    self.visited += 1;
-
-    const sig = parseFnSignature(value).?;
-
     if (value.*.object.get("isInvalid")) |invalid| {
         if (invalid.bool) {
-            self.visited -= 1;
-            log.err("invalid ctor `{s}`", .{parent});
+            log.err("invalid ctor of `{s}`", .{parent});
             return;
         }
     }
+
+    if (value.*.object.get("constexpr")) |constexpr| {
+        if (constexpr.bool) {
+            log.err("unhandled constexpr ctor of `{s}`", .{parent});
+            return;
+        }
+    }
+
+    const sig = parseFnSignature(value).?;
+
+    self.visited += 1;
 
     // todo: copy code from visitCXXMethodDecl
 
@@ -452,8 +493,6 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
 }
 
 fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8) !void {
-    self.visited += 1;
-
     const sig = parseFnSignature(value).?;
 
     var method_name = value.*.object.get("name").?.string;
@@ -467,15 +506,14 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
             if (mem.eql(u8, op, "[]")) {
                 if (!sig.const_self and mem.endsWith(u8, sig.ret_type, "&")) {
                     // class[i] = value;
-                    method_name = "getPointer";
+                    method_name = "getRef";
                 } else {
                     // value = class[i];
-                    method_name = "getValue";
+                    method_name = "get";
                 }
                 // } else if (mem.eql(u8, op, " new")) {
                 // } else if (mem.eql(u8, op, " delete")) {
             } else {
-                self.visited -= 1;
                 log.err("unhandled operator `{s}` in `{?s}`", .{ op[1..], parent });
                 return;
             }
@@ -484,11 +522,19 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
 
     if (value.*.object.get("isInvalid")) |invalid| {
         if (invalid.bool) {
-            self.visited -= 1;
             log.err("invalid method `{?s}::{s}`", .{ parent, method_name });
             return;
         }
     }
+
+    if (value.*.object.get("constexpr")) |constexpr| {
+        if (constexpr.bool) {
+            log.err("unhandled constexpr method `{?s}::{s}`", .{ parent, method_name });
+            return;
+        }
+    }
+
+    self.visited += 1;
 
     // note: if the function has a `= 0` at the end it will have "pure" = true attribute
 
@@ -541,46 +587,48 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
 
     // method args
 
-    for (v_inner.?.array.items) |v_item| {
-        const arg_kind = v_item.object.get("kind").?.string;
-        if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
-            self.visited += 1;
+    if (v_inner != null) {
+        for (v_inner.?.array.items) |v_item| {
+            const arg_kind = v_item.object.get("kind").?.string;
+            if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
+                self.visited += 1;
 
-            const v_type = v_item.object.get("type").?;
-            var v_qual = v_type.object.get("qualType").?.string;
+                const v_type = v_item.object.get("type").?;
+                var v_qual = v_type.object.get("qualType").?.string;
 
-            // va_list is in practice a `char*`, but we can double check this by verifing the desugared type
-            if (mem.eql(u8, v_qual, "va_list")) {
-                if (v_type.object.get("desugaredQualType")) |v_desurgared| {
-                    v_qual = v_desurgared.string;
+                // va_list is in practice a `char*`, but we can double check this by verifing the desugared type
+                if (mem.eql(u8, v_qual, "va_list")) {
+                    if (v_type.object.get("desugaredQualType")) |v_desurgared| {
+                        v_qual = v_desurgared.string;
+                    }
                 }
+
+                var arg_type = try self.transpileType(v_qual);
+                defer self.allocator.free(arg_type);
+
+                var arg_name: []const u8 = "_";
+                if (v_item.object.get("name")) |v_item_name| {
+                    arg_name = v_item_name.string;
+                }
+
+                if (comma) {
+                    try self.out.print(", ", .{});
+                }
+                comma = true;
+
+                try self.out.print("{s}: {s}", .{ arg_name, arg_type });
+            } else if (mem.eql(u8, arg_kind, "FormatAttr")) {
+                // varidatic function with the same properties as printf
+                self.visited += 1;
+            } else if (mem.eql(u8, arg_kind, "CompoundStmt")) {
+                const tmp = self.out;
+                self.out = body.writer();
+                try self.visitCompoundStmt(&v_item);
+                self.out = tmp;
+            } else {
+                log.err("unhandled `{s}` in function `{?s}::{s}`", .{ arg_kind, parent, method_name });
+                continue;
             }
-
-            var arg_type = try self.transpileType(v_qual);
-            defer self.allocator.free(arg_type);
-
-            var arg_name: []const u8 = "_";
-            if (v_item.object.get("name")) |v_item_name| {
-                arg_name = v_item_name.string;
-            }
-
-            if (comma) {
-                try self.out.print(", ", .{});
-            }
-            comma = true;
-
-            try self.out.print("{s}: {s}", .{ arg_name, arg_type });
-        } else if (mem.eql(u8, arg_kind, "FormatAttr")) {
-            // varidatic function with the same properties as printf
-            self.visited += 1;
-        } else if (mem.eql(u8, arg_kind, "CompoundStmt")) {
-            const tmp = self.out;
-            self.out = body.writer();
-            try self.visitCompoundStmt(&v_item);
-            self.out = tmp;
-        } else {
-            log.err("unhandled `{s}` in function `{?s}::{s}`", .{ arg_kind, parent, method_name });
-            continue;
         }
     }
 
@@ -598,10 +646,9 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
         try self.out.print(" {s}\n", .{body.items});
     } else {
         try self.out.print(";\n", .{});
-    }
-
-    if (is_mangled) {
-        try self.out.print("pub const {s} = {s};\n\n", .{ method_name, method_mangled_name });
+        if (is_mangled) {
+            try self.out.print("pub const {s} = {s};\n\n", .{ method_name, method_mangled_name });
+        }
     }
 }
 
@@ -927,25 +974,65 @@ fn visitReturnStmt(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitBinaryOperator(self: *Self, value: *const json.Value) !void {
-    const v_opcode = value.*.object.get("opcode");
-    if (v_opcode == null) {
-        log.err("no opcode in `BinaryOperator`", .{});
+    const j_inner = value.*.object.get("inner").?;
+    try self.visit(&j_inner.array.items[0]);
+
+    const opcode = value.*.object.get("opcode").?.string;
+    if (mem.eql(u8, opcode, "||")) {
+        try self.out.print(" or ", .{});
+    } else if (mem.eql(u8, opcode, "&&")) {
+        try self.out.print(" and ", .{});
+    } else {
+        try self.out.print(" {s} ", .{opcode});
+    }
+
+    try self.visit(&j_inner.array.items[1]);
+
+    self.visited += 1;
+}
+
+fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
+    const kind = value.*.object.get("castKind").?.string;
+    self.visited += 1;
+
+    if (mem.eql(u8, kind, "IntegralToBoolean")) {
+        try self.out.print("((", .{});
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.out.print(") != 0)", .{});
+        return;
+    } else if (mem.eql(u8, kind, "LValueToRValue") or mem.eql(u8, kind, "NoOp")) {
+        // wut!?
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        return;
+    } else if (mem.eql(u8, kind, "ToVoid")) {
+        // todo: casting to void is a shitty way of evaluating expressions that might have side effects,
+        // https://godbolt.org/z/45xYqaz37 shown that the following snippet should be executed even in release builds
+        try self.out.print("_ = (", .{});
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.out.print(");\n", .{});
         return;
     }
 
-    const v_inner = value.*.object.get("inner");
+    const dst = try self.transpileType(typeQualifier(value).?);
+    defer self.allocator.free(dst);
 
-    self.visited += 1;
+    if (mem.eql(u8, kind, "BitCast")) {
+        if (mem.startsWith(u8, dst, "*") or mem.startsWith(u8, dst, "[*c]")) {
+            try self.out.print("@ptrCast({s}, ", .{dst});
+        } else {
+            try self.out.print("@bitCast({s}, ", .{dst});
+        }
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+    } else if (mem.eql(u8, kind, "IntegralCast")) {
+        try self.out.print("@intCast({s}, ", .{dst});
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+    } else {
+        log.warn("unhandled cast kind `{s}`", .{kind});
+        try self.out.print("@as({s}, ", .{dst});
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+    }
 
-    try self.out.print("(", .{});
-    try self.visit(&v_inner.?.array.items[0]);
-    try self.out.print(" {s} ", .{v_opcode.?.string});
-    try self.visit(&v_inner.?.array.items[1]);
     try self.out.print(")", .{});
-}
-
-inline fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
-    return self.visitCStyleCastExpr(value);
 }
 
 fn visitMemberExpr(self: *Self, value: *const json.Value) !void {
@@ -960,15 +1047,8 @@ fn visitIntegerLiteral(self: *Self, value: *const json.Value) !void {
     self.visited += 1;
 }
 
-fn visitCStyleCastExpr(self: *Self, value: *const json.Value) !void {
-    const cast_type = try self.transpileType(typeQualifier(value).?);
-    defer self.allocator.free(cast_type);
-
-    try self.out.print("@as({s}, ", .{cast_type});
-    try self.visit(&value.*.object.get("inner").?.array.items[0]);
-    try self.out.print(")", .{});
-
-    self.visited += 1;
+inline fn visitCStyleCastExpr(self: *Self, value: *const json.Value) !void {
+    return self.visitImplicitCastExpr(value);
 }
 
 fn visitArraySubscriptExpr(self: *Self, value: *const json.Value) !void {
@@ -1005,6 +1085,46 @@ fn visitDeclRefExpr(self: *Self, value: *const json.Value) !void {
         return;
     }
 
+    self.visited += 1;
+}
+
+fn visitParenExpr(self: *Self, value: *const json.Value) !void {
+    self.visited += 1;
+
+    const rvalue = typeQualifier(value).?;
+    if (mem.eql(u8, rvalue, "void")) {
+        // inner expression results in nothing
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+    } else {
+        try self.out.print("(", .{});
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.out.print(")", .{});
+    }
+}
+
+fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
+    const opcode = value.*.object.get("opcode").?.string;
+    if (mem.eql(u8, opcode, "*")) {
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.out.print(".*", .{});
+    } else if (mem.eql(u8, opcode, "!") or mem.eql(u8, opcode, "~")) {
+        try self.out.print("{s}", .{opcode});
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+    } else {
+        log.warn("unhandled opcode `{s}` in `UnaryOperator`", .{opcode});
+        return;
+    }
+
+    self.visited += 1;
+}
+
+fn visitCallExpr(self: *Self, value: *const json.Value) !void {
+    _ = value;
+    _ = self;
+}
+
+fn visitCXXThisExpr(self: *Self, _: *const json.Value) !void {
+    try self.out.print("self", .{});
     self.visited += 1;
 }
 
@@ -1060,7 +1180,6 @@ pub fn nodeCount(value: *const json.Value) usize {
     return count;
 }
 
-// note: avoid c-style pointers `[*c]` because is too error prone when transpiling c++ code
 fn transpileType(self: *Self, tname: []const u8) ![]u8 {
     var ttname = mem.trim(u8, tname, " ");
 
@@ -1071,25 +1190,25 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
 
     const ch = ttname[ttname.len - 1];
     if (ch == '*' or ch == '&') {
-        // todo: aliased pointers do not support null, right?
-        // cursed c++ pointer or alised pointer
-        var buf: [7]u8 = undefined;
-        var template = try fmt.bufPrint(&buf, "const {c}", .{ch});
+        // note: avoid c-style pointers `[*c]` when dealing with references types
+        // note: references pointer types can't be null
+        const ptr = if (ch == '&') "*" else "[*c]";
+
+        // cursed c++ pointer type format
         var n: []u8 = undefined;
-        if (mem.endsWith(u8, ttname, template)) {
+        if (mem.endsWith(u8, ttname[0..(ttname.len - 2)], "const ")) {
             // const pointer of pointers
-            n = try self.transpileType(ttname[0..(ttname.len - template.len)]);
+            n = try self.transpileType(ttname[0..(ttname.len - 7)]);
         } else if (mem.startsWith(u8, ttname, "const ")) {
             // const pointer
-            n = try self.transpileType(ttname[("const ".len)..(ttname.len - 1)]);
+            n = try self.transpileType(ttname[6..(ttname.len - 1)]);
         } else {
-            // mutable pointer case
             var inner_name = try self.transpileType(ttname[0..(ttname.len - 1)]);
             defer self.allocator.free(inner_name);
-            return try fmt.allocPrint(self.allocator, "?*{s}", .{inner_name});
+            return try fmt.allocPrint(self.allocator, "{s}{s}", .{ ptr, inner_name });
         }
         defer self.allocator.free(n);
-        return try fmt.allocPrint(self.allocator, "?*const {s}", .{n});
+        return try fmt.allocPrint(self.allocator, "{s}const {s}", .{ ptr, n });
     } else if (ch == ']') {
         // fixed sized array
         const len = mem.lastIndexOf(u8, ttname, "[").?;
@@ -1124,41 +1243,8 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         mem.copyForwards(u8, buf, targs.items);
         return buf;
     } else {
-        const primitives = std.ComptimeStringMap([]const u8, .{
-            .{ "bool", "bool" },
-
-            .{ "char", "u8" },
-            .{ "signed char", "i8" },
-            .{ "unsigned char", "u8" },
-            .{ "short", "c_short" },
-            .{ "unsigned short", "c_ushort" },
-            .{ "int", "c_int" },
-            .{ "unsigned int", "c_uint" },
-            .{ "long", "c_long" },
-            .{ "unsigned long", "c_ulong" },
-            .{ "long long", "c_longlong" },
-            .{ "unsigned long long", "c_ulonglong" },
-
-            .{ "float", "f32" },
-            .{ "double", "f64" },
-
-            .{ "int8_t", "i8" },
-            .{ "uint8_t", "u8" },
-            .{ "int16_t", "i16" },
-            .{ "uint16_t", "u16" },
-            .{ "int32_t", "i32" },
-            .{ "uint32_t", "u32" },
-            .{ "int64_t", "i64" },
-            .{ "uint64_t", "u64" },
-            .{ "uintptr_t", "usize" },
-            .{ "intptr_t", "isize" },
-            .{ "size_t", "usize" },
-
-            .{ "void *", "*anyopaque" },
-        });
-
         // common primitives
-        if (primitives.get(ttname)) |pname| {
+        if (PrimitivesTypeLUT.get(ttname)) |pname| {
             ttname = pname;
         }
     }
