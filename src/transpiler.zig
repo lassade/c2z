@@ -41,7 +41,6 @@ const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
     .{ "uintptr_t", "usize" },
     .{ "intptr_t", "isize" },
     .{ "size_t", "usize" },
-    .{ "void *", "*anyopaque" },
 });
 
 const NodeType = enum {
@@ -57,6 +56,7 @@ const State = struct {
     parent_name: ?[]const u8 = null,
     ctors: usize = 0,
     fields: usize = 0,
+    // todo: overloads: std.StringArrayHashMap(usize),
 };
 
 const ClassInfo = struct {
@@ -90,8 +90,8 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn visit(self: *Self, value: *const json.Value) anyerror!void {
-    if (value.*.object.get("isImplicit")) |implicit| {
-        if (implicit.bool) {
+    if (value.*.object.getPtr("isImplicit")) |implicit| {
+        if (implicit.*.bool) {
             self.visited += nodeCount(value);
             return;
         }
@@ -101,7 +101,7 @@ pub fn visit(self: *Self, value: *const json.Value) anyerror!void {
         return;
     }
 
-    var kind = value.*.object.get("kind").?.string;
+    var kind = value.*.object.getPtr("kind").?.*.string;
     if (mem.eql(u8, kind, "TranslationUnitDecl")) {
         try self.visitTranslationUnitDecl(value);
     } else if (mem.eql(u8, kind, "LinkageSpecDecl")) {
@@ -146,7 +146,6 @@ pub fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitCXXThisExpr(value);
     } else if (mem.eql(u8, kind, "ConstantExpr")) {
         try self.visitConstantExpr(value);
-
         // } else if (mem.eql(u8, kind, "CallExpr")) {
         //     try self.visitCallExpr(value);
     } else {
@@ -519,7 +518,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
                 // } else if (mem.eql(u8, op, " new")) {
                 // } else if (mem.eql(u8, op, " delete")) {
             } else {
-                log.err("unhandled operator `{s}` in `{?s}`", .{ op[1..], parent });
+                log.err("unhandled operator `{s}` in `{?s}`", .{ op, parent });
                 return;
             }
         }
@@ -1200,8 +1199,8 @@ inline fn shouldSkip(self: *Self, value: *const json.Value) bool {
     //     }
     // }
     if (!self.transpile_includes) {
-        if (value.*.object.get("loc")) |loc| {
-            return loc.object.get("includedFrom") != null;
+        if (value.*.object.getPtr("loc")) |loc| {
+            return loc.*.object.getPtr("includedFrom") != null;
         }
     }
     return false;
@@ -1209,9 +1208,9 @@ inline fn shouldSkip(self: *Self, value: *const json.Value) bool {
 
 pub fn nodeCount(value: *const json.Value) usize {
     var count: usize = 1;
-    if (value.object.get("inner")) |inner| {
-        for (inner.array.items) |v_item| {
-            count += nodeCount(&v_item);
+    if (value.object.getPtr("inner")) |j_inner| {
+        for (j_inner.*.array.items) |*j_item| {
+            count += nodeCount(j_item);
         }
     }
     return count;
@@ -1231,25 +1230,31 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         // note: references pointer types can't be null
         const ptr = if (ch == '&') "*" else "[*c]";
 
+        var constness: []const u8 = "const ";
+        var raw_name: []const u8 = undefined;
+
         var buf: [7]u8 = undefined;
         var template = try fmt.bufPrint(&buf, "const {c}", .{ch});
-
-        var inner: []u8 = undefined;
         if (mem.endsWith(u8, ttname, template)) {
             // const pointer of pointers
-            inner = try self.transpileType(ttname[0..(ttname.len - template.len)]);
+            raw_name = ttname[0..(ttname.len - template.len)];
         } else if (mem.startsWith(u8, ttname, "const ")) {
             // const pointer
-            inner = try self.transpileType(ttname[("const ".len)..(ttname.len - 1)]);
+            raw_name = ttname[("const ".len)..(ttname.len - 1)];
         } else {
             // mutable pointer case
-            inner = try self.transpileType(ttname[0..(ttname.len - 1)]);
-            defer self.allocator.free(inner);
-            return try fmt.allocPrint(self.allocator, "{s}{s}", .{ ptr, inner });
+            raw_name = ttname[0..(ttname.len - 1)];
+            constness = "";
         }
 
+        // special case
+        if (mem.eql(u8, mem.trim(u8, raw_name, " "), "void")) {
+            return try fmt.allocPrint(self.allocator, "?*{s}anyopaque", .{constness});
+        }
+
+        var inner = try self.transpileType(raw_name);
         defer self.allocator.free(inner);
-        return try fmt.allocPrint(self.allocator, "{s}const {s}", .{ ptr, inner });
+        return try fmt.allocPrint(self.allocator, "{s}{s}{s}", .{ ptr, constness, inner });
     } else if (ch == ']') {
         // fixed sized array
         const len = mem.lastIndexOf(u8, ttname, "[").?;

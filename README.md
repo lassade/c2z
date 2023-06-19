@@ -9,17 +9,20 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 - Manual adjustments are required
 - Not all transpiled code should compile, but all code that does compile should work
 - Meant to work with libraries that follow the *C with classes* coding style
+- No Zig side inheritance, instead create bindings of a C++ implementation
 
 ## Todo
 
+- use `getPtr` in `json.Value`
 - auto resolve naming conflics by adding a counter at the end of the function name
 - handle typedefs of named structs
+- constexpr
 - parse fn ptr function pointers should be decorated with `callconv(.C)`
 - auto bitfield enumerations
 - write opaques if they didn't get defined at the end of the file
 - static methods inside classes
 - use `@compileError` for objects that couldn't be transpiled
-- zig side inheritance
+
 - write layout tests
 
 test with: other libraries from: https://github.com/godotengine/godot/tree/master/modules
