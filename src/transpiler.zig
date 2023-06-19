@@ -511,7 +511,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
             if (mem.eql(u8, op, "[]")) {
                 if (!sig.const_self and mem.endsWith(u8, sig.ret_type, "&")) {
                     // class[i] = value;
-                    method_name = "getRef";
+                    method_name = "getPtr";
                 } else {
                     // value = class[i];
                     method_name = "get";
