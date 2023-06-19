@@ -16,11 +16,11 @@ test "c005_inheritance" {
 test "c009_enum_flags" {
     const cpp = @import("c009_enum_flags.zig");
 
-    var wflags: cpp.ImGuiWindowFlags = .{};
-    wflags = cpp.ImGuiWindowFlags.merge(wflags, .{ .NoTitleBar = true });
+    var wflags: cpp.ImGuiWindowFlags_ = .{};
+    wflags.bits |= cpp.ImGuiWindowFlags_.NoTitleBar.bits;
 
     var cflags: cpp.ConfigFlags = .{};
-    cflags = cpp.ConfigFlags.merge(cflags, .{ .vsync_hint = true });
+    cflags.bits |= cpp.ConfigFlags.FLAG_VSYNC_HINT.bits;
 }
 
 const c011_index_this = @import("c011_index_this.zig");

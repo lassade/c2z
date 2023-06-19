@@ -18,11 +18,9 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 - handle typedefs of named structs
 - constexpr
 - parse fn ptr function pointers should be decorated with `callconv(.C)`
-- auto bitfield enumerations
 - write opaques if they didn't get defined at the end of the file
 - static methods inside classes
 - use `@compileError` for objects that couldn't be transpiled
-
 - write layout tests
 
 test with: other libraries from: https://github.com/godotengine/godot/tree/master/modules

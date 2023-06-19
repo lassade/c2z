@@ -681,7 +681,11 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
     self.visited += 1;
 
     // todo: use "fixedUnderlyingType" or figure out the type by himself
-    try self.out.print("pub const {s} = enum(c_int) {{\n", .{name});
+    try self.out.print("pub const {s} = extern struct {{\n", .{name});
+    try self.out.print("    bits: c_int = 0,\n\n", .{});
+
+    var variant_prev: ?[]const u8 = null;
+    var variant_counter: usize = 0;
 
     for (inner.?.array.items) |inner_item| {
         if (inner_item.object.get("isImplicit")) |is_implicit| {
@@ -694,15 +698,24 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
         const variant_tag = inner_item.object.get("kind").?.string;
         if (mem.eql(u8, variant_tag, "EnumConstantDecl")) {
             const variant_name = resolveEnumVariantName(name, inner_item.object.get("name").?.string);
-            try self.out.print("    {s}", .{variant_name});
+            try self.out.print("    pub const {s}: {s}", .{ variant_name, name });
             // transpile enum value
+            try self.out.print(" = .{{ .bits = ", .{});
             if (inner_item.object.get("inner")) |j_value| {
-                try self.out.print(" = ", .{});
                 for (j_value.array.items) |j_value_item| {
                     try self.visit(&j_value_item);
                 }
+                variant_prev = variant_name;
+                variant_counter = 1;
+            } else {
+                if (variant_prev) |n| {
+                    try self.out.print("{s}.{s}.bits + {d}", .{ name, n, variant_counter });
+                } else {
+                    try self.out.print("{d}", .{variant_counter});
+                }
+                variant_counter += 1;
             }
-            try self.out.print(",\n", .{});
+            try self.out.print("}};\n", .{});
         } else {
             log.err("unhandled `{s}` in enum `{s}`", .{ variant_tag, name });
             continue;
@@ -739,11 +752,11 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
             if (v_item.*.object.get("ownedTagDecl")) |v_owned| {
                 const id_name = v_owned.object.get("id").?.string;
                 const id = try std.fmt.parseInt(u64, id_name, 0);
-                if (self.nodes.get(id)) |node| {
-                    const n_tag = node.object.get("kind").?.string;
+                if (self.nodes.getPtr(id)) |node| {
+                    const n_tag = node.*.object.getPtr("kind").?.*.string;
                     if (mem.eql(u8, n_tag, "CXXRecordDecl")) {
                         self.visited += 1;
-                        var object = try node.object.clone();
+                        var object = try node.*.object.clone();
                         defer object.deinit();
                         // rename the object
                         _ = try object.put("name", json.Value{ .string = name });
@@ -751,7 +764,7 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
                         try self.visitCXXRecordDecl(&json.Value{ .object = object });
                     } else if (mem.eql(u8, n_tag, "EnumDecl")) {
                         self.visited += 1;
-                        var object = try node.object.clone();
+                        var object = try node.*.object.clone();
                         defer object.deinit();
                         // rename the object
                         _ = try object.put("name", json.Value{ .string = name });
@@ -1004,23 +1017,23 @@ fn visitBinaryOperator(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
-    const kind = value.*.object.get("castKind").?.string;
+    const kind = value.*.object.getPtr("castKind").?.*.string;
     self.visited += 1;
 
     if (mem.eql(u8, kind, "IntegralToBoolean")) {
         try self.out.print("((", .{});
-        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
         try self.out.print(") != 0)", .{});
         return;
     } else if (mem.eql(u8, kind, "LValueToRValue") or mem.eql(u8, kind, "NoOp")) {
         // wut!?
-        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
         return;
     } else if (mem.eql(u8, kind, "ToVoid")) {
         // todo: casting to void is a shitty way of evaluating expressions that might have side effects,
         // https://godbolt.org/z/45xYqaz37 shown that the following snippet should be executed even in release builds
         try self.out.print("_ = (", .{});
-        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
         try self.out.print(");\n", .{});
         return;
     }
@@ -1034,14 +1047,14 @@ fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
         } else {
             try self.out.print("@bitCast({s}, ", .{dst});
         }
-        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
     } else if (mem.eql(u8, kind, "IntegralCast")) {
         try self.out.print("@intCast({s}, ", .{dst});
-        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
     } else {
         log.warn("unhandled cast kind `{s}`", .{kind});
         try self.out.print("@as({s}, ", .{dst});
-        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
     }
 
     try self.out.print(")", .{});
@@ -1049,12 +1062,12 @@ fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
 
 fn visitMemberExpr(self: *Self, value: *const json.Value) !void {
     self.visited += 1;
-    const name = value.*.object.get("name").?.string;
+    const name = value.*.object.getPtr("name").?.*.string;
     try self.out.print("self.{s}", .{name});
 }
 
 fn visitIntegerLiteral(self: *Self, value: *const json.Value) !void {
-    const literal = value.*.object.get("value").?.string;
+    const literal = value.*.object.getPtr("value").?.*.string;
     _ = try self.out.write(literal);
     self.visited += 1;
 }
@@ -1095,7 +1108,7 @@ fn visitDeclRefExpr(self: *Self, value: *const json.Value) !void {
     } else if (mem.eql(u8, kind, "EnumConstantDecl")) {
         const base = typeQualifier(&j_ref).?;
         const variant = resolveEnumVariantName(base, j_ref.object.get("name").?.string);
-        try self.out.print("{s}.{s}", .{ base, variant });
+        try self.out.print("{s}.{s}.bits", .{ base, variant });
     } else {
         log.err("unhandled `{s}` in `DeclRefExpr`", .{kind});
         return;
@@ -1105,8 +1118,6 @@ fn visitDeclRefExpr(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitParenExpr(self: *Self, value: *const json.Value) !void {
-    self.visited += 1;
-
     const rvalue = typeQualifier(value).?;
     if (mem.eql(u8, rvalue, "void")) {
         // inner expression results in nothing
@@ -1116,6 +1127,8 @@ fn visitParenExpr(self: *Self, value: *const json.Value) !void {
         try self.visit(&value.*.object.get("inner").?.array.items[0]);
         try self.out.print(")", .{});
     }
+
+    self.visited += 1;
 }
 
 fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
@@ -1139,16 +1152,13 @@ fn visitCallExpr(self: *Self, value: *const json.Value) !void {
     _ = self;
 }
 
-fn visitCXXThisExpr(self: *Self, value: *const json.Value) !void {
-    _ = value;
-
+fn visitCXXThisExpr(self: *Self, _: *const json.Value) !void {
     try self.out.print("self", .{});
     self.visited += 1;
 }
 
 fn visitConstantExpr(self: *Self, value: *const json.Value) !void {
     self.visited += 1;
-
     for (value.*.object.get("inner").?.array.items) |j_stmt| {
         // todo: handle edge cases, if any
         // const kind = j_stmt.object.get("kind").?.string;
