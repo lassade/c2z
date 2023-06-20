@@ -785,6 +785,7 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
                 self.visited += nodeCount(v_item);
             }
         } else if (mem.eql(u8, tag, "PointerType")) {
+            // note: sadly the clang will remove type names from function pointers, but is one thing less to deal with
             self.visited += nodeCount(v_item);
         } else {
             log.err("unhandled `{s}` in typedef `{s}`", .{ tag, name });
@@ -1314,19 +1315,23 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
 
 // generics `Vector<TypeArgs>`
 // function arguments without parameters name in fn pointers `const void (x)(TypeArgs)`
-fn transpileTypeArgs(self: *Self, tname: []const u8, buffer: *std.ArrayList(u8), index: *usize) anyerror!void {
+fn transpileTypeArgs(self: *Self, args: []const u8, buffer: *std.ArrayList(u8), index: *usize) anyerror!void {
     var start = index.*;
-    while (index.* < tname.len) {
-        const ch = tname[index.*];
+    while (index.* < args.len) {
+        const ch = args[index.*];
         if (ch == '<') {
-            try buffer.*.appendSlice(tname[start..index.*]);
+            const arg = args[start..index.*];
+            log.info("arg: {s}", .{arg});
+            try buffer.*.appendSlice(arg);
             try buffer.*.append('(');
             index.* += 1;
-            try self.transpileTypeArgs(tname, buffer, index);
+            try self.transpileTypeArgs(args, buffer, index);
             start = index.*;
             continue;
         } else if (ch == '>') {
-            const name = try self.transpileType(tname[start..index.*]);
+            const arg = args[start..index.*];
+            log.info("arg: {s}", .{arg});
+            const name = try self.transpileType(arg);
             defer self.allocator.free(name);
             try buffer.*.appendSlice(name);
             try buffer.*.append(')');
@@ -1334,7 +1339,9 @@ fn transpileTypeArgs(self: *Self, tname: []const u8, buffer: *std.ArrayList(u8),
             return;
         } else if (ch == ',') {
             if (index.* > start) {
-                const name = try self.transpileType(tname[start..index.*]);
+                const arg = args[start..index.*];
+                log.info("arg: {s}", .{arg});
+                const name = try self.transpileType(arg);
                 defer self.allocator.free(name);
                 try buffer.*.appendSlice(name);
                 try buffer.*.append(',');
@@ -1346,8 +1353,10 @@ fn transpileTypeArgs(self: *Self, tname: []const u8, buffer: *std.ArrayList(u8),
         index.* += 1;
     }
 
-    if (index.* > start) {
-        const name = try self.transpileType(tname[start..index.*]);
+    const rem = args[start..];
+    if (rem.len > 0) {
+        log.info("arg: {s}", .{rem});
+        const name = try self.transpileType(rem);
         defer self.allocator.free(name);
         try buffer.*.appendSlice(name);
     }
