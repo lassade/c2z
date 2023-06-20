@@ -12,7 +12,7 @@ pub const shape_t = extern struct {
     pub const area = _ZNK7shape_t4areaEv;
 };
 
-// use to extend shape_t on sig side
+// use to extend shape_t on zig side
 pub const shape_tZimpl = extern struct {
     base: shape_t,
 

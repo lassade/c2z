@@ -784,6 +784,8 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
                 // todo: use the inner "RecordType"
                 self.visited += nodeCount(v_item);
             }
+        } else if (mem.eql(u8, tag, "PointerType")) {
+            self.visited += nodeCount(v_item);
         } else {
             log.err("unhandled `{s}` in typedef `{s}`", .{ tag, name });
             return;
@@ -1272,18 +1274,18 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         defer self.allocator.free(inner_name);
         return try fmt.allocPrint(self.allocator, "{s}{s}", .{ ttname[len..], inner_name });
     } else if (ch == ')') {
-        // todo: handle named function pointers `typedef int (*ImGuiInputTextCallback)(ImGuiInputTextCallbackData* data);`
+        // todo: handle named function pointers `typedef int (*)(ImGuiInputTextCallbackData* data);`
         // function pointer or invalid type name
         if (mem.indexOf(u8, ttname, "(*)")) |ptr| {
             var index: usize = 0;
-            var targs = std.ArrayList(u8).init(self.allocator);
-            defer targs.deinit();
-            try self.transpileTypeArgs(mem.trim(u8, ttname[(ptr + "(*)".len) + 1 .. ttname.len - 1], " "), &targs, &index);
+            var args = std.ArrayList(u8).init(self.allocator);
+            defer args.deinit();
+            try self.transpileTypeArgs(mem.trim(u8, ttname[(ptr + "(*)".len) + 1 .. ttname.len - 1], " "), &args, &index);
 
             const tret = try self.transpileType(ttname[0..ptr]);
             defer self.allocator.free(tret);
 
-            return try fmt.allocPrint(self.allocator, "?*const fn({s}) {s}", .{ targs.items, tret });
+            return try fmt.allocPrint(self.allocator, "?*const fn({s}) callconv(.C) {s} ", .{ args.items, tret });
         } else {
             log.err("unknow type `{s}`, falling back to `*anyopaque`", .{ttname});
             ttname = "*anyopaque";
@@ -1342,6 +1344,12 @@ fn transpileTypeArgs(self: *Self, tname: []const u8, buffer: *std.ArrayList(u8),
             }
         }
         index.* += 1;
+    }
+
+    if (index.* > start) {
+        const name = try self.transpileType(tname[start..index.*]);
+        defer self.allocator.free(name);
+        try buffer.*.appendSlice(name);
     }
 
     if (buffer.items.len > 0 and buffer.items[buffer.items.len - 1] == ',') {

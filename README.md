@@ -13,13 +13,13 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Todo
 
+- more operators
 - use `getPtr` in `json.Value`
+- static methods inside classes
 - auto resolve naming conflics by adding a counter at the end of the function name
 - handle typedefs of named structs
 - constexpr
-- parse fn ptr function pointers should be decorated with `callconv(.C)`
 - write opaques if they didn't get defined at the end of the file
-- static methods inside classes
 - use `@compileError` for objects that couldn't be transpiled
 - write layout tests
 
