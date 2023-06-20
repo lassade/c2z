@@ -80,12 +80,7 @@ pub fn main() !void {
         var tree = try parser.parse(astdump.stdout);
         defer tree.deinit();
 
-        var buffer = std.ArrayList(u8).init(allocator);
-        defer buffer.deinit();
-
-        _ = try buffer.writer().write("const std = @import(\"std\");\n\n");
-
-        var transpiler = Transpiler.init(&buffer, allocator);
+        var transpiler = Transpiler.init(allocator);
         transpiler.transpile_includes = res.args.@"transpile-includes" != 0;
         //transpiler.zigify = res.args.zigify != 0;
         defer transpiler.deinit();
@@ -102,7 +97,7 @@ pub fn main() !void {
         defer path.deinit();
 
         var file = try std.fs.cwd().createFile(path.items, .{});
-        try file.writeAll(buffer.items);
+        try file.writeAll(transpiler.buffer.items);
         file.close();
 
         log.info("formating `{s}`", .{path.items});

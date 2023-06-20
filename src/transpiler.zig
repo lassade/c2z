@@ -64,11 +64,12 @@ const ClassInfo = struct {
 };
 
 allocator: Allocator,
+buffer: std.ArrayList(u8),
+out: std.ArrayList(u8).Writer = undefined,
 
 nodes_visited: usize,
 nodes_count: usize,
 
-out: std.ArrayList(u8).Writer,
 nodes: std.AutoHashMap(u64, json.Value),
 definition_data: std.StringArrayHashMap(ClassInfo),
 state: State = .{},
@@ -78,10 +79,10 @@ opaques: std.StringArrayHashMap(void),
 transpile_includes: bool = false,
 zigify: bool = false,
 
-pub fn init(buffer: *std.ArrayList(u8), allocator: Allocator) Self {
+pub fn init(allocator: Allocator) Self {
     return Self{
         .allocator = allocator,
-        .out = buffer.writer(),
+        .buffer = std.ArrayList(u8).init(allocator),
         .nodes_visited = 0,
         .nodes_count = 0,
         .nodes = std.AutoHashMap(u64, json.Value).init(allocator),
@@ -91,6 +92,7 @@ pub fn init(buffer: *std.ArrayList(u8), allocator: Allocator) Self {
 }
 
 pub fn deinit(self: *Self) void {
+    self.buffer.deinit();
     self.nodes.deinit();
     self.definition_data.deinit();
     self.opaques.deinit();
@@ -98,7 +100,12 @@ pub fn deinit(self: *Self) void {
 
 pub fn run(self: *Self, value: *const json.Value) anyerror!void {
     // todo: clear state
+    self.buffer.clearRetainingCapacity();
     self.nodes_count = nodeCount(value);
+
+    self.out = self.buffer.writer();
+
+    _ = try self.out.write("const std = @import(\"std\");\n\n");
 
     try self.visit(value);
 
@@ -106,6 +113,9 @@ pub fn run(self: *Self, value: *const json.Value) anyerror!void {
     for (self.opaques.keys()) |name| {
         log.warn("defining `{s}` as an opaque type", .{name});
         try self.out.print("const {s} = anyopaque;\n", .{name});
+
+        // todo: replace `[*c]{name}` for ` ?* {name}`
+        // todo: replace `[*c]const {name}` to ` ?* const {name}`
     }
 }
 
