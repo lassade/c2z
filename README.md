@@ -21,7 +21,6 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 - auto resolve naming conflics by adding a counter at the end of the function name
 - handle typedefs of named structs
 - constexpr
-- write opaques if they didn't get defined at the end of the file
 - use `@compileError` for objects that couldn't be transpiled
 - write layout tests
 

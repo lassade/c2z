@@ -13,3 +13,9 @@ pub const ImGuiSizeCallback = ?*const fn ([*c]ImGuiSizeCallbackData) callconv(.C
 pub const ImGuiMemAllocFunc = ?*const fn (usize, ?*anyopaque) callconv(.C) ?*anyopaque;
 
 pub const ImGuiMemFreeFunc = ?*const fn (?*anyopaque, ?*anyopaque) callconv(.C) void;
+
+// opaques
+const a = anyopaque;
+const SomeStruct = anyopaque;
+const ImGuiInputTextCallbackData = anyopaque;
+const ImGuiSizeCallbackData = anyopaque;

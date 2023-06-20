@@ -64,11 +64,15 @@ const ClassInfo = struct {
 };
 
 allocator: Allocator,
+
+nodes_visited: usize,
+nodes_count: usize,
+
 out: std.ArrayList(u8).Writer,
-visited: usize,
 nodes: std.AutoHashMap(u64, json.Value),
 definition_data: std.StringArrayHashMap(ClassInfo),
 state: State = .{},
+opaques: std.StringArrayHashMap(void),
 
 // options
 transpile_includes: bool = false,
@@ -78,26 +82,42 @@ pub fn init(buffer: *std.ArrayList(u8), allocator: Allocator) Self {
     return Self{
         .allocator = allocator,
         .out = buffer.writer(),
-        .visited = 0,
+        .nodes_visited = 0,
+        .nodes_count = 0,
         .nodes = std.AutoHashMap(u64, json.Value).init(allocator),
         .definition_data = std.StringArrayHashMap(ClassInfo).init(allocator),
+        .opaques = std.StringArrayHashMap(void).init(allocator),
     };
 }
 
 pub fn deinit(self: *Self) void {
     self.nodes.deinit();
     self.definition_data.deinit();
+    self.opaques.deinit();
 }
 
-pub fn visit(self: *Self, value: *const json.Value) anyerror!void {
+pub fn run(self: *Self, value: *const json.Value) anyerror!void {
+    // todo: clear state
+    self.nodes_count = nodeCount(value);
+
+    try self.visit(value);
+
+    try self.out.print("// opaques\n", .{});
+    for (self.opaques.keys()) |name| {
+        log.warn("defining `{s}` as an opaque type", .{name});
+        try self.out.print("const {s} = anyopaque;\n", .{name});
+    }
+}
+
+fn visit(self: *Self, value: *const json.Value) anyerror!void {
     if (value.*.object.getPtr("isImplicit")) |implicit| {
         if (implicit.*.bool) {
-            self.visited += nodeCount(value);
+            self.nodes_visited += nodeCount(value);
             return;
         }
     }
     if (self.shouldSkip(value)) {
-        self.visited += nodeCount(value);
+        self.nodes_visited += nodeCount(value);
         return;
     }
 
@@ -154,7 +174,7 @@ pub fn visit(self: *Self, value: *const json.Value) anyerror!void {
 }
 
 fn visitLinkageSpecDecl(self: *Self, value: *const json.Value) !void {
-    self.visited += 1;
+    self.nodes_visited += 1;
 
     if (value.*.object.get("language")) |v_lang| {
         if (mem.eql(u8, v_lang.string, "C")) {
@@ -176,7 +196,7 @@ fn visitLinkageSpecDecl(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitTranslationUnitDecl(self: *Self, value: *const json.Value) !void {
-    self.visited += 1;
+    self.nodes_visited += 1;
 
     if (value.object.get("inner")) |inner| {
         for (inner.array.items) |inner_item| {
@@ -188,24 +208,24 @@ fn visitTranslationUnitDecl(self: *Self, value: *const json.Value) !void {
 fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     // c++ class or struct
     if (self.shouldSkip(value)) {
-        self.visited += nodeCount(value);
+        self.nodes_visited += nodeCount(value);
         return;
     }
-    self.visited += 1;
+    self.nodes_visited += 1;
 
     const tag = value.*.object.get("tagUsed").?.string;
 
     // nested unamed strucs or unions are treated as implicit fields
     var is_field = false;
 
-    var free_name = false;
+    var is_generated_name = false;
     var name: []const u8 = undefined;
     if (value.*.object.get("name")) |v| {
         name = v.string;
     } else if (self.state.parent == .class) {
         // unamed struct/class/union field
         is_field = true;
-        free_name = true;
+        is_generated_name = true;
         name = try fmt.allocPrint(self.allocator, "field{d}", .{self.state.fields});
         self.state.fields += 1;
     } else {
@@ -214,13 +234,16 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         _ = try self.nodes.put(id, value.*);
         return;
     }
-    defer if (free_name) self.allocator.free(name);
+    defer if (is_generated_name) self.allocator.free(name);
 
     var ov_inner = value.*.object.get("inner");
     if (ov_inner == null) {
-        log.warn("opaque `{s} {s}`", .{ tag, name });
-        // try self.out.print("pub const {s} = anyopaque;\n", .{name});
+        try self.opaques.put(name, undefined);
         return;
+    }
+
+    if (!is_generated_name) {
+        _ = self.opaques.swapRemove(name);
     }
 
     var is_polymorphic = false;
@@ -287,14 +310,14 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     for (ov_inner.?.array.items) |inner_item| {
         if (inner_item.object.get("isImplicit")) |implicit| {
             if (implicit.bool) {
-                self.visited += nodeCount(&inner_item);
+                self.nodes_visited += nodeCount(&inner_item);
                 continue;
             }
         }
 
         const kind = inner_item.object.get("kind").?.string;
         if (mem.eql(u8, kind, "FieldDecl")) {
-            self.visited += 1;
+            self.nodes_visited += 1;
 
             const field_name = inner_item.object.get("name").?.string;
 
@@ -334,7 +357,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         } else if (mem.eql(u8, kind, "AccessSpecDecl")) {
             // ignore, all fields are public in zig
         } else {
-            self.visited -= 1;
+            self.nodes_visited -= 1;
             log.err("unhandled `{s}` in `{s} {s}`", .{ kind, tag, name });
         }
     }
@@ -360,7 +383,7 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
         log.err("unhandled storage class `{s}` in var `{s}`", .{ var_storage, var_name });
     }
 
-    self.visited += 1;
+    self.nodes_visited += 1;
 
     var var_taw_type = typeQualifier(value).?;
     var is_const = false;
@@ -399,7 +422,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
 
     const sig = parseFnSignature(value).?;
 
-    self.visited += 1;
+    self.nodes_visited += 1;
 
     // todo: copy code from visitCXXMethodDecl
 
@@ -435,7 +458,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
     // method args
     if (value.*.object.get("inner")) |v_inner| {
         for (v_inner.array.items, 0..) |v_item, i| {
-            self.visited += 1;
+            self.nodes_visited += 1;
 
             const arg_kind = v_item.object.get("kind").?.string;
             if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
@@ -471,7 +494,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
             } else if (mem.eql(u8, arg_kind, "FormatAttr")) {
                 // varidatic function with the same properties as printf
             } else {
-                self.visited -= 1;
+                self.nodes_visited -= 1;
                 log.err("unhandled `{s}` in ctor `{s}`", .{ arg_kind, parent });
             }
         }
@@ -538,7 +561,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
         }
     }
 
-    self.visited += 1;
+    self.nodes_visited += 1;
 
     // note: if the function has a `= 0` at the end it will have "pure" = true attribute
 
@@ -595,7 +618,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
         for (v_inner.?.array.items) |v_item| {
             const arg_kind = v_item.object.get("kind").?.string;
             if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
-                self.visited += 1;
+                self.nodes_visited += 1;
 
                 const v_type = v_item.object.get("type").?;
                 var v_qual = v_type.object.get("qualType").?.string;
@@ -623,7 +646,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
                 try self.out.print("{s}: {s}", .{ arg_name, arg_type });
             } else if (mem.eql(u8, arg_kind, "FormatAttr")) {
                 // varidatic function with the same properties as printf
-                self.visited += 1;
+                self.nodes_visited += 1;
             } else if (mem.eql(u8, arg_kind, "CompoundStmt")) {
                 const tmp = self.out;
                 self.out = body.writer();
@@ -658,7 +681,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
 
 fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
     if (self.shouldSkip(value)) {
-        self.visited += nodeCount(value);
+        self.nodes_visited += nodeCount(value);
         return;
     }
 
@@ -678,7 +701,10 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
         return;
     }
 
-    self.visited += 1;
+    self.nodes_visited += 1;
+
+    // remove opque if any
+    _ = self.opaques.swapRemove(name);
 
     // todo: use "fixedUnderlyingType" or figure out the type by himself
     try self.out.print("pub const {s} = extern struct {{\n", .{name});
@@ -690,7 +716,7 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
     for (inner.?.array.items) |inner_item| {
         if (inner_item.object.get("isImplicit")) |is_implicit| {
             if (is_implicit.bool) {
-                self.visited += nodeCount(&inner_item);
+                self.nodes_visited += nodeCount(&inner_item);
                 continue;
             }
         }
@@ -721,7 +747,7 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
             continue;
         }
 
-        self.visited += 1;
+        self.nodes_visited += 1;
     }
 
     try self.out.print("}};\n\n", .{});
@@ -729,10 +755,10 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
 
 fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
     if (self.shouldSkip(value)) {
-        self.visited += nodeCount(value);
+        self.nodes_visited += nodeCount(value);
         return;
     }
-    self.visited += 1;
+    self.nodes_visited += 1;
 
     const name = value.*.object.get("name").?.string;
 
@@ -746,7 +772,7 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
         const tag = v_item.*.object.get("kind").?.string;
         if (mem.eql(u8, tag, "BuiltinType") or mem.eql(u8, tag, "TypedefType")) {
             // type alias
-            self.visited += nodeCount(v_item);
+            self.nodes_visited += nodeCount(v_item);
         } else if (mem.eql(u8, tag, "ElaboratedType")) {
             // c style simplified struct definition
             if (v_item.*.object.get("ownedTagDecl")) |v_owned| {
@@ -755,7 +781,7 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
                 if (self.nodes.getPtr(id)) |node| {
                     const n_tag = node.*.object.getPtr("kind").?.*.string;
                     if (mem.eql(u8, n_tag, "CXXRecordDecl")) {
-                        self.visited += 1;
+                        self.nodes_visited += 1;
                         var object = try node.*.object.clone();
                         defer object.deinit();
                         // rename the object
@@ -763,7 +789,7 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
                         // todo: impl the union or struct or whatever using `name`
                         try self.visitCXXRecordDecl(&json.Value{ .object = object });
                     } else if (mem.eql(u8, n_tag, "EnumDecl")) {
-                        self.visited += 1;
+                        self.nodes_visited += 1;
                         var object = try node.*.object.clone();
                         defer object.deinit();
                         // rename the object
@@ -775,18 +801,18 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
                     }
                 } else {
                     // currenly been triggered by: `typedef struct Point { float x, y; } Point;`
-                    self.visited += nodeCount(v_item);
+                    self.nodes_visited += nodeCount(v_item);
                     log.warn("missing node `{s}` of `ElaboratedType` in typedef `{s}`", .{ id_name, name });
                 }
                 return;
             } else {
                 // other kind of type alias
                 // todo: use the inner "RecordType"
-                self.visited += nodeCount(v_item);
+                self.nodes_visited += nodeCount(v_item);
             }
         } else if (mem.eql(u8, tag, "PointerType")) {
             // note: sadly the clang will remove type names from function pointers, but is one thing less to deal with
-            self.visited += nodeCount(v_item);
+            self.nodes_visited += nodeCount(v_item);
         } else {
             log.err("unhandled `{s}` in typedef `{s}`", .{ tag, name });
             return;
@@ -801,10 +827,10 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
 
 fn visitNamespaceDecl(self: *Self, value: *const json.Value) !void {
     if (self.shouldSkip(value)) {
-        self.visited += nodeCount(value);
+        self.nodes_visited += nodeCount(value);
         return;
     }
-    self.visited += 1;
+    self.nodes_visited += 1;
 
     const v_name = value.*.object.get("name");
 
@@ -847,23 +873,23 @@ inline fn visitFunctionDecl(self: *Self, value: *const json.Value) !void {
 
 fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
     if (self.shouldSkip(value)) {
-        self.visited += nodeCount(value);
+        self.nodes_visited += nodeCount(value);
         return;
     }
-    self.visited += 1;
+    self.nodes_visited += 1;
 
     var name: []const u8 = undefined;
     if (value.*.object.get("name")) |v| {
         name = v.string;
     } else {
-        self.visited -= 1;
+        self.nodes_visited -= 1;
         log.err("unnamed `ClassTemplateDecl`", .{});
         return;
     }
 
     var inner = value.*.object.get("inner");
     if (inner == null) {
-        log.warn("opaque `{s}`", .{name});
+        log.warn("generic opaque `{s}`", .{name});
         return;
     }
 
@@ -889,20 +915,20 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
     // template param
     var tp_comma = false;
     for (inner.?.array.items) |item| {
-        self.visited += 1;
+        self.nodes_visited += 1;
 
         const item_kind = item.object.get("kind").?.string;
         if (mem.eql(u8, item_kind, "TemplateTypeParmDecl")) {
             var v_item_name = item.object.get("name");
             if (v_item_name == null) {
-                self.visited -= 1;
+                self.nodes_visited -= 1;
                 log.err("unnamed template param in `{s}`", .{name});
                 continue;
             }
 
             var v_item_tag = item.object.get("tagUsed");
             if (v_item_tag == null) {
-                self.visited -= 1;
+                self.nodes_visited -= 1;
                 log.err("untaged template param in `{s}`", .{name});
                 continue;
             }
@@ -919,7 +945,7 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
                 try self.out.print("comptime {s}: type", .{item_name});
             } else {
                 // todo: use anytype to handle untyped template params
-                self.visited -= 1;
+                self.nodes_visited -= 1;
                 log.err("unknown template param `{s} {s}` in `{s}`", .{ item_tag, item_name, name });
             }
         } else if (mem.eql(u8, item_kind, "CXXRecordDecl")) {
@@ -934,7 +960,7 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
             }
 
             for (inner_inner.?.array.items) |inner_item| {
-                self.visited += 1;
+                self.nodes_visited += 1;
 
                 const inner_item_kind = inner_item.object.get("kind").?.string;
                 if (mem.eql(u8, inner_item_kind, "CXXRecordDecl")) {
@@ -950,7 +976,7 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
                     try self.visitCXXMethodDecl(&inner_item, "Self");
                     self.out = tmp;
                 } else {
-                    self.visited -= 1;
+                    self.nodes_visited -= 1;
                     log.err("unhandled `{s}` in template `{s}`", .{ inner_item_kind, name });
                 }
             }
@@ -970,7 +996,7 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitCompoundStmt(self: *Self, value: *const json.Value) !void {
-    self.visited += 1;
+    self.nodes_visited += 1;
 
     var inner = value.*.object.get("inner");
     if (inner == null) {
@@ -987,7 +1013,7 @@ fn visitCompoundStmt(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitReturnStmt(self: *Self, value: *const json.Value) !void {
-    self.visited += 1;
+    self.nodes_visited += 1;
 
     const v_inner = value.*.object.get("inner");
     if (v_inner == null) {
@@ -1016,12 +1042,12 @@ fn visitBinaryOperator(self: *Self, value: *const json.Value) !void {
 
     try self.visit(&j_inner.array.items[1]);
 
-    self.visited += 1;
+    self.nodes_visited += 1;
 }
 
 fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
     const kind = value.*.object.getPtr("castKind").?.*.string;
-    self.visited += 1;
+    self.nodes_visited += 1;
 
     if (mem.eql(u8, kind, "IntegralToBoolean")) {
         try self.out.print("((", .{});
@@ -1064,7 +1090,7 @@ fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitMemberExpr(self: *Self, value: *const json.Value) !void {
-    self.visited += 1;
+    self.nodes_visited += 1;
     const name = value.*.object.getPtr("name").?.*.string;
     try self.out.print("self.{s}", .{name});
 }
@@ -1072,7 +1098,7 @@ fn visitMemberExpr(self: *Self, value: *const json.Value) !void {
 fn visitIntegerLiteral(self: *Self, value: *const json.Value) !void {
     const literal = value.*.object.getPtr("value").?.*.string;
     _ = try self.out.write(literal);
-    self.visited += 1;
+    self.nodes_visited += 1;
 }
 
 inline fn visitCStyleCastExpr(self: *Self, value: *const json.Value) !void {
@@ -1080,7 +1106,7 @@ inline fn visitCStyleCastExpr(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitArraySubscriptExpr(self: *Self, value: *const json.Value) !void {
-    self.visited += 1;
+    self.nodes_visited += 1;
     var v_inner = value.*.object.get("inner");
     try self.visit(&v_inner.?.array.items[0]);
     try self.out.print("[", .{});
@@ -1099,7 +1125,7 @@ fn visitUnaryExprOrTypeTraitExpr(self: *Self, value: *const json.Value) !void {
         return;
     }
 
-    self.visited += 1;
+    self.nodes_visited += 1;
 }
 
 fn visitDeclRefExpr(self: *Self, value: *const json.Value) !void {
@@ -1117,7 +1143,7 @@ fn visitDeclRefExpr(self: *Self, value: *const json.Value) !void {
         return;
     }
 
-    self.visited += 1;
+    self.nodes_visited += 1;
 }
 
 fn visitParenExpr(self: *Self, value: *const json.Value) !void {
@@ -1131,7 +1157,7 @@ fn visitParenExpr(self: *Self, value: *const json.Value) !void {
         try self.out.print(")", .{});
     }
 
-    self.visited += 1;
+    self.nodes_visited += 1;
 }
 
 fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
@@ -1147,7 +1173,7 @@ fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
         return;
     }
 
-    self.visited += 1;
+    self.nodes_visited += 1;
 }
 
 fn visitCallExpr(self: *Self, value: *const json.Value) !void {
@@ -1157,11 +1183,11 @@ fn visitCallExpr(self: *Self, value: *const json.Value) !void {
 
 fn visitCXXThisExpr(self: *Self, _: *const json.Value) !void {
     try self.out.print("self", .{});
-    self.visited += 1;
+    self.nodes_visited += 1;
 }
 
 fn visitConstantExpr(self: *Self, value: *const json.Value) !void {
-    self.visited += 1;
+    self.nodes_visited += 1;
     for (value.*.object.get("inner").?.array.items) |j_stmt| {
         // todo: handle edge cases, if any
         // const kind = j_stmt.object.get("kind").?.string;

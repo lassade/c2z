@@ -79,7 +79,6 @@ pub fn main() !void {
 
         var tree = try parser.parse(astdump.stdout);
         defer tree.deinit();
-        const node_count = Transpiler.nodeCount(&tree.root);
 
         var buffer = std.ArrayList(u8).init(allocator);
         defer buffer.deinit();
@@ -90,12 +89,12 @@ pub fn main() !void {
         transpiler.transpile_includes = res.args.@"transpile-includes" != 0;
         //transpiler.zigify = res.args.zigify != 0;
         defer transpiler.deinit();
-        try transpiler.visit(&tree.root);
+        try transpiler.run(&tree.root);
 
         log.info("transpiled {d}/{d} ({d:.2} %)", .{
-            transpiler.visited,
-            node_count,
-            (100.0 * @intToFloat(f64, transpiler.visited) / @intToFloat(f64, node_count)),
+            transpiler.nodes_visited,
+            transpiler.nodes_count,
+            (100.0 * @intToFloat(f64, transpiler.nodes_visited) / @intToFloat(f64, transpiler.nodes_count)),
         });
 
         var path = std.ArrayList(u8).init(allocator);
