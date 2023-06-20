@@ -1281,7 +1281,7 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
             var index: usize = 0;
             var args = std.ArrayList(u8).init(self.allocator);
             defer args.deinit();
-            try self.transpileTypeArgs(mem.trim(u8, ttname[(ptr + "(*)".len) + 1 .. ttname.len - 1], " "), &args, &index);
+            try self.transpileArgs(mem.trim(u8, ttname[(ptr + "(*)".len) + 1 .. ttname.len - 1], " "), &args, &index);
 
             const tret = try self.transpileType(ttname[0..ptr]);
             defer self.allocator.free(tret);
@@ -1296,7 +1296,7 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         var index: usize = 0;
         var targs = std.ArrayList(u8).init(self.allocator);
         defer targs.deinit();
-        try self.transpileTypeArgs(tname, &targs, &index);
+        try self.transpileArgs(tname, &targs, &index);
 
         var buf = try self.allocator.alloc(u8, targs.items.len);
         mem.copyForwards(u8, buf, targs.items);
@@ -1315,22 +1315,20 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
 
 // generics `Vector<TypeArgs>`
 // function arguments without parameters name in fn pointers `const void (x)(TypeArgs)`
-fn transpileTypeArgs(self: *Self, args: []const u8, buffer: *std.ArrayList(u8), index: *usize) anyerror!void {
+fn transpileArgs(self: *Self, args: []const u8, buffer: *std.ArrayList(u8), index: *usize) anyerror!void {
     var start = index.*;
     while (index.* < args.len) {
         const ch = args[index.*];
         if (ch == '<') {
             const arg = args[start..index.*];
-            log.info("arg: {s}", .{arg});
             try buffer.*.appendSlice(arg);
             try buffer.*.append('(');
             index.* += 1;
-            try self.transpileTypeArgs(args, buffer, index);
+            try self.transpileArgs(args, buffer, index);
             start = index.*;
             continue;
         } else if (ch == '>') {
             const arg = args[start..index.*];
-            log.info("arg: {s}", .{arg});
             const name = try self.transpileType(arg);
             defer self.allocator.free(name);
             try buffer.*.appendSlice(name);
@@ -1340,7 +1338,6 @@ fn transpileTypeArgs(self: *Self, args: []const u8, buffer: *std.ArrayList(u8), 
         } else if (ch == ',') {
             if (index.* > start) {
                 const arg = args[start..index.*];
-                log.info("arg: {s}", .{arg});
                 const name = try self.transpileType(arg);
                 defer self.allocator.free(name);
                 try buffer.*.appendSlice(name);
@@ -1353,9 +1350,8 @@ fn transpileTypeArgs(self: *Self, args: []const u8, buffer: *std.ArrayList(u8), 
         index.* += 1;
     }
 
-    const rem = args[start..];
+    const rem = mem.trim(u8, args[start..], " ");
     if (rem.len > 0) {
-        log.info("arg: {s}", .{rem});
         const name = try self.transpileType(rem);
         defer self.allocator.free(name);
         try buffer.*.appendSlice(name);
