@@ -248,6 +248,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
 
     var ov_inner = value.*.object.get("inner");
     if (ov_inner == null) {
+        // e.g. `struct ImDrawChannel;`
         try self.opaques.put(name, undefined);
         return;
     }
@@ -707,7 +708,8 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
 
     var inner = value.*.object.get("inner");
     if (inner == null) {
-        log.warn("typedef `{s}`", .{name});
+        // e.g. `enum ImGuiKey : int;`
+        try self.opaques.put(name, undefined);
         return;
     }
 
@@ -751,7 +753,7 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
                 }
                 variant_counter += 1;
             }
-            try self.out.print("}};\n", .{});
+            try self.out.print(" }};\n", .{});
         } else {
             log.err("unhandled `{s}` in enum `{s}`", .{ variant_tag, name });
             continue;
@@ -1173,14 +1175,13 @@ fn visitParenExpr(self: *Self, value: *const json.Value) !void {
 fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
     const opcode = value.*.object.get("opcode").?.string;
     if (mem.eql(u8, opcode, "*")) {
+        // deref
         try self.visit(&value.*.object.get("inner").?.array.items[0]);
         try self.out.print(".*", .{});
-    } else if (mem.eql(u8, opcode, "!") or mem.eql(u8, opcode, "~")) {
+    } else {
+        // note: any special cases should be handled with ifelse branches
         try self.out.print("{s}", .{opcode});
         try self.visit(&value.*.object.get("inner").?.array.items[0]);
-    } else {
-        log.warn("unhandled opcode `{s}` in `UnaryOperator`", .{opcode});
-        return;
     }
 
     self.nodes_visited += 1;
@@ -1197,16 +1198,12 @@ fn visitCXXThisExpr(self: *Self, _: *const json.Value) !void {
 }
 
 fn visitConstantExpr(self: *Self, value: *const json.Value) !void {
-    self.nodes_visited += 1;
     for (value.*.object.get("inner").?.array.items) |j_stmt| {
-        // todo: handle edge cases, if any
-        // const kind = j_stmt.object.get("kind").?.string;
-        // if (mem.eql(u8, kind, "IntegerLiteral")) {
-        //     try self.visitIntegerLiteral(value);
-        // } else {
+        // note: any special cases should be handled with ifelse branches
         try self.visit(&j_stmt);
-        // }
     }
+
+    self.nodes_visited += 1;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
