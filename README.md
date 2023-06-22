@@ -13,6 +13,9 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Todo
 
+- compatible `std::vector`
+- cleanup c++ lib garbage
+- better input file not found error
 - fail when clang ast-bump has failed as well ...
 - more operators
 - write unnamed enumerations as global constants, if they aren't referenced by any typedef

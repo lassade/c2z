@@ -43,20 +43,42 @@ const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
     .{ "size_t", "usize" },
 });
 
-const NodeType = enum {
-    none,
-    include,
-    namespace,
+const ScopeTag = enum {
+    root,
+    //include,
+    //namespace,
     class,
-    function,
+    //function,
+};
+const Scope = struct {
+    tag: ScopeTag,
+    name: ?[]const u8,
+    /// Constructors indexing
+    ctors: usize = 0,
+    /// Generate unnamed nodes
+    fields: usize = 0,
 };
 
-const State = struct {
-    parent: NodeType = .none,
-    parent_name: ?[]const u8 = null,
-    ctors: usize = 0,
-    fields: usize = 0,
+const NamespaceScope = struct {
+    // todo: full_path: std.ArrayList(u8),
+    unnamed_nodes: std.AutoHashMap(u64, json.Value),
+    // todo: didn't find a hashset, maybe by using the key as `void` no extra allocations will be made?
+    opaques: std.StringArrayHashMap(void),
     // todo: overloads: std.StringArrayHashMap(usize),
+
+    fn init(allocator: Allocator) NamespaceScope {
+        return .{
+            .unnamed_nodes = std.AutoHashMap(u64, json.Value).init(allocator),
+            .opaques = std.StringArrayHashMap(void).init(allocator),
+            // todo: .overloads = std.StringArrayHashMap(usize).init(allocator),
+        };
+    }
+
+    fn deinit(self: *NamespaceScope) void {
+        self.unnamed_nodes.deinit();
+        self.opaques.deinit();
+        // todo: self.overloads.deinit();
+    }
 };
 
 const ClassInfo = struct {
@@ -64,38 +86,42 @@ const ClassInfo = struct {
 };
 
 allocator: Allocator,
+
 buffer: std.ArrayList(u8),
-out: std.ArrayList(u8).Writer = undefined,
+out: std.ArrayList(u8).Writer,
 
 nodes_visited: usize,
 nodes_count: usize,
 
-nodes: std.AutoHashMap(u64, json.Value),
-definition_data: std.StringArrayHashMap(ClassInfo),
-state: State = .{},
-opaques: std.StringArrayHashMap(void),
+namespace: NamespaceScope,
+scope: Scope,
+
+class_info: std.StringArrayHashMap(ClassInfo),
 
 // options
-transpile_includes: bool = false,
-zigify: bool = false,
+transpile_includes: bool,
+zigify: bool,
 
 pub fn init(allocator: Allocator) Self {
     return Self{
         .allocator = allocator,
         .buffer = std.ArrayList(u8).init(allocator),
+        // can't be initialized because Self will be moved
+        .out = undefined,
         .nodes_visited = 0,
         .nodes_count = 0,
-        .nodes = std.AutoHashMap(u64, json.Value).init(allocator),
-        .definition_data = std.StringArrayHashMap(ClassInfo).init(allocator),
-        .opaques = std.StringArrayHashMap(void).init(allocator),
+        .namespace = NamespaceScope.init(allocator),
+        .scope = .{ .tag = .root, .name = null },
+        .class_info = std.StringArrayHashMap(ClassInfo).init(allocator),
+        .transpile_includes = false,
+        .zigify = false,
     };
 }
 
 pub fn deinit(self: *Self) void {
     self.buffer.deinit();
-    self.nodes.deinit();
-    self.definition_data.deinit();
-    self.opaques.deinit();
+    self.namespace.deinit();
+    self.class_info.deinit();
 }
 
 pub fn run(self: *Self, value: *const json.Value) anyerror!void {
@@ -108,15 +134,49 @@ pub fn run(self: *Self, value: *const json.Value) anyerror!void {
     _ = try self.out.write("const std = @import(\"std\");\n\n");
 
     try self.visit(value);
+}
 
-    try self.out.print("// opaques\n", .{});
-    for (self.opaques.keys()) |name| {
-        log.warn("defining `{s}` as an opaque type", .{name});
-        try self.out.print("const {s} = anyopaque;\n", .{name});
+fn beginNamespace(self: *Self) NamespaceScope {
+    const parent = self.namespace;
+    self.namespace = NamespaceScope.init(self.allocator);
+    return parent;
+}
 
-        // todo: replace `[*c]{name}` for ` ?* {name}`
-        // todo: replace `[*c]const {name}` to ` ?* const {name}`
+fn endNamespace(self: *Self, parent: NamespaceScope) !void {
+    if (self.namespace.opaques.keys().len > 0) {
+        try self.out.print("\n\n// opaques\n\n", .{});
+        for (self.namespace.opaques.keys()) |name| {
+            log.warn("defining `{s}` as an opaque type", .{name});
+            try self.out.print("const {s} = anyopaque;\n", .{name});
+
+            // todo: replace `[*c]{name}` for ` ?* {name}`
+            // todo: replace `[*c]const {name}` to ` ?* const {name}`
+        }
     }
+
+    if (self.namespace.unnamed_nodes.count() > 0) {
+        try self.out.print("\n\n// unnamed nodes\n\n", .{});
+        var unnamed: usize = 0;
+        var nodes_it = self.namespace.unnamed_nodes.iterator();
+        while (nodes_it.next()) |entry| {
+            // todo: sometimes these enums are inside a namespace or a struct, so they should be defined at the end of these but still inside
+            const kind = entry.value_ptr.*.object.get("kind").?.string;
+            if (mem.eql(u8, kind, "EnumDecl")) {
+                const name = try fmt.allocPrint(self.allocator, "UnnamedEnum{d}", .{unnamed});
+                defer self.allocator.free(name);
+                _ = try entry.value_ptr.*.object.put("name", json.Value{ .string = name });
+                try self.visitEnumDecl(entry.value_ptr);
+            } else {
+                log.warn("unused unnamed node `{s}`", .{kind});
+                continue;
+            }
+
+            unnamed += 1;
+        }
+    }
+
+    self.namespace.deinit();
+    self.namespace = parent;
 }
 
 fn visit(self: *Self, value: *const json.Value) anyerror!void {
@@ -232,16 +292,16 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     var name: []const u8 = undefined;
     if (value.*.object.get("name")) |v| {
         name = v.string;
-    } else if (self.state.parent == .class) {
-        // unamed struct/class/union field
+    } else if (self.scope.tag == .class) {
+        // unamed struct, class or union inside a class definition should be treated as a field
         is_field = true;
         is_generated_name = true;
-        name = try fmt.allocPrint(self.allocator, "field{d}", .{self.state.fields});
-        self.state.fields += 1;
+        name = try fmt.allocPrint(self.allocator, "field{d}", .{self.scope.fields});
+        self.scope.fields += 1;
     } else {
         // referenced by someone else
         const id = try std.fmt.parseInt(u64, value.*.object.get("id").?.string, 0);
-        _ = try self.nodes.put(id, value.*);
+        _ = try self.namespace.unnamed_nodes.put(id, value.*);
         return;
     }
     defer if (is_generated_name) self.allocator.free(name);
@@ -249,12 +309,12 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     var ov_inner = value.*.object.get("inner");
     if (ov_inner == null) {
         // e.g. `struct ImDrawChannel;`
-        try self.opaques.put(name, undefined);
+        try self.namespace.opaques.put(name, undefined);
         return;
     }
 
     if (!is_generated_name) {
-        _ = self.opaques.swapRemove(name);
+        _ = self.namespace.opaques.swapRemove(name);
     }
 
     var is_polymorphic = false;
@@ -275,7 +335,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     if (is_polymorphic and v_bases != null) {
         if (v_bases.?.array.items.len == 1) {
             const parent_type_name = typeQualifier(&v_bases.?.array.items[0]).?;
-            if (self.definition_data.get(parent_type_name)) |def_data| {
+            if (self.class_info.get(parent_type_name)) |def_data| {
                 if (def_data.is_polymorphic) {
                     // when the parent is polymorphic don't add the vtable pointer in the base class
                     is_polymorphic = false;
@@ -290,7 +350,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         try self.out.print("    vtable: *const anyopaque,\n\n", .{});
     }
 
-    _ = try self.definition_data.put(name, .{ .is_polymorphic = is_polymorphic });
+    _ = try self.class_info.put(name, .{ .is_polymorphic = is_polymorphic });
 
     if (v_bases != null) {
         if (v_bases.?.array.items.len > 1) {
@@ -309,14 +369,11 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     var fns = std.ArrayList(u8).init(self.allocator);
     defer fns.deinit();
 
-    var prev_state = self.state;
-    self.state = .{
-        .parent = .class,
-        .parent_name = name,
-        .ctors = 0,
-        .fields = 0,
-    };
-    defer self.state = prev_state;
+    const parent_state = self.scope;
+    self.scope = .{ .tag = .class, .name = name };
+    defer self.scope = parent_state;
+
+    const parent_namespace = self.beginNamespace();
 
     for (ov_inner.?.array.items) |inner_item| {
         if (inner_item.object.get("isImplicit")) |implicit| {
@@ -377,6 +434,8 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     if (fns.items.len > 0) {
         try self.out.print("\n{s}", .{fns.items});
     }
+
+    try self.endNamespace(parent_namespace);
 
     if (is_field) {
         try self.out.print("}},\n\n", .{});
@@ -519,7 +578,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
 
     // sig
     try self.out.print("pub inline fn init", .{});
-    if (self.state.ctors != 0) try self.out.print("{d}", .{self.state.ctors}); // avoid name conflict
+    if (self.scope.ctors != 0) try self.out.print("{d}", .{self.scope.ctors}); // avoid name conflict
     try self.out.print("({s}) {s} {{\n", .{ init_args.items, parent });
     // body
     try self.out.print("    var self: {s} = undefined;\n", .{parent});
@@ -527,7 +586,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
     try self.out.print("    return self;\n", .{});
     try self.out.print("}}\n\n", .{});
 
-    self.state.ctors += 1;
+    self.scope.ctors += 1;
 }
 
 fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8) !void {
@@ -700,23 +759,24 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
     if (value.*.object.get("name")) |v| {
         name = v.string;
     } else {
+        // todo: handle unamed enumerations that aren't inside a typedef like these `enum { FPNG_ENCODE_SLOWER = 1,  FPNG_FORCE_UNCOMPRESSED = 2, };`
         // referenced by someone else
         const id = try std.fmt.parseInt(u64, value.*.object.get("id").?.string, 0);
-        _ = try self.nodes.put(id, value.*);
+        _ = try self.namespace.unnamed_nodes.put(id, value.*);
         return;
     }
 
     var inner = value.*.object.get("inner");
     if (inner == null) {
         // e.g. `enum ImGuiKey : int;`
-        try self.opaques.put(name, undefined);
+        try self.namespace.opaques.put(name, undefined);
         return;
     }
 
     self.nodes_visited += 1;
 
     // remove opque if any
-    _ = self.opaques.swapRemove(name);
+    _ = self.namespace.opaques.swapRemove(name);
 
     // todo: use "fixedUnderlyingType" or figure out the type by himself
     try self.out.print("pub const {s} = extern struct {{\n", .{name});
@@ -790,7 +850,7 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
             if (v_item.*.object.get("ownedTagDecl")) |v_owned| {
                 const id_name = v_owned.object.get("id").?.string;
                 const id = try std.fmt.parseInt(u64, id_name, 0);
-                if (self.nodes.getPtr(id)) |node| {
+                if (self.namespace.unnamed_nodes.getPtr(id)) |node| {
                     const n_tag = node.*.object.getPtr("kind").?.*.string;
                     if (mem.eql(u8, n_tag, "CXXRecordDecl")) {
                         self.nodes_visited += 1;
@@ -811,6 +871,8 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
                     } else {
                         log.err("unhandled `ElaboratedType` `{s}` in typedef `{s}`", .{ n_tag, name });
                     }
+                    // remove used node
+                    _ = self.namespace.unnamed_nodes.remove(id);
                 } else {
                     // currenly been triggered by: `typedef struct Point { float x, y; } Point;`
                     self.nodes_visited += nodeCount(v_item);
@@ -859,19 +921,17 @@ fn visitNamespaceDecl(self: *Self, value: *const json.Value) !void {
 
     // todo: namespace merging
 
+    const parent_namespace = self.beginNamespace();
+
     if (v_name) |name| {
         try self.out.print("pub const {s} = struct {{\n", .{name.string});
     }
-
-    // const pw = self.out;
-    // var buffer = std.ArrayList(u8).init(u8);
-    // self.out = buffer.writer();
 
     for (inner.?.array.items) |inner_item| {
         try self.visit(&inner_item);
     }
 
-    //self.out = pw;
+    try self.endNamespace(parent_namespace);
 
     if (v_name) |_| {
         try self.out.print("}};\n\n", .{});
@@ -915,14 +975,9 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
     var fns = std.ArrayList(u8).init(self.allocator);
     defer fns.deinit();
 
-    var prev_state = self.state;
-    self.state = .{
-        .parent = .class,
-        .parent_name = "Self",
-        .ctors = 0,
-        .fields = 0,
-    };
-    defer self.state = prev_state;
+    const parent_state = self.scope;
+    self.scope = .{ .tag = .class, .name = "Self" };
+    defer self.scope = parent_state;
 
     // template param
     var tp_comma = false;
@@ -971,6 +1026,8 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
                 return;
             }
 
+            const parent_namespace = self.beginNamespace();
+
             for (inner_inner.?.array.items) |inner_item| {
                 self.nodes_visited += 1;
 
@@ -997,6 +1054,8 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
             if (fns.items.len > 0) {
                 try self.out.print("\n{s}", .{fns.items});
             }
+
+            try self.endNamespace(parent_namespace);
 
             try self.out.print("    }};\n}}\n\n", .{});
 
@@ -1092,6 +1151,10 @@ fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
     } else if (mem.eql(u8, kind, "IntegralCast")) {
         try self.out.print("@intCast({s}, ", .{dst});
         try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
+    } else if (mem.eql(u8, kind, "NullToPointer")) {
+        self.nodes_visited += 1;
+        try self.out.print("null", .{});
+        return;
     } else {
         log.warn("unhandled cast kind `{s}`", .{kind});
         try self.out.print("@as({s}, ", .{dst});

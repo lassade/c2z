@@ -57,6 +57,7 @@ pub fn main() !void {
         try args.append("-x");
         try args.append("c++");
         try args.append(c_ver);
+        try args.append("-lc++");
         try args.append("-Xclang");
         try args.append("-ast-dump=json");
         if (res.args.cargs) |cargs| {

@@ -1,9 +1,17 @@
-//----------------------------------------------------------------------------------
-// Enumerators Definition
-//----------------------------------------------------------------------------------
-// System/Window config flags
-// NOTE: Every bit registers one state (use it with bit masks)
-// By default all flags are set to 0
+// fpng
+
+enum
+{
+    // Enables computing custom Huffman tables for each file, instead of using the custom global tables. 
+    // Results in roughly 6% smaller files on average, but compression is around 40% slower.
+    FPNG_ENCODE_SLOWER = 1, 
+    
+    // Only use raw Deflate blocks (no compression at all). Intended for testing.
+    FPNG_FORCE_UNCOMPRESSED = 2,
+};
+
+// ImGui
+
 typedef enum {
     FLAG_VSYNC_HINT         = 0x00000040,   // Set to try enabling V-Sync on GPU
     FLAG_FULLSCREEN_MODE    = 0x00000002,   // Set to run program in fullscreen
