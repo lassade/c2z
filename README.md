@@ -13,8 +13,7 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Todo
 
-- compatible `std::vector`
-- cleanup c++ lib garbage
+- deinit a `std::vector` deal with allocators and other methods
 - better input file not found error
 - fail when clang ast-bump has failed as well ...
 - more operators

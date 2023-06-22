@@ -41,6 +41,8 @@ const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
     .{ "uintptr_t", "usize" },
     .{ "intptr_t", "isize" },
     .{ "size_t", "usize" },
+    // custom types
+    .{ "std::vector", "cpp.Vector" },
 });
 
 const ScopeTag = enum {
@@ -1309,7 +1311,12 @@ inline fn shouldSkip(self: *Self, value: *const json.Value) bool {
     // }
     if (!self.transpile_includes) {
         if (value.*.object.getPtr("loc")) |loc| {
-            return loc.*.object.getPtr("includedFrom") != null;
+            // c include
+            if (loc.*.object.getPtr("includedFrom") != null) return true;
+            // c++ ...
+            if (loc.*.object.getPtr("expansionLoc")) |expansionLoc| {
+                if (expansionLoc.*.object.getPtr("includedFrom") != null) return true;
+            }
         }
     }
     return false;
@@ -1390,13 +1397,16 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
     } else if (ch == '>') {
         // templated type
         var index: usize = 0;
-        var targs = std.ArrayList(u8).init(self.allocator);
-        defer targs.deinit();
-        try self.transpileArgs(tname, &targs, &index);
+        var args = std.ArrayList(u8).init(self.allocator);
+        defer args.deinit();
 
-        var buf = try self.allocator.alloc(u8, targs.items.len);
-        mem.copyForwards(u8, buf, targs.items);
-        return buf;
+        const less_than = mem.indexOf(u8, ttname, "<").?;
+        try self.transpileArgs(ttname[less_than..], &args, &index);
+
+        const root = try self.transpileType(ttname[0..less_than]);
+        defer self.allocator.free(root);
+
+        return try fmt.allocPrint(self.allocator, "{s}{s}", .{ root, args.items });
     } else {
         // common primitives
         if (PrimitivesTypeLUT.get(ttname)) |pname| {
