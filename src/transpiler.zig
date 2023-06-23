@@ -98,6 +98,7 @@ nodes_count: usize,
 
 namespace: NamespaceScope,
 scope: Scope,
+semicolon: bool = true,
 
 class_info: std.StringArrayHashMap(ClassInfo),
 
@@ -241,6 +242,10 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitConstantExpr(value);
     } else if (mem.eql(u8, kind, "VarDecl")) {
         try self.visitVarDecl(value);
+    } else if (mem.eql(u8, kind, "IfStmt")) {
+        try self.visitIfStmt(value);
+    } else if (mem.eql(u8, kind, "CXXBoolLiteralExpr")) {
+        try self.visistCXXBoolLiteralExpr(value);
         // } else if (mem.eql(u8, kind, "CallExpr")) {
         //     try self.visitCallExpr(value);
     } else {
@@ -1098,12 +1103,37 @@ fn visitCompoundStmt(self: *Self, value: *const json.Value) !void {
 
     try self.out.print("{{\n", .{});
 
+    self.semicolon = true;
+
     for (inner.?.array.items) |inner_item| {
         try self.visit(&inner_item);
-        _ = try self.out.write(";\n");
+
+        if (self.semicolon) {
+            _ = try self.out.write(";\n");
+        } else {
+            // reset
+            self.semicolon = true;
+        }
     }
 
     try self.out.print("}}", .{});
+}
+
+fn visitIfStmt(self: *Self, value: *const json.Value) !void {
+    const j_inner = value.*.object.getPtr("inner").?;
+
+    try self.out.print(" if (", .{});
+    try self.visit(&j_inner.*.array.items[0]);
+    try self.out.print(")", .{});
+    try self.visit(&j_inner.*.array.items[1]);
+
+    if (if (value.*.object.getPtr("hasElse")) |j_else| j_else.*.bool else false) {
+        try self.out.print(" else ", .{});
+        try self.visit(&j_inner.*.array.items[2]);
+    }
+
+    self.nodes_visited += 1;
+    self.semicolon = false;
 }
 
 fn visitReturnStmt(self: *Self, value: *const json.Value) !void {
@@ -1295,6 +1325,11 @@ fn visitConstantExpr(self: *Self, value: *const json.Value) !void {
         try self.visit(&j_stmt);
     }
 
+    self.nodes_visited += 1;
+}
+
+fn visistCXXBoolLiteralExpr(self: *Self, value: *const json.Value) !void {
+    try self.out.print("{}", .{value.*.object.getPtr("value").?.*.bool});
     self.nodes_visited += 1;
 }
 

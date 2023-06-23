@@ -13,6 +13,7 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Todo
 
+- handle private members, class is default private, struct default public
 - better input file not found error
 - fail when clang ast-bump has failed as well ...
 - more operators
