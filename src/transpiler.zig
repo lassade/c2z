@@ -48,10 +48,8 @@ const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
 
 const ScopeTag = enum {
     root,
-    //include,
-    //namespace,
     class,
-    //function,
+    local,
 };
 const Scope = struct {
     tag: ScopeTag,
@@ -246,6 +244,8 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitIfStmt(value);
     } else if (mem.eql(u8, kind, "CXXBoolLiteralExpr")) {
         try self.visistCXXBoolLiteralExpr(value);
+    } else if (mem.eql(u8, kind, "DeclStmt")) {
+        try self.visistDeclStmt(value);
         // } else if (mem.eql(u8, kind, "CallExpr")) {
         //     try self.visitCallExpr(value);
     } else {
@@ -467,32 +467,22 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
     var ty = try self.transpileType(raw_ty);
     defer self.allocator.free(ty);
 
-    // don't inline because these constants can change in the c++ headers or sources
-    // if (constant) {
-    //     if (value.*.object.getPtr("init")) |j_init| {
-    //         if (mem.eql(u8, j_init.*.string, "c")) {
-    //             self.nodes_visited += 1;
-    //             try self.out.print("pub const {s}: {s} = ", .{ name, ty });
-    //             try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
-    //             try self.out.print(";\n\n", .{});
-    //             return;
-    //         }
-    //     }
-    // }
-
-    // check thread-local storage
-    if (value.*.object.getPtr("storageClass")) |j_storage_class| {
-        if (mem.eql(u8, j_storage_class.*.string, "static")) {
-            // hanlded
-        } else {
-            log.err("unhandled storage class `{s}` in var `{s}`", .{ j_storage_class.*.string, name });
-            return;
+    if (self.scope.tag == .local) {
+        // variable
+        _ = try self.out.write(if (constant) "const" else "var");
+        try self.out.print(" {s}: {s} = ", .{ name, ty });
+        if (value.*.object.getPtr("inner")) |j_inner| {
+            // declaration statement like `int a;`
+            try self.visit(&j_inner.*.array.items[0]);
         }
+
+        self.nodes_visited += 1;
+        return;
     }
 
     self.nodes_visited += nodeCount(value);
 
-    const mangled_name = value.*.object.get("mangledName").?.string;
+    const mangled_name = value.*.object.getPtr("mangledName").?.string;
     if (constant) {
         try self.out.print("extern const {s}: {s};\n", .{ mangled_name, ty });
         try self.out.print("pub inline fn {s}() {s} {{\n    return {s};\n}}\n\n", .{ name, ty, mangled_name });
@@ -1103,6 +1093,13 @@ fn visitCompoundStmt(self: *Self, value: *const json.Value) !void {
 
     try self.out.print("{{\n", .{});
 
+    const scope = self.scope;
+    defer self.scope = scope;
+    self.scope = .{
+        .tag = .local,
+        .name = null,
+    };
+
     self.semicolon = true;
 
     for (inner.?.array.items) |inner_item| {
@@ -1124,16 +1121,22 @@ fn visitIfStmt(self: *Self, value: *const json.Value) !void {
 
     try self.out.print(" if (", .{});
     try self.visit(&j_inner.*.array.items[0]);
-    try self.out.print(")", .{});
-    try self.visit(&j_inner.*.array.items[1]);
+    try self.out.print(") ", .{});
+
+    var body = &j_inner.*.array.items[1];
+    try self.visit(body);
 
     if (if (value.*.object.getPtr("hasElse")) |j_else| j_else.*.bool else false) {
         try self.out.print(" else ", .{});
-        try self.visit(&j_inner.*.array.items[2]);
+        body = &j_inner.*.array.items[2];
+        try self.visit(body);
     }
 
     self.nodes_visited += 1;
-    self.semicolon = false;
+
+    // don't print a semicolon when the if else is guarded with braces `if { ... }`
+    var body_kind = body.*.object.getPtr("kind").?.string;
+    self.semicolon = !mem.eql(u8, body_kind, "CompoundStmt");
 }
 
 fn visitReturnStmt(self: *Self, value: *const json.Value) !void {
@@ -1331,6 +1334,13 @@ fn visitConstantExpr(self: *Self, value: *const json.Value) !void {
 fn visistCXXBoolLiteralExpr(self: *Self, value: *const json.Value) !void {
     try self.out.print("{}", .{value.*.object.getPtr("value").?.*.bool});
     self.nodes_visited += 1;
+}
+
+fn visistDeclStmt(self: *Self, value: *const json.Value) !void {
+    if (value.*.object.getPtr("inner")) |j_decl| {
+        // declaration statement like `int a;`
+        try self.visit(&j_decl.*.array.items[0]);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
