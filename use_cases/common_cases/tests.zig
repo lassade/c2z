@@ -1,34 +1,56 @@
 const std = @import("std");
+const cpp = @import("cpp");
 const expect = std.testing.expect;
 
-const c005_inheritance = @import("c005_inheritance.zig");
+test "inheritance" {
+    const fii = @import("c005_inheritance.zig");
 
-test "c005_inheritance" {
-    var circle: c005_inheritance.circle_t = c005_inheritance.circle_t.init();
+    var circle: fii.circle_t = fii.circle_t.init();
     try expect(circle.radius == 0);
-    circle = c005_inheritance.circle_t.initRadius(10);
+    circle = fii.circle_t.initRadius(10);
     try expect(circle.radius == 10);
     try expect(circle.area() == 3.14 * 10 * 10);
-    try expect(c005_inheritance.circle_t.area(&circle) == 3.14 * 10 * 10);
+    try expect(fii.circle_t.area(&circle) == 3.14 * 10 * 10);
     circle.deinit();
 }
 
-test "c009_enum_flags" {
-    const cpp = @import("c009_enum_flags.zig");
+test "enum_flags" {
+    const ffi = @import("c009_enum_flags.zig");
 
-    var wflags: cpp.ImGuiWindowFlags_ = .{};
-    wflags.bits |= cpp.ImGuiWindowFlags_.NoTitleBar.bits;
+    var wflags: ffi.ImGuiWindowFlags_ = .{};
+    wflags.bits |= ffi.ImGuiWindowFlags_.NoTitleBar.bits;
 
-    var cflags: cpp.ConfigFlags = .{};
-    cflags.bits |= cpp.ConfigFlags.FLAG_VSYNC_HINT.bits;
+    var cflags: ffi.ConfigFlags = .{};
+    cflags.bits |= ffi.ConfigFlags.FLAG_VSYNC_HINT.bits;
 }
 
-const c011_index_this = @import("c011_index_this.zig");
+test "index_this" {
+    const fii = @import("c011_index_this.zig");
 
-test "c011_index_this" {
-    var p: c011_index_this.ImVec2 = .{ .x = 1, .y = 2 };
+    var p: fii.ImVec2 = .{ .x = 1, .y = 2 };
     try expect(p.get(0) == 1);
     try expect(p.get(1) == 2);
     p.getRef(0).* = 2;
     try expect(p.get(0) == 2);
+}
+
+test "cpp_vector" {
+    const fii = @import("c013_cpp_vector.zig");
+
+    var v: cpp.AutoVector(u8) = .{};
+    try expect(@ptrToInt(v.values().ptr) != 0); // odd, but expected
+    try expect(v.values().len == 0);
+    _ = fii.enumerate(&v, 15);
+    for (v.values(), 0..) |num, i| {
+        try expect(num == i);
+    }
+    v.deinit();
+
+    // // todo: std.valgrind ??
+    // // dumb way of checking if the memory is leaking on my windows machine ... and after a couple of minutes it isn't
+    // while (true) {
+    //     _ = fii.enumerate(&v, 256);
+    //     v.deinit(); // this doesn't
+    //     //v = .{}; // this leaks memory
+    // }
 }

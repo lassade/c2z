@@ -1,4 +1,5 @@
 const std = @import("std");
+const cpp = @import("cpp");
 
-extern fn _Z27fpng_encode_image_to_memoryPKvjjjRNSt3__16vectorIhNS1_9allocatorIhEEEEj(pImage: ?*const anyopaque, w: u32, h: u32, num_chans: u32, out_buf: *cpp.Vector(u8), flags: u32) bool;
-pub const fpng_encode_image_to_memory = _Z27fpng_encode_image_to_memoryPKvjjjRNSt3__16vectorIhNS1_9allocatorIhEEEEj;
+extern fn _Z9enumerateRNSt3__16vectorIhNS_9allocatorIhEEEEy(out_buf: *cpp.AutoVector(u8), count: usize) bool;
+pub const enumerate = _Z9enumerateRNSt3__16vectorIhNS_9allocatorIhEEEEy;

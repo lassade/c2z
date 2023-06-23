@@ -74,7 +74,11 @@ pub fn build(b: *std.Build) void {
     //lib.linkLibC();
     lib.linkLibCpp();
     lib.addCSourceFile("./use_cases/common_cases/include/c005_inheritance.cpp", cflags);
+    lib.addCSourceFile("./use_cases/common_cases/include/c013_cpp_vector.cpp", cflags);
     unit_tests.linkLibrary(lib);
+
+    const cpp_mod = b.addModule("cpp", .{ .source_file = .{ .path = "src/cpp.zig" } });
+    unit_tests.addModule("cpp", cpp_mod);
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 

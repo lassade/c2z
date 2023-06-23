@@ -42,7 +42,7 @@ const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
     .{ "intptr_t", "isize" },
     .{ "size_t", "usize" },
     // custom types
-    .{ "std::vector", "cpp.Vector" },
+    .{ "std::vector", "cpp.AutoVector" },
 });
 
 const ScopeTag = enum {
