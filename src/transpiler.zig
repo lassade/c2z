@@ -1100,6 +1100,7 @@ fn visitCompoundStmt(self: *Self, value: *const json.Value) !void {
 
     for (inner.?.array.items) |inner_item| {
         try self.visit(&inner_item);
+        _ = try self.out.write(";\n");
     }
 
     try self.out.print("}}", .{});
@@ -1110,14 +1111,13 @@ fn visitReturnStmt(self: *Self, value: *const json.Value) !void {
 
     const v_inner = value.*.object.get("inner");
     if (v_inner == null) {
-        try self.out.print("return;", .{});
+        try self.out.print("return", .{});
         return;
     }
 
     _ = try self.out.write("return ");
     // todo: must check if is returning an aliesed pointer, if so it must add the referece operator '&'
     try self.visit(&v_inner.?.array.items[0]);
-    _ = try self.out.write(";\n");
 }
 
 fn visitBinaryOperator(self: *Self, value: *const json.Value) !void {
@@ -1258,11 +1258,18 @@ fn visitParenExpr(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
-    const opcode = value.*.object.get("opcode").?.string;
+    const opcode = value.*.object.getPtr("opcode").?.*.string;
+
     if (mem.eql(u8, opcode, "*")) {
         // deref
         try self.visit(&value.*.object.get("inner").?.array.items[0]);
         try self.out.print(".*", .{});
+    } else if (mem.eql(u8, opcode, "++")) {
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.out.print(" += 1", .{});
+    } else if (mem.eql(u8, opcode, "--")) {
+        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.out.print(" -= 1", .{});
     } else {
         // note: any special cases should be handled with ifelse branches
         try self.out.print("{s}", .{opcode});

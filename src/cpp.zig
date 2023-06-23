@@ -57,11 +57,7 @@ pub fn VectorAlloc(
         }
 
         pub inline fn values(self: *Self) []T {
-            if (self.head) |head| {
-                return @ptrCast([*]T, head)[0..self.size()];
-            } else {
-                return &[_]T{};
-            }
+            return if (self.head) |head| @ptrCast([*]T, head)[0..self.size()] else &[_]T{};
         }
 
         pub fn deinit(self: *Self) void {
