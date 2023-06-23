@@ -37,7 +37,7 @@ test "index_this" {
 test "cpp_vector" {
     const fii = @import("c013_cpp_vector.zig");
 
-    var v: cpp.AutoVector(u8) = .{};
+    var v = cpp.Vector(u8).init(.{});
     try expect(@ptrToInt(v.values().ptr) != 0); // odd, but expected
     try expect(v.values().len == 0);
     _ = fii.enumerate(&v, 15);

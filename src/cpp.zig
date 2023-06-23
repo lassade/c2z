@@ -24,13 +24,13 @@ pub fn Allocator(comptime T: type) type {
     };
 }
 
-/// basic std::vector with the default allocator
-pub fn AutoVector(comptime T: type) type {
-    return Vector(T, Allocator(T));
+/// basic std::vector
+pub fn Vector(comptime T: type) type {
+    return VectorAlloc(T, Allocator(T));
 }
 
-/// basic std::vector
-pub fn Vector(
+/// basic std::vector with a custom allocator type
+pub fn VectorAlloc(
     comptime T: type,
     comptime Alloc: type,
 ) type {
@@ -42,10 +42,10 @@ pub fn Vector(
         tail: ?*T = null,
         end: ?*T = null,
 
-        allocator: Alloc = .{},
+        allocator: Alloc,
 
-        pub fn init() Self {
-            return .{};
+        pub fn init(allocator: Alloc) Self {
+            return .{ .allocator = allocator };
         }
 
         pub inline fn size(self: *const Self) usize {
@@ -75,3 +75,13 @@ pub fn Vector(
         }
     };
 }
+
+// just use `[N]T`
+pub fn Array(
+    comptime T: type,
+    comptime N: comptime_int,
+) type {
+    return @Type([N]T);
+}
+
+// todo: UniquePtr, SharedPtr, String

@@ -42,7 +42,8 @@ const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
     .{ "intptr_t", "isize" },
     .{ "size_t", "usize" },
     // custom types
-    .{ "std::vector", "cpp.AutoVector" },
+    .{ "std::vector", "cpp.Vector" },
+    .{ "std::array", "cpp.Array" }, // todo: std::array<T, N> -> [N]T
 });
 
 const ScopeTag = enum {
@@ -238,6 +239,8 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitCXXThisExpr(value);
     } else if (mem.eql(u8, kind, "ConstantExpr")) {
         try self.visitConstantExpr(value);
+    } else if (mem.eql(u8, kind, "VarDecl")) {
+        try self.visitVarDecl(value);
         // } else if (mem.eql(u8, kind, "CallExpr")) {
         //     try self.visitCallExpr(value);
     } else {
@@ -447,33 +450,50 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitVarDecl(self: *Self, value: *const json.Value) !void {
-    const var_name = value.*.object.get("name").?.string;
-    const var_storage = value.*.object.get("storageClass").?.string;
-    if (mem.eql(u8, var_storage, "static")) {
-        // ok
-    } else {
-        log.err("unhandled storage class `{s}` in var `{s}`", .{ var_storage, var_name });
+    const name = value.*.object.getPtr("name").?.*.string;
+
+    var constant = false;
+    var raw_ty = typeQualifier(value).?;
+    if (mem.startsWith(u8, raw_ty, "const ")) {
+        constant = true;
+        raw_ty = raw_ty["const ".len..];
     }
 
-    self.nodes_visited += 1;
+    var ty = try self.transpileType(raw_ty);
+    defer self.allocator.free(ty);
 
-    var var_taw_type = typeQualifier(value).?;
-    var is_const = false;
-    if (mem.startsWith(u8, var_taw_type, "const ")) {
-        is_const = true;
-        var_taw_type = var_taw_type["const ".len..];
+    // don't inline because these constants can change in the c++ headers or sources
+    // if (constant) {
+    //     if (value.*.object.getPtr("init")) |j_init| {
+    //         if (mem.eql(u8, j_init.*.string, "c")) {
+    //             self.nodes_visited += 1;
+    //             try self.out.print("pub const {s}: {s} = ", .{ name, ty });
+    //             try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
+    //             try self.out.print(";\n\n", .{});
+    //             return;
+    //         }
+    //     }
+    // }
+
+    // check thread-local storage
+    if (value.*.object.getPtr("storageClass")) |j_storage_class| {
+        if (mem.eql(u8, j_storage_class.*.string, "static")) {
+            // hanlded
+        } else {
+            log.err("unhandled storage class `{s}` in var `{s}`", .{ j_storage_class.*.string, name });
+            return;
+        }
     }
 
-    var var_type = try self.transpileType(var_taw_type);
-    defer self.allocator.free(var_type);
+    self.nodes_visited += nodeCount(value);
 
-    const var_mangled_name = value.*.object.get("mangledName").?.string;
-    if (is_const) {
-        try self.out.print("extern const {s}: {s};\n", .{ var_mangled_name, var_type });
-        try self.out.print("pub inline fn {s}() {s} {{\n    return {s};\n}}\n\n", .{ var_name, var_type, var_mangled_name });
+    const mangled_name = value.*.object.get("mangledName").?.string;
+    if (constant) {
+        try self.out.print("extern const {s}: {s};\n", .{ mangled_name, ty });
+        try self.out.print("pub inline fn {s}() {s} {{\n    return {s};\n}}\n\n", .{ name, ty, mangled_name });
     } else {
-        try self.out.print("extern var {s}: {s};\n", .{ var_mangled_name, var_type });
-        try self.out.print("pub inline fn {s}() *{s} {{\n    return &{s};\n}}\n\n", .{ var_name, var_type, var_mangled_name });
+        try self.out.print("extern var {s}: {s};\n", .{ mangled_name, ty });
+        try self.out.print("pub inline fn {s}() *{s} {{\n    return &{s};\n}}\n\n", .{ name, ty, mangled_name });
     }
 }
 
@@ -1401,10 +1421,11 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         defer args.deinit();
 
         const less_than = mem.indexOf(u8, ttname, "<").?;
-        try self.transpileArgs(ttname[less_than..], &args, &index);
 
         const root = try self.transpileType(ttname[0..less_than]);
         defer self.allocator.free(root);
+
+        try self.transpileArgs(ttname[less_than..], &args, &index);
 
         return try fmt.allocPrint(self.allocator, "{s}{s}", .{ root, args.items });
     } else {
