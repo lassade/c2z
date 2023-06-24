@@ -1296,7 +1296,8 @@ fn visitIfStmt(self: *Self, value: *const json.Value) !void {
     }
 
     // don't print a semicolon when the if else is guarded with braces `if { ... }`
-    self.semicolon = !mem.eql(u8, body.object.getPtr("kind").?.string, "CompoundStmt");
+    var body_kind = body.object.getPtr("kind").?.string;
+    self.semicolon = !(mem.eql(u8, body_kind, "CompoundStmt") or mem.eql(u8, body_kind, "ForStmt") or mem.eql(u8, body_kind, "IfStmt"));
 
     self.nodes_visited += 1;
 }
@@ -1341,7 +1342,8 @@ fn visitForStmt(self: *Self, value: *const json.Value) !void {
     try self.visit(body);
 
     // don't print a semicolon when the if else is guarded with braces `for (...) { ... }`
-    self.semicolon = !mem.eql(u8, body.object.getPtr("kind").?.string, "CompoundStmt");
+    var body_kind = body.object.getPtr("kind").?.string;
+    self.semicolon = !(mem.eql(u8, body_kind, "CompoundStmt") or mem.eql(u8, body_kind, "ForStmt") or mem.eql(u8, body_kind, "IfStmt"));
 
     if (braces) {
         if (self.semicolon) try self.out.print("; ", .{});
