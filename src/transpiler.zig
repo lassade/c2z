@@ -483,9 +483,10 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
     if (self.scope.tag == .local) {
         // variable
         _ = try self.out.write(if (constant) "const" else "var");
-        try self.out.print(" {s}: {s} = ", .{ name, ty });
+        try self.out.print(" {s}: {s}", .{ name, ty });
         if (value.*.object.getPtr("inner")) |j_inner| {
             // declaration statement like `int a;`
+            try self.out.print(" = ", .{});
             try self.visit(&j_inner.*.array.items[0]);
         }
 
@@ -1442,10 +1443,16 @@ fn visistCXXBoolLiteralExpr(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 }
 
-fn visistDeclStmt(self: *Self, value: *const json.Value) !void {
-    if (value.*.object.getPtr("inner")) |j_decl| {
-        // declaration statement like `int a;`
-        try self.visit(&j_decl.*.array.items[0]);
+fn visistDeclStmt(self: *Self, node: *const json.Value) !void {
+    if (node.*.object.getPtr("inner")) |decls| {
+        // declaration statement like `int a, b, c;`
+        const last = decls.*.array.items.len - 1;
+        for (decls.*.array.items, 0..) |*decl, i| {
+            try self.visit(decl);
+            if (last != i) {
+                try self.out.print(";\n", .{});
+            }
+        }
     }
 }
 
