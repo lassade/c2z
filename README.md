@@ -6,17 +6,18 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 ## Notes
 
 - Avoid glue C code
-- Manual adjustments are required
-- Not all transpiled code should compile, but all code that does compile should work
+- Transpiled code can leak memory (implicit destructors aren't called)
+- Manual adjustments are required, specially to make bindings idiomatic and easer to read
 - Meant to work with libraries that follow the *C with classes* coding style
 - No Zig side inheritance, instead create bindings of a C++ implementation
 
 ## Todo
 
 - flags mixin functions
+- figure out a way of calling destructors when never necessary
 - handle private members, class is default private, struct default public, in code is referenced as `self.public`
 - better input file not found error
-- fail when clang ast-bump has failed as well ...
+- fail when clang ast-bump has failed, because missing headers or worng code
 - more operators
 - use `getPtr` in `json.Value`
 - static methods inside classes

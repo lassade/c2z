@@ -249,15 +249,19 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
     } else if (mem.eql(u8, kind, "ForStmt")) {
         try self.visitForStmt(value);
     } else if (mem.eql(u8, kind, "CXXBoolLiteralExpr")) {
-        try self.visistCXXBoolLiteralExpr(value);
+        try self.visitCXXBoolLiteralExpr(value);
     } else if (mem.eql(u8, kind, "DeclStmt")) {
-        try self.visistDeclStmt(value);
+        try self.visitDeclStmt(value);
     } else if (mem.eql(u8, kind, "CallExpr")) {
         try self.visitCallExpr(value);
     } else if (mem.eql(u8, kind, "CXXMemberCallExpr")) {
         try self.visitCXXMemberCallExpr(value);
     } else if (mem.eql(u8, kind, "CXXNullPtrLiteralExpr")) {
-        try self.visistCXXNullPtrLiteralExpr(value);
+        try self.visitCXXNullPtrLiteralExpr(value);
+    } else if (mem.eql(u8, kind, "FunctionTemplateDecl")) {
+        try self.visitFunctionTemplateDecl(value);
+    } else if (mem.eql(u8, kind, "CXXPseudoDestructorExpr")) {
+        try self.visitCXXPseudoDestructorExpr(value);
     } else {
         log.err("unhandled `{s}`", .{kind});
     }
@@ -785,6 +789,117 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
     }
 }
 
+fn visitFunctionTemplateDecl(self: *Self, node: *const json.Value) !void {
+    self.nodes_visited += 1;
+
+    // gather comptime parameters ...
+    var cp = std.ArrayList(u8).init(self.allocator);
+    defer cp.deinit();
+
+    var comma = false;
+    const name = node.object.getPtr("name").?.string;
+    for (node.object.getPtr("inner").?.array.items) |*item| {
+        const kind = item.object.getPtr("kind").?.string;
+        if (mem.eql(u8, kind, "TemplateTypeParmDecl")) {
+            if (comma) try self.out.print(", ", .{});
+            comma = true;
+
+            const out = self.out;
+            self.out = cp.writer();
+            try self.visitTemplateTypeParmDecl(item, name);
+            self.out = out;
+        } else if (mem.eql(u8, kind, "FunctionDecl")) {
+            self.nodes_visited += 1;
+
+            const f_inner = item.object.get("inner");
+            if (f_inner == null) {
+                log.err("`FunctionTemplateDecl` `{s}` with empty inner body", .{name});
+                return;
+            }
+
+            const f_items = f_inner.?.array.items;
+
+            if (f_items.len > 0) {
+                if (!mem.eql(u8, f_items[f_items.len - 1].object.getPtr("kind").?.string, "CompoundStmt")) {
+                    log.err("`FunctionTemplateDecl` `{s}` without `CompoundStmt`", .{name});
+                    return;
+                }
+            }
+
+            const sig = parseFnSignature(item).?;
+            const method_name = item.object.get("name").?.string;
+
+            const ret = try self.transpileType(sig.ret_type);
+            defer self.allocator.free(ret);
+
+            try self.out.print("pub ", .{});
+            if (item.object.get("inline")) |v_inline| {
+                if (v_inline.bool) try self.out.print("inline ", .{});
+            }
+            try self.out.print("fn {s}({s}", .{ method_name, cp.items });
+
+            var body = std.ArrayList(u8).init(self.allocator);
+            defer body.deinit();
+
+            for (f_items) |*f_item| {
+                const arg_kind = f_item.object.get("kind").?.string;
+                if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
+                    self.nodes_visited += 1;
+
+                    const ty = f_item.object.get("type").?;
+                    var qual = ty.object.get("qualType").?.string;
+
+                    // va_list is in practice a `char*`, but we can double check this by verifing the desugared type
+                    if (mem.eql(u8, qual, "va_list")) {
+                        if (ty.object.get("desugaredQualType")) |v_desurgared| {
+                            qual = v_desurgared.string;
+                        }
+                    }
+
+                    if (comma) {
+                        try self.out.print(", ", .{});
+                    }
+                    comma = true;
+
+                    const arg_name = f_item.object.get("name").?.string;
+                    const arg_type = try self.transpileType(qual);
+                    defer self.allocator.free(arg_type);
+
+                    try self.out.print("{s}: {s}", .{ arg_name, arg_type });
+                } else if (mem.eql(u8, arg_kind, "FormatAttr")) {
+                    // varidatic function with the same properties as printf
+                    self.nodes_visited += 1;
+                } else if (mem.eql(u8, arg_kind, "CompoundStmt")) {
+                    const tmp = self.out;
+                    self.out = body.writer();
+                    try self.visitCompoundStmt(f_item);
+                    self.out = tmp;
+                    break;
+                } else {
+                    log.err("unhandled `FunctionDecl` item `{s}` in `FunctionTemplateDecl` `{s}`", .{ arg_kind, method_name });
+                }
+            }
+
+            if (sig.varidatic) {
+                if (comma) {
+                    try self.out.print(", ", .{});
+                }
+                try self.out.print("...) {s}", .{ret});
+            } else {
+                try self.out.print(") {s}", .{ret});
+            }
+
+            try self.out.print(" {s}\n\n", .{body.items});
+
+            return;
+        } else {
+            log.err("unhandled item `{s}` in `FunctionTemplateDecl` `{s}`", .{ kind, name });
+        }
+    }
+
+    log.err("`FunctionTemplateDecl` `{s}` without `FunctionDecl`", .{name});
+}
+
 fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
     if (self.shouldSkip(value)) {
         self.nodes_visited += nodeCount(value);
@@ -983,6 +1098,29 @@ inline fn visitFunctionDecl(self: *Self, value: *const json.Value) !void {
     return self.visitCXXMethodDecl(value, null);
 }
 
+fn visitTemplateTypeParmDecl(self: *Self, node: *const json.Value, parent: []const u8) !void {
+    self.nodes_visited += 1;
+
+    var name = node.object.get("name");
+    if (name == null) {
+        log.err("unnamed template param in `{s}`", .{parent});
+        return;
+    }
+
+    var tag = node.object.get("tagUsed");
+    if (tag == null) {
+        self.nodes_visited -= 1;
+        log.err("untaged template param in `{s}`", .{parent});
+        return;
+    }
+
+    if (mem.eql(u8, tag.?.string, "typename")) {
+        try self.out.print("comptime {s}: type", .{name.?.string});
+    } else {
+        try self.out.print("comptime {s}: anytype", .{name.?.string});
+    }
+}
+
 fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
     if (self.shouldSkip(value)) {
         self.nodes_visited += nodeCount(value);
@@ -1021,41 +1159,18 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
 
     // template param
     var tp_comma = false;
-    for (inner.?.array.items) |item| {
-        self.nodes_visited += 1;
-
+    for (inner.?.array.items) |*item| {
         const item_kind = item.object.get("kind").?.string;
         if (mem.eql(u8, item_kind, "TemplateTypeParmDecl")) {
-            var v_item_name = item.object.get("name");
-            if (v_item_name == null) {
-                self.nodes_visited -= 1;
-                log.err("unnamed template param in `{s}`", .{name});
-                continue;
-            }
-
-            var v_item_tag = item.object.get("tagUsed");
-            if (v_item_tag == null) {
-                self.nodes_visited -= 1;
-                log.err("untaged template param in `{s}`", .{name});
-                continue;
-            }
-
-            const item_name = v_item_name.?.string;
-            const item_tag = v_item_tag.?.string;
-
             if (tp_comma) {
                 try self.out.print(", ", .{});
             }
             tp_comma = true;
 
-            if (mem.eql(u8, item_tag, "typename")) {
-                try self.out.print("comptime {s}: type", .{item_name});
-            } else {
-                // todo: use anytype to handle untyped template params
-                self.nodes_visited -= 1;
-                log.err("unknown template param `{s} {s}` in `{s}`", .{ item_tag, item_name, name });
-            }
+            try self.visitTemplateTypeParmDecl(item, name);
         } else if (mem.eql(u8, item_kind, "CXXRecordDecl")) {
+            self.nodes_visited += 1;
+
             // template definition
             try self.out.print(") type {{\n    return extern struct {{\n", .{});
             try self.out.print("        const Self = @This();\n\n", .{});
@@ -1422,16 +1537,38 @@ fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
 
 fn visitCallExpr(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
-    const j_inner = value.object.getPtr("inner").?;
+    const inner = value.object.getPtr("inner").?;
 
-    try self.visit(&j_inner.array.items[0]);
+    const callee = &inner.array.items[0];
+    const kind = callee.object.getPtr("kind").?.string;
+    if (mem.eql(u8, kind, "UnresolvedLookupExpr")) {
+        self.nodes_visited += 1;
+
+        const loopups = callee.object.getPtr("lookups").?.array.items;
+        if (loopups.len > 1) {
+            // todo: resolve the callee from the lookup table
+            log.warn("unresolved `CallExpr` callee `{s}`", .{callee.object.getPtr("name").?.string});
+        }
+
+        // just take the frist one
+        const entry = &loopups[0];
+        const entry_kind = entry.object.getPtr("kind").?.string;
+        if (mem.eql(u8, entry_kind, "FunctionDecl")) {
+            _ = try self.out.write(entry.object.getPtr("name").?.string);
+        } else {
+            log.err("unhandled loopup entry `{s}` in `CallExpr` `{s}`", .{ entry_kind, callee.object.getPtr("name").?.string });
+            return;
+        }
+    } else {
+        try self.visit(callee);
+    }
 
     _ = try self.out.write("(");
 
     // args
-    const count = j_inner.array.items.len;
+    const count = inner.array.items.len;
     for (1..count) |i| {
-        try self.visit(&j_inner.array.items[i]);
+        try self.visit(&inner.array.items[i]);
 
         if (i != count - 1) {
             _ = try self.out.write(", ");
@@ -1472,6 +1609,14 @@ fn visitCXXMemberCallExpr(self: *Self, value: *const json.Value) !void {
     _ = try self.out.write(")");
 }
 
+fn visitCXXPseudoDestructorExpr(self: *Self, node: *const json.Value) !void {
+    self.nodes_visited += 1;
+
+    const items = node.object.getPtr("inner").?.array.items;
+    try self.visit(&items[0]);
+    _ = try self.out.write(".deinit()");
+}
+
 fn visitCXXThisExpr(self: *Self, _: *const json.Value) !void {
     try self.out.print("self", .{});
     self.nodes_visited += 1;
@@ -1486,12 +1631,12 @@ fn visitConstantExpr(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 }
 
-fn visistCXXBoolLiteralExpr(self: *Self, value: *const json.Value) !void {
+fn visitCXXBoolLiteralExpr(self: *Self, value: *const json.Value) !void {
     try self.out.print("{}", .{value.object.getPtr("value").?.bool});
     self.nodes_visited += 1;
 }
 
-fn visistDeclStmt(self: *Self, node: *const json.Value) !void {
+fn visitDeclStmt(self: *Self, node: *const json.Value) !void {
     if (node.object.getPtr("inner")) |decls| {
         // declaration statement like `int a, b, c;`
         const last = decls.array.items.len - 1;
@@ -1504,7 +1649,7 @@ fn visistDeclStmt(self: *Self, node: *const json.Value) !void {
     }
 }
 
-fn visistCXXNullPtrLiteralExpr(self: *Self, _: *const json.Value) !void {
+fn visitCXXNullPtrLiteralExpr(self: *Self, _: *const json.Value) !void {
     _ = try self.out.write("null");
     self.nodes_visited += 1;
 }
