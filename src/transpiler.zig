@@ -163,11 +163,11 @@ fn endNamespace(self: *Self, parent: NamespaceScope) !void {
         var nodes_it = self.namespace.unnamed_nodes.iterator();
         while (nodes_it.next()) |entry| {
             // todo: sometimes these enums are inside a namespace or a struct, so they should be defined at the end of these but still inside
-            const kind = entry.value_ptr.*.object.get("kind").?.string;
+            const kind = entry.value_ptr.object.get("kind").?.string;
             if (mem.eql(u8, kind, "EnumDecl")) {
                 const name = try fmt.allocPrint(self.allocator, "UnnamedEnum{d}", .{unnamed});
                 defer self.allocator.free(name);
-                _ = try entry.value_ptr.*.object.put("name", json.Value{ .string = name });
+                _ = try entry.value_ptr.object.put("name", json.Value{ .string = name });
                 try self.visitEnumDecl(entry.value_ptr);
             } else {
                 log.warn("unused unnamed node `{s}`", .{kind});
@@ -183,8 +183,11 @@ fn endNamespace(self: *Self, parent: NamespaceScope) !void {
 }
 
 fn visit(self: *Self, value: *const json.Value) anyerror!void {
-    if (value.*.object.getPtr("isImplicit")) |implicit| {
-        if (implicit.*.bool) {
+    // ignore empty nodes
+    if (value.object.count() == 0) return;
+
+    if (value.object.getPtr("isImplicit")) |implicit| {
+        if (implicit.bool) {
             self.nodes_visited += nodeCount(value);
             return;
         }
@@ -194,7 +197,7 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         return;
     }
 
-    var kind = value.*.object.getPtr("kind").?.*.string;
+    var kind = value.object.getPtr("kind").?.string;
     if (mem.eql(u8, kind, "TranslationUnitDecl")) {
         try self.visitTranslationUnitDecl(value);
     } else if (mem.eql(u8, kind, "LinkageSpecDecl")) {
@@ -243,6 +246,8 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitVarDecl(value);
     } else if (mem.eql(u8, kind, "IfStmt")) {
         try self.visitIfStmt(value);
+    } else if (mem.eql(u8, kind, "ForStmt")) {
+        try self.visitForStmt(value);
     } else if (mem.eql(u8, kind, "CXXBoolLiteralExpr")) {
         try self.visistCXXBoolLiteralExpr(value);
     } else if (mem.eql(u8, kind, "DeclStmt")) {
@@ -261,7 +266,7 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
 fn visitLinkageSpecDecl(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 
-    if (value.*.object.get("language")) |v_lang| {
+    if (value.object.get("language")) |v_lang| {
         if (mem.eql(u8, v_lang.string, "C")) {
             // c lang, basically tells the compiler no function overload so don't mangle
         } else {
@@ -298,14 +303,14 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     }
     self.nodes_visited += 1;
 
-    const tag = value.*.object.get("tagUsed").?.string;
+    const tag = value.object.get("tagUsed").?.string;
 
     // nested unamed strucs or unions are treated as implicit fields
     var is_field = false;
 
     var is_generated_name = false;
     var name: []const u8 = undefined;
-    if (value.*.object.get("name")) |v| {
+    if (value.object.get("name")) |v| {
         name = v.string;
     } else if (self.scope.tag == .class) {
         // unamed struct, class or union inside a class definition should be treated as a field
@@ -315,13 +320,13 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         self.scope.fields += 1;
     } else {
         // referenced by someone else
-        const id = try std.fmt.parseInt(u64, value.*.object.get("id").?.string, 0);
+        const id = try std.fmt.parseInt(u64, value.object.get("id").?.string, 0);
         _ = try self.namespace.unnamed_nodes.put(id, value.*);
         return;
     }
     defer if (is_generated_name) self.allocator.free(name);
 
-    var ov_inner = value.*.object.get("inner");
+    var ov_inner = value.object.get("inner");
     if (ov_inner == null) {
         // e.g. `struct ImDrawChannel;`
         try self.namespace.opaques.put(name, undefined);
@@ -333,7 +338,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     }
 
     var is_polymorphic = false;
-    if (value.*.object.get("definitionData")) |v_def_data| {
+    if (value.object.get("definitionData")) |v_def_data| {
         if (v_def_data.object.get("isPolymorphic")) |v_is_polymorphic| {
             is_polymorphic = v_is_polymorphic.bool;
         }
@@ -352,7 +357,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         try self.out.print("pub const {s} = extern struct {{\n", .{name});
     }
 
-    const v_bases = value.*.object.get("bases");
+    const v_bases = value.object.get("bases");
 
     if (is_polymorphic and v_bases != null) {
         if (v_bases.?.array.items.len == 1) {
@@ -468,7 +473,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitVarDecl(self: *Self, value: *const json.Value) !void {
-    const name = value.*.object.getPtr("name").?.*.string;
+    const name = value.object.getPtr("name").?.string;
 
     var constant = false;
     var raw_ty = typeQualifier(value).?;
@@ -484,10 +489,10 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
         // variable
         _ = try self.out.write(if (constant) "const" else "var");
         try self.out.print(" {s}: {s}", .{ name, ty });
-        if (value.*.object.getPtr("inner")) |j_inner| {
+        if (value.object.getPtr("inner")) |j_inner| {
             // declaration statement like `int a;`
             try self.out.print(" = ", .{});
-            try self.visit(&j_inner.*.array.items[0]);
+            try self.visit(&j_inner.array.items[0]);
         }
 
         self.nodes_visited += 1;
@@ -496,7 +501,7 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
 
     self.nodes_visited += nodeCount(value);
 
-    const mangled_name = value.*.object.getPtr("mangledName").?.string;
+    const mangled_name = value.object.getPtr("mangledName").?.string;
     if (constant) {
         try self.out.print("extern const {s}: {s};\n", .{ mangled_name, ty });
         try self.out.print("pub inline fn {s}() {s} {{\n    return {s};\n}}\n\n", .{ name, ty, mangled_name });
@@ -507,14 +512,14 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []const u8) !void {
-    if (value.*.object.get("isInvalid")) |invalid| {
+    if (value.object.get("isInvalid")) |invalid| {
         if (invalid.bool) {
             log.err("invalid ctor of `{s}`", .{parent});
             return;
         }
     }
 
-    if (value.*.object.get("constexpr")) |constexpr| {
+    if (value.object.get("constexpr")) |constexpr| {
         if (constexpr.bool) {
             log.err("unhandled constexpr ctor of `{s}`", .{parent});
             return;
@@ -531,7 +536,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
 
     // todo: deal with inlined methods
     // var inlined = false;
-    // if (value.*.object.get("inline")) |v_inline| {
+    // if (value.object.get("inline")) |v_inline| {
     //     inlined = v_inline.bool;
     //     if (inlined) {
     //         //
@@ -540,7 +545,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
     //     }
     // }
 
-    const method_mangled_name = value.*.object.get("mangledName").?.string;
+    const method_mangled_name = value.object.get("mangledName").?.string;
 
     try self.out.print("extern fn {s}(", .{method_mangled_name});
 
@@ -557,7 +562,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
     defer forward_init_args.deinit();
 
     // method args
-    if (value.*.object.get("inner")) |v_inner| {
+    if (value.object.get("inner")) |v_inner| {
         for (v_inner.array.items, 0..) |v_item, i| {
             self.nodes_visited += 1;
 
@@ -623,7 +628,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
 fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8) !void {
     const sig = parseFnSignature(value).?;
 
-    var method_name = value.*.object.get("name").?.string;
+    var method_name = value.object.get("name").?.string;
     if (mem.startsWith(u8, method_name, "operator")) {
         var op = method_name["operator".len..];
         if (op.len > 0 and std.ascii.isAlphanumeric(op[0])) {
@@ -648,14 +653,14 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
         }
     }
 
-    if (value.*.object.get("isInvalid")) |invalid| {
+    if (value.object.get("isInvalid")) |invalid| {
         if (invalid.bool) {
             log.err("invalid method `{?s}::{s}`", .{ parent, method_name });
             return;
         }
     }
 
-    if (value.*.object.get("constexpr")) |constexpr| {
+    if (value.object.get("constexpr")) |constexpr| {
         if (constexpr.bool) {
             log.err("unhandled constexpr method `{?s}::{s}`", .{ parent, method_name });
             return;
@@ -672,7 +677,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
     var is_mangled: bool = undefined;
     var method_mangled_name: []const u8 = undefined;
     // template function doent have the `mangledName` field
-    if (value.*.object.get("mangledName")) |v_mangled_name| {
+    if (value.object.get("mangledName")) |v_mangled_name| {
         method_mangled_name = v_mangled_name.string;
         // functions decorated with `extern "C"` won't be mangled
         is_mangled = !mem.eql(u8, method_mangled_name, method_name);
@@ -681,7 +686,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
         is_mangled = false;
     }
 
-    const v_inner = value.*.object.get("inner");
+    const v_inner = value.object.get("inner");
     var has_body = false;
     if (v_inner != null and v_inner.?.array.items.len > 0) {
         const item_kind = v_inner.?.array.items[v_inner.?.array.items.len - 1].object.get("kind").?.string;
@@ -690,7 +695,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
 
     if (has_body) {
         try self.out.print("pub ", .{});
-        if (value.*.object.get("inline")) |v_inline| {
+        if (value.object.get("inline")) |v_inline| {
             if (v_inline.bool) try self.out.print("inline ", .{});
         }
         try self.out.print("fn {s}(", .{method_name});
@@ -787,17 +792,17 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
     }
 
     var name: []const u8 = undefined;
-    if (value.*.object.get("name")) |v| {
+    if (value.object.get("name")) |v| {
         name = v.string;
     } else {
         // todo: handle unamed enumerations that aren't inside a typedef like these `enum { FPNG_ENCODE_SLOWER = 1,  FPNG_FORCE_UNCOMPRESSED = 2, };`
         // referenced by someone else
-        const id = try std.fmt.parseInt(u64, value.*.object.get("id").?.string, 0);
+        const id = try std.fmt.parseInt(u64, value.object.get("id").?.string, 0);
         _ = try self.namespace.unnamed_nodes.put(id, value.*);
         return;
     }
 
-    var inner = value.*.object.get("inner");
+    var inner = value.object.get("inner");
     if (inner == null) {
         // e.g. `enum ImGuiKey : int;`
         try self.namespace.opaques.put(name, undefined);
@@ -863,29 +868,29 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
     }
     self.nodes_visited += 1;
 
-    const name = value.*.object.get("name").?.string;
+    const name = value.object.get("name").?.string;
 
-    if (value.*.object.get("inner")) |v_inner| {
+    if (value.object.get("inner")) |v_inner| {
         if (v_inner.array.items.len != 1) {
             log.err("complex typedef `{s}`", .{name});
             return;
         }
 
         const v_item = &v_inner.array.items[0];
-        const tag = v_item.*.object.get("kind").?.string;
+        const tag = v_item.object.get("kind").?.string;
         if (mem.eql(u8, tag, "BuiltinType") or mem.eql(u8, tag, "TypedefType")) {
             // type alias
             self.nodes_visited += nodeCount(v_item);
         } else if (mem.eql(u8, tag, "ElaboratedType")) {
             // c style simplified struct definition
-            if (v_item.*.object.get("ownedTagDecl")) |v_owned| {
+            if (v_item.object.get("ownedTagDecl")) |v_owned| {
                 const id_name = v_owned.object.get("id").?.string;
                 const id = try std.fmt.parseInt(u64, id_name, 0);
                 if (self.namespace.unnamed_nodes.getPtr(id)) |node| {
-                    const n_tag = node.*.object.getPtr("kind").?.*.string;
+                    const n_tag = node.object.getPtr("kind").?.string;
                     if (mem.eql(u8, n_tag, "CXXRecordDecl")) {
                         self.nodes_visited += 1;
-                        var object = try node.*.object.clone();
+                        var object = try node.object.clone();
                         defer object.deinit();
                         // rename the object
                         _ = try object.put("name", json.Value{ .string = name });
@@ -893,7 +898,7 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
                         try self.visitCXXRecordDecl(&json.Value{ .object = object });
                     } else if (mem.eql(u8, n_tag, "EnumDecl")) {
                         self.nodes_visited += 1;
-                        var object = try node.*.object.clone();
+                        var object = try node.object.clone();
                         defer object.deinit();
                         // rename the object
                         _ = try object.put("name", json.Value{ .string = name });
@@ -941,9 +946,9 @@ fn visitNamespaceDecl(self: *Self, value: *const json.Value) !void {
     }
     self.nodes_visited += 1;
 
-    const v_name = value.*.object.get("name");
+    const v_name = value.object.get("name");
 
-    var inner = value.*.object.get("inner");
+    var inner = value.object.get("inner");
     if (inner == null) {
         if (v_name) |name| {
             log.warn("empty namespace `{s}`", .{name.string});
@@ -986,7 +991,7 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 
     var name: []const u8 = undefined;
-    if (value.*.object.get("name")) |v| {
+    if (value.object.get("name")) |v| {
         name = v.string;
     } else {
         self.nodes_visited -= 1;
@@ -994,7 +999,7 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
         return;
     }
 
-    var inner = value.*.object.get("inner");
+    var inner = value.object.get("inner");
     if (inner == null) {
         log.warn("generic opaque `{s}`", .{name});
         return;
@@ -1109,7 +1114,7 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
 fn visitCompoundStmt(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 
-    var inner = value.*.object.get("inner");
+    var inner = value.object.get("inner");
     if (inner == null) {
         return;
     }
@@ -1140,32 +1145,71 @@ fn visitCompoundStmt(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitIfStmt(self: *Self, value: *const json.Value) !void {
-    const j_inner = value.*.object.getPtr("inner").?;
+    const j_inner = value.object.getPtr("inner").?;
 
     try self.out.print(" if (", .{});
-    try self.visit(&j_inner.*.array.items[0]);
+    try self.visit(&j_inner.array.items[0]);
     try self.out.print(") ", .{});
 
-    var body = &j_inner.*.array.items[1];
+    var body = &j_inner.array.items[1];
     try self.visit(body);
 
-    if (if (value.*.object.getPtr("hasElse")) |j_else| j_else.*.bool else false) {
+    if (if (value.object.getPtr("hasElse")) |j_else| j_else.bool else false) {
         try self.out.print(" else ", .{});
-        body = &j_inner.*.array.items[2];
+        body = &j_inner.array.items[2];
         try self.visit(body);
     }
 
-    self.nodes_visited += 1;
-
     // don't print a semicolon when the if else is guarded with braces `if { ... }`
-    var body_kind = body.*.object.getPtr("kind").?.string;
-    self.semicolon = !mem.eql(u8, body_kind, "CompoundStmt");
+    self.semicolon = !mem.eql(u8, body.object.getPtr("kind").?.string, "CompoundStmt");
+
+    self.nodes_visited += 1;
+}
+
+fn visitForStmt(self: *Self, value: *const json.Value) !void {
+    const j_inner = value.object.getPtr("inner").?;
+
+    // note: extra braces required for nested loops and to avoid variable shadowing
+    try self.out.print("{{ ", .{});
+
+    // var delcarations
+    var vars = &j_inner.array.items[0];
+    if (vars.object.count() != 0) {
+        try self.visit(vars);
+        try self.out.print("; ", .{});
+    }
+
+    // todo: handle node at index == `1`
+
+    try self.out.print("while (", .{});
+    try self.visit(&j_inner.array.items[2]);
+    try self.out.print(")", .{});
+
+    var exp = &j_inner.array.items[3];
+    if (exp.object.count() != 0) {
+        try self.out.print(" : ({{ ", .{});
+        try self.visit(exp);
+        try self.out.print("; }})", .{});
+    }
+
+    var body = &j_inner.array.items[4];
+    try self.visit(body);
+
+    // don't print a semicolon when the if else is guarded with braces `for (...) { ... }`
+    if (!mem.eql(u8, body.object.getPtr("kind").?.string, "CompoundStmt")) {
+        try self.out.print("; ", .{});
+    }
+
+    try self.out.print("}} ", .{});
+    self.semicolon = false;
+
+    self.nodes_visited += 1;
 }
 
 fn visitReturnStmt(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 
-    const v_inner = value.*.object.get("inner");
+    const v_inner = value.object.get("inner");
     if (v_inner == null) {
         try self.out.print("return", .{});
         return;
@@ -1177,20 +1221,20 @@ fn visitReturnStmt(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitBinaryOperator(self: *Self, node: *const json.Value) !void {
-    const inner = node.*.object.getPtr("inner").?;
+    const inner = node.object.getPtr("inner").?;
 
-    const opcode = node.*.object.getPtr("opcode").?.*.string;
+    const opcode = node.object.getPtr("opcode").?.string;
 
     // transpile a = b = c = ...; into b = c; a = b;
-    var b = &inner.*.array.items[1];
+    var b = &inner.array.items[1];
     if (mem.eql(u8, opcode, "=")) {
         // ignore the many nested casts ...
         var tmp = b;
-        while (mem.eql(u8, tmp.*.object.getPtr("kind").?.*.string, "ImplicitCastExpr")) {
-            tmp = &tmp.*.object.getPtr("inner").?.*.array.items[0];
+        while (mem.eql(u8, tmp.object.getPtr("kind").?.string, "ImplicitCastExpr")) {
+            tmp = &tmp.object.getPtr("inner").?.array.items[0];
         }
 
-        if (mem.eql(u8, tmp.*.object.getPtr("kind").?.*.string, "BinaryOperator") and mem.eql(u8, tmp.*.object.getPtr("opcode").?.*.string, "=")) {
+        if (mem.eql(u8, tmp.object.getPtr("kind").?.string, "BinaryOperator") and mem.eql(u8, tmp.object.getPtr("opcode").?.string, "=")) {
             try self.visit(tmp);
 
             if (self.scope.tag == .local and self.semicolon) {
@@ -1200,17 +1244,21 @@ fn visitBinaryOperator(self: *Self, node: *const json.Value) !void {
             }
 
             // ignore implicit casting for a less error prone code
-            b = &tmp.*.object.getPtr("inner").?.*.array.items[0];
+            b = &tmp.object.getPtr("inner").?.array.items[0];
         }
     }
 
-    const a = &inner.*.array.items[0];
+    const a = &inner.array.items[0];
     try self.visit(a);
 
     if (mem.eql(u8, opcode, "||")) {
         try self.out.print(" or ", .{});
     } else if (mem.eql(u8, opcode, "&&")) {
         try self.out.print(" and ", .{});
+    } else if (mem.eql(u8, opcode, ",")) {
+        // yep this is a thing used inside some loops `for(...;...; i++, j++)`
+        //                                                          ^^^^^^^^ binary operator ","
+        try self.out.print("; ", .{});
     } else {
         try self.out.print(" {s} ", .{opcode});
     }
@@ -1221,27 +1269,27 @@ fn visitBinaryOperator(self: *Self, node: *const json.Value) !void {
 }
 
 fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
-    const kind = value.*.object.getPtr("castKind").?.*.string;
+    const kind = value.object.getPtr("castKind").?.string;
     self.nodes_visited += 1;
 
     if (mem.eql(u8, kind, "IntegralToBoolean")) {
         try self.out.print("((", .{});
-        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
+        try self.visit(&value.object.getPtr("inner").?.array.items[0]);
         try self.out.print(") != 0)", .{});
         return;
     } else if (mem.eql(u8, kind, "LValueToRValue") or mem.eql(u8, kind, "NoOp")) {
         // todo: wut!?
-        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
+        try self.visit(&value.object.getPtr("inner").?.array.items[0]);
         return;
     } else if (mem.eql(u8, kind, "FunctionToPointerDecay")) {
         // todo: figure out when a conversion is really needed
-        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
+        try self.visit(&value.object.getPtr("inner").?.array.items[0]);
         return;
     } else if (mem.eql(u8, kind, "ToVoid")) {
         // todo: casting to void is a shitty way of evaluating expressions that might have side effects,
         // https://godbolt.org/z/45xYqaz37 shown that the following snippet should be executed even in release builds
         try self.out.print("_ = (", .{});
-        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
+        try self.visit(&value.object.getPtr("inner").?.array.items[0]);
         try self.out.print(");\n", .{});
         return;
     }
@@ -1255,10 +1303,10 @@ fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
         } else {
             try self.out.print("@bitCast({s}, ", .{dst});
         }
-        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
+        try self.visit(&value.object.getPtr("inner").?.array.items[0]);
     } else if (mem.eql(u8, kind, "IntegralCast")) {
         try self.out.print("@intCast({s}, ", .{dst});
-        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
+        try self.visit(&value.object.getPtr("inner").?.array.items[0]);
     } else if (mem.eql(u8, kind, "NullToPointer")) {
         self.nodes_visited += 1;
         try self.out.print("null", .{});
@@ -1266,7 +1314,7 @@ fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
     } else {
         log.warn("unhandled cast kind `{s}`", .{kind});
         try self.out.print("@as({s}, ", .{dst});
-        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
+        try self.visit(&value.object.getPtr("inner").?.array.items[0]);
     }
 
     try self.out.print(")", .{});
@@ -1274,12 +1322,12 @@ fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
 
 fn visitMemberExpr(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
-    const name = value.*.object.getPtr("name").?.*.string;
+    const name = value.object.getPtr("name").?.string;
     try self.out.print("self.{s}", .{name});
 }
 
 fn visitIntegerLiteral(self: *Self, value: *const json.Value) !void {
-    const literal = value.*.object.getPtr("value").?.*.string;
+    const literal = value.object.getPtr("value").?.string;
     _ = try self.out.write(literal);
     self.nodes_visited += 1;
 }
@@ -1290,7 +1338,7 @@ inline fn visitCStyleCastExpr(self: *Self, value: *const json.Value) !void {
 
 fn visitArraySubscriptExpr(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
-    var v_inner = value.*.object.get("inner");
+    var v_inner = value.object.get("inner");
     try self.visit(&v_inner.?.array.items[0]);
     try self.out.print("[", .{});
     try self.visit(&v_inner.?.array.items[1]);
@@ -1298,17 +1346,17 @@ fn visitArraySubscriptExpr(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitUnaryExprOrTypeTraitExpr(self: *Self, value: *const json.Value) !void {
-    const name = value.*.object.getPtr("name").?.*.string;
+    const name = value.object.getPtr("name").?.string;
     if (mem.eql(u8, name, "sizeof")) {
-        if (value.*.object.getPtr("argType")) |j_ty| {
+        if (value.object.getPtr("argType")) |j_ty| {
             // simple type name
-            const size_of = try self.transpileType(j_ty.*.object.get("qualType").?.string);
+            const size_of = try self.transpileType(j_ty.object.get("qualType").?.string);
             defer self.allocator.free(size_of);
             try self.out.print("@sizeOf({s})", .{size_of});
         } else {
             // complex expression like a template type parameter
             _ = try self.out.write("@sizeOf");
-            try self.visit(&value.*.object.getPtr("inner").?.array.items[0]);
+            try self.visit(&value.object.getPtr("inner").?.array.items[0]);
         }
     } else {
         log.err("unknonw `UnaryExprOrTypeTraitExpr` `{s}`", .{name});
@@ -1319,14 +1367,14 @@ fn visitUnaryExprOrTypeTraitExpr(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitDeclRefExpr(self: *Self, value: *const json.Value) !void {
-    const j_ref = value.*.object.getPtr("referencedDecl").?;
-    const kind = j_ref.*.object.getPtr("kind").?.*.string;
+    const j_ref = value.object.getPtr("referencedDecl").?;
+    const kind = j_ref.object.getPtr("kind").?.string;
     if (mem.eql(u8, kind, "ParmVarDecl") or mem.eql(u8, kind, "FunctionDecl") or mem.eql(u8, kind, "VarDecl")) {
-        const name = j_ref.*.object.get("name").?.string;
+        const name = j_ref.object.get("name").?.string;
         _ = try self.out.write(name);
     } else if (mem.eql(u8, kind, "EnumConstantDecl")) {
         const base = typeQualifier(j_ref).?;
-        const variant = resolveEnumVariantName(base, j_ref.*.object.get("name").?.string);
+        const variant = resolveEnumVariantName(base, j_ref.object.get("name").?.string);
         try self.out.print("{s}.{s}.bits", .{ base, variant });
     } else {
         log.err("unhandled `{s}` in `DeclRefExpr`", .{kind});
@@ -1340,10 +1388,10 @@ fn visitParenExpr(self: *Self, value: *const json.Value) !void {
     const rvalue = typeQualifier(value).?;
     if (mem.eql(u8, rvalue, "void")) {
         // inner expression results in nothing
-        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.visit(&value.object.get("inner").?.array.items[0]);
     } else {
         try self.out.print("(", .{});
-        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.visit(&value.object.get("inner").?.array.items[0]);
         try self.out.print(")", .{});
     }
 
@@ -1351,22 +1399,22 @@ fn visitParenExpr(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
-    const opcode = value.*.object.getPtr("opcode").?.*.string;
+    const opcode = value.object.getPtr("opcode").?.string;
 
     if (mem.eql(u8, opcode, "*")) {
         // deref
-        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.visit(&value.object.get("inner").?.array.items[0]);
         try self.out.print(".*", .{});
     } else if (mem.eql(u8, opcode, "++")) {
-        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.visit(&value.object.get("inner").?.array.items[0]);
         try self.out.print(" += 1", .{});
     } else if (mem.eql(u8, opcode, "--")) {
-        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.visit(&value.object.get("inner").?.array.items[0]);
         try self.out.print(" -= 1", .{});
     } else {
         // note: any special cases should be handled with ifelse branches
         try self.out.print("{s}", .{opcode});
-        try self.visit(&value.*.object.get("inner").?.array.items[0]);
+        try self.visit(&value.object.get("inner").?.array.items[0]);
     }
 
     self.nodes_visited += 1;
@@ -1374,16 +1422,16 @@ fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
 
 fn visitCallExpr(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
-    const j_inner = value.*.object.getPtr("inner").?;
+    const j_inner = value.object.getPtr("inner").?;
 
-    try self.visit(&j_inner.*.array.items[0]);
+    try self.visit(&j_inner.array.items[0]);
 
     _ = try self.out.write("(");
 
     // args
-    const count = j_inner.*.array.items.len;
+    const count = j_inner.array.items.len;
     for (1..count) |i| {
-        try self.visit(&j_inner.*.array.items[i]);
+        try self.visit(&j_inner.array.items[i]);
 
         if (i != count - 1) {
             _ = try self.out.write(", ");
@@ -1396,12 +1444,12 @@ fn visitCallExpr(self: *Self, value: *const json.Value) !void {
 fn visitCXXMemberCallExpr(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 
-    const j_inner = value.*.object.getPtr("inner").?;
+    const j_inner = value.object.getPtr("inner").?;
 
-    const j_member = &j_inner.*.array.items[0];
-    const kind = j_member.*.object.getPtr("kind").?.*.string;
+    const j_member = &j_inner.array.items[0];
+    const kind = j_member.object.getPtr("kind").?.string;
     if (mem.eql(u8, kind, "MemberExpr")) {
-        const name = j_member.*.object.getPtr("name").?.*.string;
+        const name = j_member.object.getPtr("name").?.string;
         try self.out.print("self.{s}", .{name});
         self.nodes_visited += nodeCount(j_member);
     } else {
@@ -1412,9 +1460,9 @@ fn visitCXXMemberCallExpr(self: *Self, value: *const json.Value) !void {
     _ = try self.out.write("(");
 
     // args
-    const count = j_inner.*.array.items.len;
+    const count = j_inner.array.items.len;
     for (1..count) |i| {
-        try self.visit(&j_inner.*.array.items[i]);
+        try self.visit(&j_inner.array.items[i]);
 
         if (i != count - 1) {
             _ = try self.out.write(", ");
@@ -1430,7 +1478,7 @@ fn visitCXXThisExpr(self: *Self, _: *const json.Value) !void {
 }
 
 fn visitConstantExpr(self: *Self, value: *const json.Value) !void {
-    for (value.*.object.get("inner").?.array.items) |j_stmt| {
+    for (value.object.get("inner").?.array.items) |j_stmt| {
         // note: any special cases should be handled with ifelse branches
         try self.visit(&j_stmt);
     }
@@ -1439,15 +1487,15 @@ fn visitConstantExpr(self: *Self, value: *const json.Value) !void {
 }
 
 fn visistCXXBoolLiteralExpr(self: *Self, value: *const json.Value) !void {
-    try self.out.print("{}", .{value.*.object.getPtr("value").?.*.bool});
+    try self.out.print("{}", .{value.object.getPtr("value").?.bool});
     self.nodes_visited += 1;
 }
 
 fn visistDeclStmt(self: *Self, node: *const json.Value) !void {
-    if (node.*.object.getPtr("inner")) |decls| {
+    if (node.object.getPtr("inner")) |decls| {
         // declaration statement like `int a, b, c;`
-        const last = decls.*.array.items.len - 1;
-        for (decls.*.array.items, 0..) |*decl, i| {
+        const last = decls.array.items.len - 1;
+        for (decls.array.items, 0..) |*decl, i| {
             try self.visit(decl);
             if (last != i) {
                 try self.out.print(";\n", .{});
@@ -1464,9 +1512,9 @@ fn visistCXXNullPtrLiteralExpr(self: *Self, _: *const json.Value) !void {
 ///////////////////////////////////////////////////////////////////////////////
 
 inline fn typeQualifier(value: *const json.Value) ?[]const u8 {
-    if (value.*.object.getPtr("type")) |j_type| {
-        if (j_type.*.object.getPtr("qualType")) |j_qualifier| {
-            return j_qualifier.*.string;
+    if (value.object.getPtr("type")) |j_type| {
+        if (j_type.object.getPtr("qualType")) |j_qualifier| {
+            return j_qualifier.string;
         }
     }
     return null;
@@ -1494,18 +1542,18 @@ fn parseFnSignature(value: *const json.Value) ?FnSig {
 
 inline fn shouldSkip(self: *Self, value: *const json.Value) bool {
     // todo: incorporate this?
-    // if (value.*.object.get("isImplicit")) |implicit| {
+    // if (value.object.get("isImplicit")) |implicit| {
     //     if (implicit.bool) {
     //         return true;
     //     }
     // }
     if (!self.transpile_includes) {
-        if (value.*.object.getPtr("loc")) |loc| {
+        if (value.object.getPtr("loc")) |loc| {
             // c include
-            if (loc.*.object.getPtr("includedFrom") != null) return true;
+            if (loc.object.getPtr("includedFrom") != null) return true;
             // c++ ...
-            if (loc.*.object.getPtr("expansionLoc")) |expansionLoc| {
-                if (expansionLoc.*.object.getPtr("includedFrom") != null) return true;
+            if (loc.object.getPtr("expansionLoc")) |expansionLoc| {
+                if (expansionLoc.object.getPtr("includedFrom") != null) return true;
             }
         }
     }
@@ -1515,7 +1563,7 @@ inline fn shouldSkip(self: *Self, value: *const json.Value) bool {
 fn nodeCount(value: *const json.Value) usize {
     var count: usize = 1;
     if (value.object.getPtr("inner")) |j_inner| {
-        for (j_inner.*.array.items) |*j_item| {
+        for (j_inner.array.items) |*j_item| {
             count += nodeCount(j_item);
         }
     }
@@ -1618,8 +1666,8 @@ fn transpileArgs(self: *Self, args: []const u8, buffer: *std.ArrayList(u8), inde
         const ch = args[index.*];
         if (ch == '<') {
             const arg = args[start..index.*];
-            try buffer.*.appendSlice(arg);
-            try buffer.*.append('(');
+            try buffer.appendSlice(arg);
+            try buffer.append('(');
             index.* += 1;
             try self.transpileArgs(args, buffer, index);
             start = index.*;
@@ -1628,8 +1676,8 @@ fn transpileArgs(self: *Self, args: []const u8, buffer: *std.ArrayList(u8), inde
             const arg = args[start..index.*];
             const name = try self.transpileType(arg);
             defer self.allocator.free(name);
-            try buffer.*.appendSlice(name);
-            try buffer.*.append(')');
+            try buffer.appendSlice(name);
+            try buffer.append(')');
             index.* += 1;
             return;
         } else if (ch == ',') {
@@ -1637,8 +1685,8 @@ fn transpileArgs(self: *Self, args: []const u8, buffer: *std.ArrayList(u8), inde
                 const arg = args[start..index.*];
                 const name = try self.transpileType(arg);
                 defer self.allocator.free(name);
-                try buffer.*.appendSlice(name);
-                try buffer.*.append(',');
+                try buffer.appendSlice(name);
+                try buffer.append(',');
                 start = index.* + 1;
             } else {
                 start = index.*;
@@ -1651,7 +1699,7 @@ fn transpileArgs(self: *Self, args: []const u8, buffer: *std.ArrayList(u8), inde
     if (rem.len > 0) {
         const name = try self.transpileType(rem);
         defer self.allocator.free(name);
-        try buffer.*.appendSlice(name);
+        try buffer.appendSlice(name);
     }
 
     if (buffer.items.len > 0 and buffer.items[buffer.items.len - 1] == ',') {
