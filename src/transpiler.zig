@@ -262,6 +262,8 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitFunctionTemplateDecl(value);
     } else if (mem.eql(u8, kind, "CXXPseudoDestructorExpr")) {
         try self.visitCXXPseudoDestructorExpr(value);
+    } else if (mem.eql(u8, kind, "CompoundAssignOperator")) {
+        try self.visitCompoundAssignOperator(value);
     } else {
         log.err("unhandled `{s}`", .{kind});
     }
@@ -1284,12 +1286,13 @@ fn visitIfStmt(self: *Self, value: *const json.Value) !void {
 fn visitForStmt(self: *Self, value: *const json.Value) !void {
     const j_inner = value.object.getPtr("inner").?;
 
-    // note: extra braces required for nested loops and to avoid variable shadowing
-    try self.out.print("{{ ", .{});
-
     // var delcarations
+    var braces = false;
     var vars = &j_inner.array.items[0];
     if (vars.object.count() != 0) {
+        // note: extra braces required for nested loops and to avoid variable shadowing
+        braces = true;
+        try self.out.print("{{ ", .{});
         try self.visit(vars);
         try self.out.print("; ", .{});
     }
@@ -1302,21 +1305,32 @@ fn visitForStmt(self: *Self, value: *const json.Value) !void {
 
     var exp = &j_inner.array.items[3];
     if (exp.object.count() != 0) {
-        try self.out.print(" : ({{ ", .{});
-        try self.visit(exp);
-        try self.out.print("; }})", .{});
+        const exp_kind = exp.object.getPtr("kind").?.string;
+        if (mem.eql(u8, exp_kind, "UnaryOperator") or mem.eql(u8, exp_kind, "CompoundAssignOperator") or (mem.eql(u8, exp_kind, "BinaryOperator") and !mem.eql(u8, exp.object.getPtr("opcode").?.string, ","))) {
+            // not a ',' operator so it doesnt require a scope
+            try self.out.print(" : (", .{});
+            try self.visit(exp);
+            try self.out.print(")", .{});
+        } else {
+            // default behaviour
+            try self.out.print(" : ({{ ", .{});
+            try self.visit(exp);
+            try self.out.print("; }})", .{});
+        }
     }
 
     var body = &j_inner.array.items[4];
     try self.visit(body);
 
     // don't print a semicolon when the if else is guarded with braces `for (...) { ... }`
-    if (!mem.eql(u8, body.object.getPtr("kind").?.string, "CompoundStmt")) {
-        try self.out.print("; ", .{});
-    }
+    self.semicolon = !mem.eql(u8, body.object.getPtr("kind").?.string, "CompoundStmt");
 
-    try self.out.print("}} ", .{});
-    self.semicolon = false;
+    if (braces) {
+        if (self.semicolon) try self.out.print("; ", .{});
+        self.semicolon = false;
+
+        try self.out.print("}} ", .{});
+    }
 
     self.nodes_visited += 1;
 }
@@ -1337,7 +1351,6 @@ fn visitReturnStmt(self: *Self, value: *const json.Value) !void {
 
 fn visitBinaryOperator(self: *Self, node: *const json.Value) !void {
     const inner = node.object.getPtr("inner").?;
-
     const opcode = node.object.getPtr("opcode").?.string;
 
     // transpile a = b = c = ...; into b = c; a = b;
@@ -1349,7 +1362,8 @@ fn visitBinaryOperator(self: *Self, node: *const json.Value) !void {
             tmp = &tmp.object.getPtr("inner").?.array.items[0];
         }
 
-        if (mem.eql(u8, tmp.object.getPtr("kind").?.string, "BinaryOperator") and mem.eql(u8, tmp.object.getPtr("opcode").?.string, "=")) {
+        var tmp_kind = tmp.object.getPtr("kind").?.string;
+        if (mem.eql(u8, tmp_kind, "CompoundAssignOperator") or (mem.eql(u8, tmp_kind, "BinaryOperator") and mem.eql(u8, tmp.object.getPtr("opcode").?.string, "="))) {
             try self.visit(tmp);
 
             if (self.scope.tag == .local and self.semicolon) {
@@ -1378,6 +1392,42 @@ fn visitBinaryOperator(self: *Self, node: *const json.Value) !void {
         try self.out.print(" {s} ", .{opcode});
     }
 
+    try self.visit(b);
+
+    self.nodes_visited += 1;
+}
+
+fn visitCompoundAssignOperator(self: *Self, node: *const json.Value) !void {
+    const inner = node.object.getPtr("inner").?;
+    const opcode = node.object.getPtr("opcode").?.string;
+
+    // transpile a = b = c = ...; into b = c; a = b;
+    var b = &inner.array.items[1];
+
+    // ignore the many nested casts ...
+    var tmp = b;
+    while (mem.eql(u8, tmp.object.getPtr("kind").?.string, "ImplicitCastExpr")) {
+        tmp = &tmp.object.getPtr("inner").?.array.items[0];
+    }
+
+    var tmp_kind = tmp.object.getPtr("kind").?.string;
+    if (mem.eql(u8, tmp_kind, "CompoundAssignOperator") or (mem.eql(u8, tmp_kind, "BinaryOperator") and mem.eql(u8, tmp.object.getPtr("opcode").?.string, "="))) {
+        try self.visit(tmp);
+
+        if (self.scope.tag == .local and self.semicolon) {
+            try self.out.print(";\n", .{});
+        } else {
+            log.err("multiple assigmnets outside a local function scope", .{});
+        }
+
+        // ignore implicit casting for a less error prone code
+        b = &tmp.object.getPtr("inner").?.array.items[0];
+    }
+
+    const a = &inner.array.items[0];
+
+    try self.visit(a);
+    try self.out.print(" {s} ", .{opcode});
     try self.visit(b);
 
     self.nodes_visited += 1;
@@ -1614,7 +1664,7 @@ fn visitCXXPseudoDestructorExpr(self: *Self, node: *const json.Value) !void {
 
     const items = node.object.getPtr("inner").?.array.items;
     try self.visit(&items[0]);
-    _ = try self.out.write(".deinit()");
+    _ = try self.out.write(".deinit");
 }
 
 fn visitCXXThisExpr(self: *Self, _: *const json.Value) !void {
