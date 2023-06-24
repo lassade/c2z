@@ -272,6 +272,8 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitUnresolvedMemberExpr(value);
     } else if (mem.eql(u8, kind, "CXXDependentScopeMemberExpr")) {
         try self.visitCXXDependentScopeMemberExpr(value);
+    } else if (mem.eql(u8, kind, "ConditionalOperator")) {
+        try self.visitConditionalOperator(value);
     } else {
         log.err("unhandled `{s}`", .{kind});
     }
@@ -1387,6 +1389,7 @@ fn visitBinaryOperator(self: *Self, node: *const json.Value) !void {
         // ignore the many nested casts ...
         var tmp = b;
         while (mem.eql(u8, tmp.object.getPtr("kind").?.string, "ImplicitCastExpr")) {
+            self.nodes_visited += 1;
             tmp = &tmp.object.getPtr("inner").?.array.items[0];
         }
 
@@ -1435,6 +1438,7 @@ fn visitCompoundAssignOperator(self: *Self, node: *const json.Value) !void {
     // ignore the many nested casts ...
     var tmp = b;
     while (mem.eql(u8, tmp.object.getPtr("kind").?.string, "ImplicitCastExpr")) {
+        self.nodes_visited += 1;
         tmp = &tmp.object.getPtr("inner").?.array.items[0];
     }
 
@@ -1462,9 +1466,9 @@ fn visitCompoundAssignOperator(self: *Self, node: *const json.Value) !void {
 }
 
 fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
-    const kind = value.object.getPtr("castKind").?.string;
     self.nodes_visited += 1;
 
+    const kind = value.object.getPtr("castKind").?.string;
     if (mem.eql(u8, kind, "IntegralToBoolean")) {
         try self.out.print("((", .{});
         try self.visit(&value.object.getPtr("inner").?.array.items[0]);
@@ -1613,11 +1617,11 @@ fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
         const exp = &value.object.get("inner").?.array.items[0];
         const exp_kind = exp.object.getPtr("kind").?.string;
         // handles the case of `*data++`, is still worng but is easer to see why
-        const parentesis = mem.eql(u8, exp_kind, "UnaryOperator");
+        const parentheses = mem.eql(u8, exp_kind, "UnaryOperator");
 
-        if (parentesis) try self.out.print("(", .{});
+        if (parentheses) try self.out.print("(", .{});
         try self.visit(exp);
-        if (parentesis) try self.out.print(")", .{});
+        if (parentheses) try self.out.print(")", .{});
         try self.out.print(".*", .{});
     } else if (mem.eql(u8, opcode, "++")) {
         try self.visit(&value.object.get("inner").?.array.items[0]);
@@ -1833,6 +1837,23 @@ fn visitUnresolvedMemberExpr(self: *Self, _: *const json.Value) !void {
     // todo: wut?!
     log.warn("impossible to solve `UnresolvedMemberExpr`", .{});
     _ = try self.out.write("@\"unresolvedMemberExpr!\"");
+}
+
+fn visitConditionalOperator(self: *Self, node: *const json.Value) !void {
+    // The ?: ternary operator.
+    self.nodes_visited += 1;
+
+    const inner = node.object.getPtr("inner").?.array.items;
+
+    _ = try self.out.write(" if (");
+    try self.visit(&inner[0]);
+    _ = try self.out.write(") ");
+    try self.visit(&inner[1]);
+    _ = try self.out.write(" else ");
+    try self.visit(&inner[2]);
+    _ = try self.out.write(" ");
+
+    self.semicolon = true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
