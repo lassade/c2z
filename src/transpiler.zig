@@ -1383,33 +1383,9 @@ fn visitBinaryOperator(self: *Self, node: *const json.Value) !void {
     const inner = node.object.getPtr("inner").?;
     const opcode = node.object.getPtr("opcode").?.string;
 
-    // transpile a = b = c = ...; into b = c; a = b;
-    var b = &inner.array.items[1];
-    if (mem.eql(u8, opcode, "=")) {
-        // ignore the many nested casts ...
-        var tmp = b;
-        while (mem.eql(u8, tmp.object.getPtr("kind").?.string, "ImplicitCastExpr")) {
-            self.nodes_visited += 1;
-            tmp = &tmp.object.getPtr("inner").?.array.items[0];
-        }
+    // todo: transpile `a = b = c;` into `b = c; a = b;` but can't ignore all casts
 
-        var tmp_kind = tmp.object.getPtr("kind").?.string;
-        if (mem.eql(u8, tmp_kind, "CompoundAssignOperator") or (mem.eql(u8, tmp_kind, "BinaryOperator") and mem.eql(u8, tmp.object.getPtr("opcode").?.string, "="))) {
-            try self.visit(tmp);
-
-            if (self.scope.tag == .local and self.semicolon) {
-                try self.out.print(";\n", .{});
-            } else {
-                log.err("multiple assigmnets outside a local function scope", .{});
-            }
-
-            // ignore implicit casting for a less error prone code
-            b = &tmp.object.getPtr("inner").?.array.items[0];
-        }
-    }
-
-    const a = &inner.array.items[0];
-    try self.visit(a);
+    try self.visit(&inner.array.items[0]);
 
     if (mem.eql(u8, opcode, "||")) {
         try self.out.print(" or ", .{});
@@ -1423,7 +1399,7 @@ fn visitBinaryOperator(self: *Self, node: *const json.Value) !void {
         try self.out.print(" {s} ", .{opcode});
     }
 
-    try self.visit(b);
+    try self.visit(&inner.array.items[1]);
 
     self.nodes_visited += 1;
 }
@@ -1432,35 +1408,11 @@ fn visitCompoundAssignOperator(self: *Self, node: *const json.Value) !void {
     const inner = node.object.getPtr("inner").?;
     const opcode = node.object.getPtr("opcode").?.string;
 
-    // transpile a = b = c = ...; into b = c; a = b;
-    var b = &inner.array.items[1];
+    // todo: transpile `a = b = c;` into `b = c; a = b;` but can't ignore all casts
 
-    // ignore the many nested casts ...
-    var tmp = b;
-    while (mem.eql(u8, tmp.object.getPtr("kind").?.string, "ImplicitCastExpr")) {
-        self.nodes_visited += 1;
-        tmp = &tmp.object.getPtr("inner").?.array.items[0];
-    }
-
-    var tmp_kind = tmp.object.getPtr("kind").?.string;
-    if (mem.eql(u8, tmp_kind, "CompoundAssignOperator") or (mem.eql(u8, tmp_kind, "BinaryOperator") and mem.eql(u8, tmp.object.getPtr("opcode").?.string, "="))) {
-        try self.visit(tmp);
-
-        if (self.scope.tag == .local and self.semicolon) {
-            try self.out.print(";\n", .{});
-        } else {
-            log.err("multiple assigmnets outside a local function scope", .{});
-        }
-
-        // ignore implicit casting for a less error prone code
-        b = &tmp.object.getPtr("inner").?.array.items[0];
-    }
-
-    const a = &inner.array.items[0];
-
-    try self.visit(a);
+    try self.visit(&inner.array.items[0]);
     try self.out.print(" {s} ", .{opcode});
-    try self.visit(b);
+    try self.visit(&inner.array.items[1]);
 
     self.nodes_visited += 1;
 }
