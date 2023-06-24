@@ -13,11 +13,11 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Todo
 
+- flags mixin functions
 - handle private members, class is default private, struct default public, in code is referenced as `self.public`
 - better input file not found error
 - fail when clang ast-bump has failed as well ...
 - more operators
-- write unnamed enumerations as global constants, if they aren't referenced by any typedef
 - use `getPtr` in `json.Value`
 - static methods inside classes
 - auto resolve naming conflics by adding a counter at the end of the function name

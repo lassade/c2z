@@ -388,8 +388,8 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         try self.out.print("\n", .{});
     }
 
-    var fns = std.ArrayList(u8).init(self.allocator);
-    defer fns.deinit();
+    var functions = std.ArrayList(u8).init(self.allocator);
+    defer functions.deinit();
 
     const parent_state = self.scope;
     self.scope = .{ .tag = .class, .name = name };
@@ -423,7 +423,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
             try self.out.print("    {s}: {s},\n", .{ field_name, field_type });
         } else if (mem.eql(u8, kind, "CXXMethodDecl")) {
             const tmp = self.out;
-            self.out = fns.writer();
+            self.out = functions.writer();
             try self.visitCXXMethodDecl(&inner_item, name);
             self.out = tmp;
         } else if (mem.eql(u8, kind, "CXXRecordDecl")) {
@@ -431,17 +431,17 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
             try self.visitCXXRecordDecl(&inner_item);
         } else if (mem.eql(u8, kind, "VarDecl")) {
             const tmp = self.out;
-            self.out = fns.writer();
+            self.out = functions.writer();
             try self.visitVarDecl(&inner_item);
             self.out = tmp;
         } else if (mem.eql(u8, kind, "CXXConstructorDecl")) {
             const tmp = self.out;
-            self.out = fns.writer();
+            self.out = functions.writer();
             try self.visitCXXConstructorDecl(&inner_item, name);
             self.out = tmp;
         } else if (mem.eql(u8, kind, "CXXDestructorDecl")) {
             const dtor = inner_item.object.get("mangledName").?.string;
-            var w = fns.writer();
+            var w = functions.writer();
             try w.print("    extern fn {s}(self: *{s}) void;\n", .{ dtor, name });
             try w.print("    pub inline fn deinit(self: *{s}) void {{ self.{s}(); }}\n\n", .{ name, dtor });
         } else if (mem.eql(u8, kind, "AccessSpecDecl")) {
@@ -454,8 +454,8 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     }
 
     // delcarations must be after fields
-    if (fns.items.len > 0) {
-        try self.out.print("\n{s}", .{fns.items});
+    if (functions.items.len > 0) {
+        try self.out.print("\n{s}", .{functions.items});
     }
 
     try self.endNamespace(parent_namespace);
@@ -917,6 +917,10 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
         } else if (mem.eql(u8, tag, "PointerType")) {
             // note: sadly the clang will remove type names from function pointers, but is one thing less to deal with
             self.nodes_visited += nodeCount(v_item);
+        } else if (mem.eql(u8, tag, "TemplateTypeParmType")) {
+            self.nodes_visited += 1;
+            try self.out.print("pub const {s} = {s};\n\n", .{ name, typeQualifier(v_item).? });
+            return;
         } else {
             log.err("unhandled `{s}` in typedef `{s}`", .{ tag, name });
             return;
@@ -1002,8 +1006,8 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
 
     try self.out.print("pub fn {s}(", .{name});
 
-    var fns = std.ArrayList(u8).init(self.allocator);
-    defer fns.deinit();
+    var functions = std.ArrayList(u8).init(self.allocator);
+    defer functions.deinit();
 
     const parent_state = self.scope;
     self.scope = .{ .tag = .class, .name = "Self" };
@@ -1071,9 +1075,14 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
                     try self.out.print("        {s}: {s},\n", .{ field_name, field_type });
                 } else if (mem.eql(u8, inner_item_kind, "CXXMethodDecl")) {
                     const tmp = self.out;
-                    self.out = fns.writer();
+                    self.out = functions.writer();
                     try self.visitCXXMethodDecl(&inner_item, "Self");
                     self.out = tmp;
+                } else if (mem.eql(u8, inner_item_kind, "TypedefDecl")) {
+                    const out = self.out;
+                    self.out = functions.writer();
+                    try self.visitTypedefDecl(&inner_item);
+                    self.out = out;
                 } else {
                     self.nodes_visited -= 1;
                     log.err("unhandled `{s}` in template `{s}`", .{ inner_item_kind, name });
@@ -1081,8 +1090,8 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
             }
 
             // delcarations must be after fields
-            if (fns.items.len > 0) {
-                try self.out.print("\n{s}", .{fns.items});
+            if (functions.items.len > 0) {
+                try self.out.print("\n{s}", .{functions.items});
             }
 
             try self.endNamespace(parent_namespace);
