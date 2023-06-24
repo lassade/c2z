@@ -274,6 +274,10 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitCXXDependentScopeMemberExpr(value);
     } else if (mem.eql(u8, kind, "ConditionalOperator")) {
         try self.visitConditionalOperator(value);
+    } else if (mem.eql(u8, kind, "BreakStmt")) {
+        try self.visitBreakStmt(value);
+    } else if (mem.eql(u8, kind, "StringLiteral")) {
+        try self.visitStringLiteral(value);
     } else {
         log.err("unhandled `{s}`", .{kind});
     }
@@ -1806,6 +1810,18 @@ fn visitConditionalOperator(self: *Self, node: *const json.Value) !void {
     _ = try self.out.write(" ");
 
     self.semicolon = true;
+}
+
+fn visitBreakStmt(self: *Self, _: *const json.Value) !void {
+    self.nodes_visited += 1;
+    _ = try self.out.write("break");
+}
+
+fn visitStringLiteral(self: *Self, node: *const json.Value) !void {
+    self.nodes_visited += 1;
+    _ = try self.out.write("\"");
+    try self.out.print("{}", .{std.zig.fmtEscapes(node.object.getPtr("value").?.string)});
+    _ = try self.out.write("\"");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
