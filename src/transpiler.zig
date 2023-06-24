@@ -1513,10 +1513,24 @@ fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
     try self.out.print(")", .{});
 }
 
-fn visitMemberExpr(self: *Self, value: *const json.Value) !void {
+fn visitMemberExpr(self: *Self, node: *const json.Value) !void {
     self.nodes_visited += 1;
-    const name = value.object.getPtr("name").?.string;
-    try self.out.print("self.{s}", .{name});
+
+    const target = &node.object.getPtr("inner").?.array.items[0];
+    try self.visit(target);
+
+    const name = node.object.getPtr("name").?.string;
+    try self.out.print(".{s}", .{name});
+}
+
+fn visitCXXDependentScopeMemberExpr(self: *Self, node: *const json.Value) !void {
+    self.nodes_visited += 1;
+
+    const target = &node.object.getPtr("inner").?.array.items[0];
+    try self.visit(target);
+
+    const member = node.object.getPtr("member").?.string;
+    try self.out.print(".{s}", .{member});
 }
 
 fn visitIntegerLiteral(self: *Self, value: *const json.Value) !void {
@@ -1819,25 +1833,6 @@ fn visitUnresolvedMemberExpr(self: *Self, _: *const json.Value) !void {
     // todo: wut?!
     log.warn("impossible to solve `UnresolvedMemberExpr`", .{});
     _ = try self.out.write("@\"unresolvedMemberExpr!\"");
-}
-
-fn visitCXXDependentScopeMemberExpr(self: *Self, node: *const json.Value) !void {
-    self.nodes_visited += 1;
-
-    const member = node.object.getPtr("member").?.string;
-
-    const target = &node.object.getPtr("inner").?.array.items[0];
-    const target_kind = target.object.getPtr("kind").?.string;
-
-    if (mem.eql(u8, target_kind, "DeclRefExpr")) {
-        try self.visitDeclRefExpr(target);
-    } else {
-        log.warn("unhandled target `{s}` in `CXXDependentScopeMemberExpr`", .{target_kind});
-        return;
-    }
-
-    _ = try self.out.write(".");
-    _ = try self.out.write(member);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
