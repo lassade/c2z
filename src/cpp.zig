@@ -2,6 +2,31 @@
 
 const std = @import("std");
 
+/// optional c enumeration extension functions
+pub fn FlagsMixin(comptime FlagsType: type) type {
+    return struct {
+        pub const IntType = @typeInfo(FlagsType).Struct.fields[0].type;
+        pub inline fn init(flags: IntType) FlagsType {
+            return .{ .bits = flags };
+        }
+        pub inline fn merge(lhs: FlagsType, rhs: FlagsType) FlagsType {
+            return init(lhs.bits | rhs.bits);
+        }
+        pub inline fn intersect(lhs: FlagsType, rhs: FlagsType) FlagsType {
+            return init(lhs.bits & rhs.bits);
+        }
+        pub inline fn complement(self: FlagsType) FlagsType {
+            return init(~self.bits);
+        }
+        pub inline fn subtract(lhs: FlagsType, rhs: FlagsType) FlagsType {
+            return init(lhs.bits & rhs.complement().bits);
+        }
+        pub inline fn contains(lhs: FlagsType, rhs: FlagsType) bool {
+            return intersect(lhs, rhs).bits == rhs.bits;
+        }
+    };
+}
+
 /// default stateless allocator, uses `malloc` and `free` internally
 pub fn Allocator(comptime T: type) type {
     return extern struct {

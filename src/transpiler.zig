@@ -984,6 +984,7 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
         self.nodes_visited += 1;
     }
 
+    try self.out.print("\n    // pub usingnamespace cpp.FlagsMixin({s});\n", .{name});
     try self.out.print("}};\n\n", .{});
 }
 

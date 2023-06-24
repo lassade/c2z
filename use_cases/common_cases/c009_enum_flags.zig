@@ -1,4 +1,5 @@
 const std = @import("std");
+const cpp = @import("cpp");
 
 pub const ConfigFlags = extern struct {
     bits: c_int = 0,
@@ -18,6 +19,8 @@ pub const ConfigFlags = extern struct {
     pub const FLAG_WINDOW_MOUSE_PASSTHROUGH: ConfigFlags = .{ .bits = @intCast(c_uint, 16384) };
     pub const FLAG_MSAA_4X_HINT: ConfigFlags = .{ .bits = @intCast(c_uint, 32) };
     pub const FLAG_INTERLACED_HINT: ConfigFlags = .{ .bits = @intCast(c_uint, 65536) };
+
+    pub usingnamespace cpp.FlagsMixin(ConfigFlags);
 };
 
 pub const ImGuiWindowFlags_ = extern struct {
@@ -55,4 +58,6 @@ pub const ImGuiWindowFlags_ = extern struct {
     pub const Modal: ImGuiWindowFlags_ = .{ .bits = @intCast(c_uint, 1 << 27) };
     pub const ChildMenu: ImGuiWindowFlags_ = .{ .bits = @intCast(c_uint, 1 << 28) };
     pub const DockNodeHost: ImGuiWindowFlags_ = .{ .bits = @intCast(c_uint, 1 << 29) };
+
+    pub usingnamespace cpp.FlagsMixin(ImGuiWindowFlags_);
 };

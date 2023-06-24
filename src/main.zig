@@ -60,6 +60,7 @@ pub fn main() !void {
         try args.append("-lc++");
         try args.append("-Xclang");
         try args.append("-ast-dump=json");
+        try args.append("-fsyntax-only");
         if (res.args.cargs) |cargs| {
             try args.append(cargs);
         }

@@ -19,9 +19,13 @@ test "enum_flags" {
 
     var wflags: ffi.ImGuiWindowFlags_ = .{};
     wflags.bits |= ffi.ImGuiWindowFlags_.NoTitleBar.bits;
+    wflags = wflags.merge(ffi.ImGuiWindowFlags_.AlwaysAutoResize);
+    wflags = wflags.merge(ffi.ImGuiWindowFlags_.AlwaysAutoResize);
+    try expect(wflags.contains(ffi.ImGuiWindowFlags_.AlwaysAutoResize));
 
     var cflags: ffi.ConfigFlags = .{};
     cflags.bits |= ffi.ConfigFlags.FLAG_VSYNC_HINT.bits;
+    try expect(cflags.contains(ffi.ConfigFlags.FLAG_VSYNC_HINT));
 }
 
 test "index_this" {
