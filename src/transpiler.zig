@@ -248,6 +248,8 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitIfStmt(value);
     } else if (mem.eql(u8, kind, "ForStmt")) {
         try self.visitForStmt(value);
+    } else if (mem.eql(u8, kind, "WhileStmt")) {
+        try self.visitWhileStmt(value);
     } else if (mem.eql(u8, kind, "CXXBoolLiteralExpr")) {
         try self.visitCXXBoolLiteralExpr(value);
     } else if (mem.eql(u8, kind, "DeclStmt")) {
@@ -1335,6 +1337,22 @@ fn visitForStmt(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 }
 
+fn visitWhileStmt(self: *Self, node: *const json.Value) !void {
+    const j_inner = node.object.getPtr("inner").?;
+
+    try self.out.print("while (", .{});
+    var exp = &j_inner.array.items[0];
+    try self.visit(exp);
+    try self.out.print(")", .{});
+
+    var body = &j_inner.array.items[1];
+    try self.visit(body);
+
+    // don't print a semicolon when the if else is guarded with braces `while (...) { ... }`
+    self.semicolon = !mem.eql(u8, body.object.getPtr("kind").?.string, "CompoundStmt");
+    self.nodes_visited += 1;
+}
+
 fn visitReturnStmt(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 
@@ -1568,7 +1586,14 @@ fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
 
     if (mem.eql(u8, opcode, "*")) {
         // deref
-        try self.visit(&value.object.get("inner").?.array.items[0]);
+        const exp = &value.object.get("inner").?.array.items[0];
+        const exp_kind = exp.object.getPtr("kind").?.string;
+        // handles the case of `*data++`, is still worng but is easer to see why
+        const parentesis = mem.eql(u8, exp_kind, "UnaryOperator");
+
+        if (parentesis) try self.out.print("(", .{});
+        try self.visit(exp);
+        if (parentesis) try self.out.print(")", .{});
         try self.out.print(".*", .{});
     } else if (mem.eql(u8, opcode, "++")) {
         try self.visit(&value.object.get("inner").?.array.items[0]);
@@ -1604,6 +1629,9 @@ fn visitCallExpr(self: *Self, value: *const json.Value) !void {
         const entry = &loopups[0];
         const entry_kind = entry.object.getPtr("kind").?.string;
         if (mem.eql(u8, entry_kind, "FunctionDecl")) {
+            _ = try self.out.write(entry.object.getPtr("name").?.string);
+        } else if (mem.eql(u8, entry_kind, "FunctionTemplateDecl")) {
+            // todo: outpu generic parameters
             _ = try self.out.write(entry.object.getPtr("name").?.string);
         } else {
             log.err("unhandled loopup entry `{s}` in `CallExpr` `{s}`", .{ entry_kind, callee.object.getPtr("name").?.string });

@@ -13,6 +13,8 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Todo
 
+- `if (*data++ == v) { ... }` should generate `{ data += 1; if (data.* == v) { ... } }`
+- format bits inline functions with `zig fmt --stdin` and output them commented out?
 - flags mixin functions
 - figure out a way of calling destructors when never necessary
 - handle private members, class is default private, struct default public, in code is referenced as `self.public`
