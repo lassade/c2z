@@ -97,6 +97,7 @@ nodes_count: usize,
 namespace: NamespaceScope,
 scope: Scope,
 semicolon: bool = true,
+public: bool = true,
 
 class_info: std.StringArrayHashMap(ClassInfo),
 
@@ -246,8 +247,10 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visistCXXBoolLiteralExpr(value);
     } else if (mem.eql(u8, kind, "DeclStmt")) {
         try self.visistDeclStmt(value);
-        // } else if (mem.eql(u8, kind, "CallExpr")) {
-        //     try self.visitCallExpr(value);
+    } else if (mem.eql(u8, kind, "CallExpr")) {
+        try self.visitCallExpr(value);
+    } else if (mem.eql(u8, kind, "CXXMemberCallExpr")) {
+        try self.visitCXXMemberCallExpr(value);
     } else {
         log.err("unhandled `{s}`", .{kind});
     }
@@ -334,10 +337,17 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         }
     }
 
+    const public = self.public;
+    defer self.public = public;
+
+    if (mem.eql(u8, tag, "class")) {
+        self.public = false;
+    }
+
     if (is_field) {
         try self.out.print("{s}: extern {s} {{\n", .{ name, tag });
     } else {
-        try self.out.print("pub const {s} = extern {s} {{\n", .{ name, tag });
+        try self.out.print("pub const {s} = extern struct {{\n", .{name});
     }
 
     const v_bases = value.*.object.get("bases");
@@ -428,12 +438,13 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
             try self.visitCXXConstructorDecl(&inner_item, name);
             self.out = tmp;
         } else if (mem.eql(u8, kind, "CXXDestructorDecl")) {
-            const dtor_name = inner_item.object.get("mangledName").?.string;
+            const dtor = inner_item.object.get("mangledName").?.string;
             var w = fns.writer();
-            try w.print("    extern fn {s}(self: *{s}) void;\n", .{ dtor_name, name });
-            try w.print("    pub inline fn deinit(self: *{s}) void {{ self.{s}(); }}\n\n", .{ name, dtor_name });
+            try w.print("    extern fn {s}(self: *{s}) void;\n", .{ dtor, name });
+            try w.print("    pub inline fn deinit(self: *{s}) void {{ self.{s}(); }}\n\n", .{ name, dtor });
         } else if (mem.eql(u8, kind, "AccessSpecDecl")) {
-            // ignore, all fields are public in zig
+            const access = inner_item.object.get("access").?.string;
+            self.public = mem.eql(u8, access, "public");
         } else {
             self.nodes_visited -= 1;
             log.err("unhandled `{s}` in `{s} {s}`", .{ kind, tag, name });
@@ -757,7 +768,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
 
     // body must be after fields
     if (has_body) {
-        try self.out.print(" {s}\n", .{body.items});
+        try self.out.print(" {s}\n\n", .{body.items});
     } else {
         try self.out.print(";\n", .{});
         if (is_mangled) {
@@ -1181,7 +1192,11 @@ fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
         try self.out.print(") != 0)", .{});
         return;
     } else if (mem.eql(u8, kind, "LValueToRValue") or mem.eql(u8, kind, "NoOp")) {
-        // wut!?
+        // todo: wut!?
+        try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
+        return;
+    } else if (mem.eql(u8, kind, "FunctionToPointerDecay")) {
+        // todo: figure out when a conversion is really needed
         try self.visit(&value.*.object.getPtr("inner").?.*.array.items[0]);
         return;
     } else if (mem.eql(u8, kind, "ToVoid")) {
@@ -1245,11 +1260,18 @@ fn visitArraySubscriptExpr(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitUnaryExprOrTypeTraitExpr(self: *Self, value: *const json.Value) !void {
-    const name = value.*.object.get("name").?.string;
+    const name = value.*.object.getPtr("name").?.*.string;
     if (mem.eql(u8, name, "sizeof")) {
-        const size_of = try self.transpileType(value.*.object.get("argType").?.object.get("qualType").?.string);
-        defer self.allocator.free(size_of);
-        try self.out.print("@sizeOf({s})", .{size_of});
+        if (value.*.object.getPtr("argType")) |j_ty| {
+            // simple type name
+            const size_of = try self.transpileType(j_ty.*.object.get("qualType").?.string);
+            defer self.allocator.free(size_of);
+            try self.out.print("@sizeOf({s})", .{size_of});
+        } else {
+            // complex expression
+            _ = try self.out.write("@sizeOf");
+            try self.visit(&value.*.object.getPtr("inner").?.array.items[0]);
+        }
     } else {
         log.err("unknonw `UnaryExprOrTypeTraitExpr` `{s}`", .{name});
         return;
@@ -1259,14 +1281,14 @@ fn visitUnaryExprOrTypeTraitExpr(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitDeclRefExpr(self: *Self, value: *const json.Value) !void {
-    const j_ref = value.*.object.get("referencedDecl").?;
-    const kind = j_ref.object.get("kind").?.string;
-    if (mem.eql(u8, kind, "ParmVarDecl")) {
-        const param = j_ref.object.get("name").?.string;
-        _ = try self.out.write(param);
+    const j_ref = value.*.object.getPtr("referencedDecl").?;
+    const kind = j_ref.*.object.getPtr("kind").?.*.string;
+    if (mem.eql(u8, kind, "ParmVarDecl") or mem.eql(u8, kind, "FunctionDecl") or mem.eql(u8, kind, "VarDecl")) {
+        const name = j_ref.*.object.get("name").?.string;
+        _ = try self.out.write(name);
     } else if (mem.eql(u8, kind, "EnumConstantDecl")) {
-        const base = typeQualifier(&j_ref).?;
-        const variant = resolveEnumVariantName(base, j_ref.object.get("name").?.string);
+        const base = typeQualifier(j_ref).?;
+        const variant = resolveEnumVariantName(base, j_ref.*.object.get("name").?.string);
         try self.out.print("{s}.{s}.bits", .{ base, variant });
     } else {
         log.err("unhandled `{s}` in `DeclRefExpr`", .{kind});
@@ -1313,8 +1335,55 @@ fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
 }
 
 fn visitCallExpr(self: *Self, value: *const json.Value) !void {
-    _ = value;
-    _ = self;
+    self.nodes_visited += 1;
+    const j_inner = value.*.object.getPtr("inner").?;
+
+    try self.visit(&j_inner.*.array.items[0]);
+
+    _ = try self.out.write("(");
+
+    // args
+    const count = j_inner.*.array.items.len;
+    for (1..count) |i| {
+        try self.visit(&j_inner.*.array.items[i]);
+
+        if (i != count - 1) {
+            _ = try self.out.write(", ");
+        }
+    }
+
+    _ = try self.out.write(")");
+}
+
+fn visitCXXMemberCallExpr(self: *Self, value: *const json.Value) !void {
+    self.nodes_visited += 1;
+
+    const j_inner = value.*.object.getPtr("inner").?;
+
+    const j_member = &j_inner.*.array.items[0];
+    const kind = j_member.*.object.getPtr("kind").?.*.string;
+    if (mem.eql(u8, kind, "MemberExpr")) {
+        const name = j_member.*.object.getPtr("name").?.*.string;
+        try self.out.print("self.{s}", .{name});
+        self.nodes_visited += nodeCount(j_member);
+    } else {
+        log.err("unknown `{s}` in  `CXXMemberCallExpr`", .{kind});
+        return;
+    }
+
+    _ = try self.out.write("(");
+
+    // args
+    const count = j_inner.*.array.items.len;
+    for (1..count) |i| {
+        try self.visit(&j_inner.*.array.items[i]);
+
+        if (i != count - 1) {
+            _ = try self.out.write(", ");
+        }
+    }
+
+    _ = try self.out.write(")");
 }
 
 fn visitCXXThisExpr(self: *Self, _: *const json.Value) !void {
