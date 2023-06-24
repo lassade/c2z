@@ -266,6 +266,10 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitCXXPseudoDestructorExpr(value);
     } else if (mem.eql(u8, kind, "CompoundAssignOperator")) {
         try self.visitCompoundAssignOperator(value);
+    } else if (mem.eql(u8, kind, "CXXOperatorCallExpr")) {
+        try self.visitCXXOperatorCallExpr(value);
+    } else if (mem.eql(u8, kind, "UnresolvedMemberExpr")) {
+        try self.visitUnresolvedMemberExpr(value);
     } else {
         log.err("unhandled `{s}`", .{kind});
     }
@@ -643,7 +647,6 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
             // just a function starting with operator
         } else {
             // todo: implicit casting
-            // todo: operator overloads
             if (mem.eql(u8, op, "[]")) {
                 if (!sig.const_self and mem.endsWith(u8, sig.ret_type, "&")) {
                     // class[i] = value;
@@ -652,9 +655,13 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
                     // value = class[i];
                     method_name = "get";
                 }
-                // } else if (mem.eql(u8, op, " new")) {
-                // } else if (mem.eql(u8, op, " delete")) {
-            } else {
+            } else if (mem.eql(u8, op, "=")) {
+                // assign
+                method_name = "copyFrom";
+            }
+            // } else if (mem.eql(u8, op, " new")) {
+            // } else if (mem.eql(u8, op, " delete")) {
+            else {
                 log.err("unhandled operator `{s}` in `{?s}`", .{ op, parent });
                 return;
             }
@@ -1696,25 +1703,28 @@ fn visitCXXPseudoDestructorExpr(self: *Self, node: *const json.Value) !void {
 }
 
 fn visitCXXThisExpr(self: *Self, _: *const json.Value) !void {
-    try self.out.print("self", .{});
     self.nodes_visited += 1;
+    try self.out.print("self", .{});
 }
 
 fn visitConstantExpr(self: *Self, value: *const json.Value) !void {
+    self.nodes_visited += 1;
+
     for (value.object.get("inner").?.array.items) |j_stmt| {
         // note: any special cases should be handled with ifelse branches
         try self.visit(&j_stmt);
     }
-
-    self.nodes_visited += 1;
 }
 
 fn visitCXXBoolLiteralExpr(self: *Self, value: *const json.Value) !void {
-    try self.out.print("{}", .{value.object.getPtr("value").?.bool});
     self.nodes_visited += 1;
+
+    try self.out.print("{}", .{value.object.getPtr("value").?.bool});
 }
 
 fn visitDeclStmt(self: *Self, node: *const json.Value) !void {
+    self.nodes_visited += 1;
+
     if (node.object.getPtr("inner")) |decls| {
         // declaration statement like `int a, b, c;`
         const last = decls.array.items.len - 1;
@@ -1728,8 +1738,84 @@ fn visitDeclStmt(self: *Self, node: *const json.Value) !void {
 }
 
 fn visitCXXNullPtrLiteralExpr(self: *Self, _: *const json.Value) !void {
-    _ = try self.out.write("null");
     self.nodes_visited += 1;
+    _ = try self.out.write("null");
+}
+
+fn visitCXXOperatorCallExpr(self: *Self, node: *const json.Value) !void {
+    // A call to an overloaded operator
+    self.nodes_visited += 1;
+
+    //var name = node.object.get("name").?.string;
+    var inner = node.object.getPtr("inner").?.array.items;
+
+    // ignore implicit casts
+    var op = &inner[0];
+    var op_kind = op.object.getPtr("kind").?.string;
+    while (mem.eql(u8, op_kind, "ImplicitCastExpr")) {
+        self.nodes_visited += 1;
+        op = &op.object.getPtr("inner").?.array.items[0];
+        op_kind = op.object.getPtr("kind").?.string;
+    }
+
+    // figure out what operator function to call
+    var op_name: []const u8 = "???";
+    var deref = false;
+    if (mem.eql(u8, op_kind, "DeclRefExpr")) {
+        self.nodes_visited += 1;
+
+        const ref = op.object.getPtr("referencedDecl").?;
+        const ref_kind = ref.object.getPtr("kind").?.string;
+        if (mem.eql(u8, ref_kind, "CXXMethodDecl")) {
+            const name = ref.object.getPtr("name").?.string;
+            if (mem.eql(u8, name, "operator[]")) {
+                const sig = parseFnSignature(ref).?;
+                if (!sig.const_self and mem.endsWith(u8, sig.ret_type, "&")) {
+                    // class[i] = value;
+                    op_name = "getPtr";
+                    deref = true;
+                } else {
+                    // value = class[i];
+                    op_name = "get";
+                }
+            } else if (mem.eql(u8, name, "operator=")) {
+                op_name = "copyFrom";
+            } else {
+                log.err("unhandled operator `{s}` in `CXXOperatorCallExpr`", .{name});
+                return;
+            }
+        } else {
+            log.err("unhandlded referece decl `{s}` of `DeclRefExpr` in `CXXOperatorCallExpr`", .{ref_kind});
+            return;
+        }
+    } else {
+        log.err("unhandlded `{s}` in `CXXOperatorCallExpr`", .{op_kind});
+        return;
+    }
+
+    try self.visit(&inner[1]);
+    try self.out.print(".{s}(", .{op_name});
+
+    // args
+    var comma = false;
+    const count = inner.len;
+    for (2..count) |i| {
+        try self.visit(&inner[i]);
+
+        if (comma) _ = try self.out.write(", ");
+        comma = true;
+    }
+
+    _ = try self.out.write(")");
+    if (deref) _ = try self.out.write(".*");
+}
+
+fn visitUnresolvedMemberExpr(self: *Self, _: *const json.Value) !void {
+    self.nodes_visited += 1;
+
+    // todo: wut?!
+    log.warn("impossible to solve `UnresolvedMemberExpr`", .{});
+    _ = try self.out.write("@\"unresolvedMemberExpr!\"");
 }
 
 ///////////////////////////////////////////////////////////////////////////////

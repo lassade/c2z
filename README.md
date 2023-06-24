@@ -28,6 +28,7 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 - constexpr
 - use `@compileError` for objects that couldn't be transpiled
 - write layout tests
+- solve `UnresolvedMemberExpr`, maybe when integrating clang ast directly
 
 test with: other libraries from: https://github.com/godotengine/godot/tree/master/modules
 - SDL2
