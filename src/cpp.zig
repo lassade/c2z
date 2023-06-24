@@ -24,12 +24,12 @@ pub fn Allocator(comptime T: type) type {
     };
 }
 
-/// basic std::vector
+/// basic std::vector compatible type, it doesn't free items
 pub fn Vector(comptime T: type) type {
     return VectorAlloc(T, Allocator(T));
 }
 
-/// basic std::vector with a custom allocator type
+/// basic std::vector with a custom allocator type, it doesn't free items
 pub fn VectorAlloc(
     comptime T: type,
     comptime Alloc: type,

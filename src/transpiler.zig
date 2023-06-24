@@ -251,6 +251,8 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitCallExpr(value);
     } else if (mem.eql(u8, kind, "CXXMemberCallExpr")) {
         try self.visitCXXMemberCallExpr(value);
+    } else if (mem.eql(u8, kind, "CXXNullPtrLiteralExpr")) {
+        try self.visistCXXNullPtrLiteralExpr(value);
     } else {
         log.err("unhandled `{s}`", .{kind});
     }
@@ -1164,11 +1166,37 @@ fn visitReturnStmt(self: *Self, value: *const json.Value) !void {
     try self.visit(&v_inner.?.array.items[0]);
 }
 
-fn visitBinaryOperator(self: *Self, value: *const json.Value) !void {
-    const j_inner = value.*.object.get("inner").?;
-    try self.visit(&j_inner.array.items[0]);
+fn visitBinaryOperator(self: *Self, node: *const json.Value) !void {
+    const inner = node.*.object.getPtr("inner").?;
 
-    const opcode = value.*.object.get("opcode").?.string;
+    const opcode = node.*.object.getPtr("opcode").?.*.string;
+
+    // transpile a = b = c = ...; into b = c; a = b;
+    var b = &inner.*.array.items[1];
+    if (mem.eql(u8, opcode, "=")) {
+        // ignore the many nested casts ...
+        var tmp = b;
+        while (mem.eql(u8, tmp.*.object.getPtr("kind").?.*.string, "ImplicitCastExpr")) {
+            tmp = &tmp.*.object.getPtr("inner").?.*.array.items[0];
+        }
+
+        if (mem.eql(u8, tmp.*.object.getPtr("kind").?.*.string, "BinaryOperator") and mem.eql(u8, tmp.*.object.getPtr("opcode").?.*.string, "=")) {
+            try self.visit(tmp);
+
+            if (self.scope.tag == .local and self.semicolon) {
+                try self.out.print(";\n", .{});
+            } else {
+                log.err("multiple assigmnets outside a local function scope", .{});
+            }
+
+            // ignore implicit casting for a less error prone code
+            b = &tmp.*.object.getPtr("inner").?.*.array.items[0];
+        }
+    }
+
+    const a = &inner.*.array.items[0];
+    try self.visit(a);
+
     if (mem.eql(u8, opcode, "||")) {
         try self.out.print(" or ", .{});
     } else if (mem.eql(u8, opcode, "&&")) {
@@ -1177,7 +1205,7 @@ fn visitBinaryOperator(self: *Self, value: *const json.Value) !void {
         try self.out.print(" {s} ", .{opcode});
     }
 
-    try self.visit(&j_inner.array.items[1]);
+    try self.visit(b);
 
     self.nodes_visited += 1;
 }
@@ -1268,7 +1296,7 @@ fn visitUnaryExprOrTypeTraitExpr(self: *Self, value: *const json.Value) !void {
             defer self.allocator.free(size_of);
             try self.out.print("@sizeOf({s})", .{size_of});
         } else {
-            // complex expression
+            // complex expression like a template type parameter
             _ = try self.out.write("@sizeOf");
             try self.visit(&value.*.object.getPtr("inner").?.array.items[0]);
         }
@@ -1412,12 +1440,17 @@ fn visistDeclStmt(self: *Self, value: *const json.Value) !void {
     }
 }
 
+fn visistCXXNullPtrLiteralExpr(self: *Self, _: *const json.Value) !void {
+    _ = try self.out.write("null");
+    self.nodes_visited += 1;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 inline fn typeQualifier(value: *const json.Value) ?[]const u8 {
-    if (value.*.object.get("type")) |j_type| {
-        if (j_type.object.get("qualType")) |j_qualifier| {
-            return j_qualifier.string;
+    if (value.*.object.getPtr("type")) |j_type| {
+        if (j_type.*.object.getPtr("qualType")) |j_qualifier| {
+            return j_qualifier.*.string;
         }
     }
     return null;
@@ -1463,7 +1496,7 @@ inline fn shouldSkip(self: *Self, value: *const json.Value) bool {
     return false;
 }
 
-pub fn nodeCount(value: *const json.Value) usize {
+fn nodeCount(value: *const json.Value) usize {
     var count: usize = 1;
     if (value.object.getPtr("inner")) |j_inner| {
         for (j_inner.*.array.items) |*j_item| {
