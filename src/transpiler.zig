@@ -42,6 +42,7 @@ const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
     .{ "uintptr_t", "usize" },
     .{ "intptr_t", "isize" },
     .{ "size_t", "usize" },
+    .{ "ptrdiff_t", "isize" },
     // custom types
     .{ "std::vector", "cpp.Vector" },
     .{ "std::array", "cpp.Array" }, // todo: std::array<T, N> -> [N]T
@@ -250,6 +251,17 @@ fn writeCommentedCode(self: *Self, code: []const u8) !void {
     }
 }
 
+fn writeDocs(self: *Self, inner: ?*json.Value) !void {
+    if (inner != null) {
+        for (inner.?.array.items) |*item| {
+            const kind = item.object.get("kind").?.string;
+            if (mem.eql(u8, kind, "FullComment")) {
+                try self.visitFullComment(item);
+            }
+        }
+    }
+}
+
 fn visit(self: *Self, value: *const json.Value) anyerror!void {
     // ignore empty nodes
     if (value.object.count() == 0) return;
@@ -346,6 +358,8 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitBreakStmt(value);
     } else if (mem.eql(u8, kind, "StringLiteral")) {
         try self.visitStringLiteral(value);
+    } else if (mem.eql(u8, kind, "FullComment")) {
+        // skip
     } else {
         log.err("unhandled `{s}`", .{kind});
     }
@@ -366,9 +380,9 @@ fn visitLinkageSpecDecl(self: *Self, value: *const json.Value) !void {
         return;
     }
 
-    if (value.object.get("inner")) |inner| {
-        for (inner.array.items) |inner_item| {
-            try self.visit(&inner_item);
+    if (value.object.getPtr("inner")) |inner| {
+        for (inner.array.items) |*item| {
+            try self.visit(item);
         }
     }
 }
@@ -376,9 +390,9 @@ fn visitLinkageSpecDecl(self: *Self, value: *const json.Value) !void {
 fn visitTranslationUnitDecl(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 
-    if (value.object.get("inner")) |inner| {
-        for (inner.array.items) |inner_item| {
-            try self.visit(&inner_item);
+    if (value.object.getPtr("inner")) |inner| {
+        for (inner.array.items) |*item| {
+            try self.visit(item);
         }
     }
 }
@@ -414,8 +428,8 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     }
     defer if (is_generated_name) self.allocator.free(name);
 
-    var ov_inner = value.object.get("inner");
-    if (ov_inner == null) {
+    var inner = value.object.getPtr("inner");
+    if (inner == null) {
         // e.g. `struct ImDrawChannel;`
         try self.namespace.opaques.put(name, undefined);
         return;
@@ -438,6 +452,8 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     if (mem.eql(u8, tag, "class")) {
         self.public = false;
     }
+
+    try self.writeDocs(inner);
 
     if (is_field) {
         try self.out.print("{s}: extern {s} {{\n", .{ name, tag });
@@ -490,59 +506,71 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
 
     const parent_namespace = self.beginNamespace();
 
-    for (ov_inner.?.array.items) |inner_item| {
-        if (inner_item.object.get("isImplicit")) |implicit| {
+    for (inner.?.array.items) |*item| {
+        if (item.object.getPtr("isImplicit")) |implicit| {
             if (implicit.bool) {
-                self.nodes_visited += nodeCount(&inner_item);
+                self.nodes_visited += nodeCount(item);
                 continue;
             }
         }
 
-        const kind = inner_item.object.get("kind").?.string;
-        if (mem.eql(u8, kind, "FieldDecl")) {
+        const kind = item.object.getPtr("kind").?.string;
+        if (mem.eql(u8, kind, "FullComment")) {
+            // skip
+        } else if (mem.eql(u8, kind, "FieldDecl")) {
             self.nodes_visited += 1;
 
-            const field_name = inner_item.object.get("name").?.string;
+            const field_name = item.object.getPtr("name").?.string;
 
-            if (inner_item.object.get("isInvalid")) |invalid| {
+            if (item.object.getPtr("isInvalid")) |invalid| {
                 if (invalid.bool) {
                     log.err("invalid field `{s}::{s}`", .{ name, field_name });
                     continue;
                 }
             }
 
-            const field_type = try self.transpileType(typeQualifier(&inner_item).?);
+            try self.writeDocs(item.object.getPtr("inner"));
+
+            const field_type = try self.transpileType(typeQualifier(item).?);
             defer self.allocator.free(field_type);
             try self.out.print("    {s}: {s},\n", .{ field_name, field_type });
         } else if (mem.eql(u8, kind, "CXXMethodDecl")) {
-            const tmp = self.out;
+            const out = self.out;
             self.out = functions.writer();
-            try self.visitCXXMethodDecl(&inner_item, name);
-            self.out = tmp;
+            try self.visitCXXMethodDecl(item, name);
+            self.out = out;
+        } else if (mem.eql(u8, kind, "EnumDecl")) {
+            // nested enums
+            try self.visitEnumDecl(item);
         } else if (mem.eql(u8, kind, "CXXRecordDecl")) {
             // nested stucts, classes and unions
-            try self.visitCXXRecordDecl(&inner_item);
+            try self.visitCXXRecordDecl(item);
         } else if (mem.eql(u8, kind, "VarDecl")) {
-            const tmp = self.out;
+            const out = self.out;
             self.out = functions.writer();
-            try self.visitVarDecl(&inner_item);
-            self.out = tmp;
+            try self.visitVarDecl(item);
+            self.out = out;
         } else if (mem.eql(u8, kind, "CXXConstructorDecl")) {
-            const tmp = self.out;
+            const out = self.out;
             self.out = functions.writer();
-            try self.visitCXXConstructorDecl(&inner_item, name);
-            self.out = tmp;
+            try self.visitCXXConstructorDecl(item, name);
+            self.out = out;
         } else if (mem.eql(u8, kind, "CXXDestructorDecl")) {
-            const dtor = inner_item.object.get("mangledName").?.string;
+            const dtor = item.object.get("mangledName").?.string;
             var w = functions.writer();
             try w.print("    extern fn {s}(self: *{s}) void;\n", .{ dtor, name });
             try w.print("    pub inline fn deinit(self: *{s}) void {{ self.{s}(); }}\n\n", .{ name, dtor });
         } else if (mem.eql(u8, kind, "AccessSpecDecl")) {
-            const access = inner_item.object.get("access").?.string;
+            const access = item.object.get("access").?.string;
             self.public = mem.eql(u8, access, "public");
+        } else if (mem.eql(u8, kind, "FriendDecl")) {
+            const out = self.out;
+            self.out = functions.writer();
+            try self.visitFriendDecl(item);
+            self.out = out;
         } else {
             self.nodes_visited -= 1;
-            log.err("unhandled `{s}` in `{s} {s}`", .{ kind, tag, name });
+            log.err("unhandled `{s}` in {s} `{s}`", .{ kind, tag, name });
         }
     }
 
@@ -758,6 +786,20 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
             } else if (mem.eql(u8, op, "=")) {
                 // assign
                 name = "copyFrom";
+            } else if (mem.eql(u8, op, "<")) {
+                name = "lessThan";
+            } else if (mem.eql(u8, op, "<=")) {
+                name = "lessEqThan";
+            } else if (mem.eql(u8, op, ">")) {
+                name = "greaterThan";
+            } else if (mem.eql(u8, op, ">=")) {
+                name = "greaterEqThan";
+            } else if (mem.eql(u8, op, "==")) {
+                name = "equalTo";
+            } else if (mem.eql(u8, op, "<<")) {
+                name = "shiftLeft";
+            } else if (mem.eql(u8, op, ">>")) {
+                name = "shiftRight";
             } else {
                 log.err("unhandled operator `{s}` in `{?s}`", .{ op, this_opt });
                 return;
@@ -798,10 +840,10 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
         is_mangled = false;
     }
 
-    const v_inner = value.object.get("inner");
+    const inner = value.object.getPtr("inner");
     var has_body = false;
-    if (v_inner != null and v_inner.?.array.items.len > 0) {
-        const item_kind = v_inner.?.array.items[v_inner.?.array.items.len - 1].object.get("kind").?.string;
+    if (inner != null and inner.?.array.items.len > 0) {
+        const item_kind = inner.?.array.items[inner.?.array.items.len - 1].object.get("kind").?.string;
         has_body = mem.eql(u8, item_kind, "CompoundStmt");
     }
 
@@ -819,13 +861,18 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
             if (v_inline.bool) try self.out.print("inline ", .{});
         }
 
+        try self.writeDocs(inner);
+
         if (overload_opt) |i| {
             try self.out.print("fn {s}__Overload{d}(", .{ name, i });
         } else {
             try self.out.print("fn {s}(", .{name});
         }
     } else {
-        if (!is_mangled) try self.out.print("pub ", .{});
+        if (!is_mangled) {
+            try self.writeDocs(inner);
+            try self.out.print("pub ", .{});
+        }
         try self.out.print("extern fn {s}(", .{mangled_name});
     }
 
@@ -845,13 +892,15 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
 
     // method args
 
-    if (v_inner != null) {
-        for (v_inner.?.array.items) |v_item| {
-            const arg_kind = v_item.object.get("kind").?.string;
-            if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
+    if (inner != null) {
+        for (inner.?.array.items) |*item| {
+            const kind = item.object.get("kind").?.string;
+            if (mem.eql(u8, kind, "FullComment")) {
+                // skip
+            } else if (mem.eql(u8, kind, "ParmVarDecl")) {
                 self.nodes_visited += 1;
 
-                const v_type = v_item.object.get("type").?;
+                const v_type = item.object.get("type").?;
                 var v_qual = v_type.object.get("qualType").?.string;
 
                 // va_list is in practice a `char*`, but we can double check this by verifing the desugared type
@@ -865,8 +914,8 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                 defer self.allocator.free(arg_type);
 
                 var arg_name: []const u8 = "_";
-                if (v_item.object.get("name")) |v_item_name| {
-                    arg_name = v_item_name.string;
+                if (item.object.get("name")) |item_name| {
+                    arg_name = item_name.string;
                 }
 
                 if (comma) {
@@ -875,16 +924,16 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                 comma = true;
 
                 try self.out.print("{s}: {s}", .{ arg_name, arg_type });
-            } else if (mem.eql(u8, arg_kind, "FormatAttr")) {
+            } else if (mem.eql(u8, kind, "FormatAttr")) {
                 // varidatic function with the same properties as printf
                 self.nodes_visited += 1;
-            } else if (mem.eql(u8, arg_kind, "CompoundStmt")) {
+            } else if (mem.eql(u8, kind, "CompoundStmt")) {
                 const out2 = self.out;
                 self.out = body.writer();
-                try self.visitCompoundStmt(&v_item);
+                try self.visitCompoundStmt(item);
                 self.out = out2;
             } else {
-                log.err("unhandled `{s}` in function `{?s}.{s}`", .{ arg_kind, this_opt, name });
+                log.err("unhandled `{s}` in function `{?s}.{s}`", .{ kind, this_opt, name });
                 continue;
             }
         }
@@ -919,6 +968,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
     } else {
         try self.out.print(";\n", .{});
         if (is_mangled) {
+            try self.writeDocs(inner);
             if (overload_opt) |i| {
                 try self.out.print("pub const {s}__Overload{d} = {s};\n\n", .{ name, i, mangled_name });
             } else {
@@ -1039,24 +1089,24 @@ fn visitFunctionTemplateDecl(self: *Self, node: *const json.Value) !void {
     log.err("`FunctionTemplateDecl` `{s}` without `FunctionDecl`", .{name});
 }
 
-fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
-    if (self.shouldSkip(value)) {
-        self.nodes_visited += nodeCount(value);
+fn visitEnumDecl(self: *Self, node: *const json.Value) !void {
+    if (self.shouldSkip(node)) {
+        self.nodes_visited += nodeCount(node);
         return;
     }
 
     var name: []const u8 = undefined;
-    if (value.object.get("name")) |v| {
+    if (node.object.getPtr("name")) |v| {
         name = v.string;
     } else {
         // todo: handle unamed enumerations that aren't inside a typedef like these `enum { FPNG_ENCODE_SLOWER = 1,  FPNG_FORCE_UNCOMPRESSED = 2, };`
         // referenced by someone else
-        const id = try std.fmt.parseInt(u64, value.object.get("id").?.string, 0);
-        _ = try self.namespace.unnamed_nodes.put(id, value.*);
+        const id = try std.fmt.parseInt(u64, node.object.getPtr("id").?.string, 0);
+        _ = try self.namespace.unnamed_nodes.put(id, node.*);
         return;
     }
 
-    var inner = value.object.get("inner");
+    var inner = node.object.getPtr("inner");
     if (inner == null) {
         // e.g. `enum ImGuiKey : int;`
         try self.namespace.opaques.put(name, undefined);
@@ -1065,8 +1115,10 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
 
     self.nodes_visited += 1;
 
-    // remove opque if any
+    // remove opaque if any
     _ = self.namespace.opaques.swapRemove(name);
+
+    try self.writeDocs(inner);
 
     // todo: use "fixedUnderlyingType" or figure out the type by himself
     try self.out.print("pub const {s} = extern struct {{\n", .{name});
@@ -1075,24 +1127,44 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
     var variant_prev: ?[]const u8 = null;
     var variant_counter: usize = 0;
 
-    for (inner.?.array.items) |inner_item| {
-        if (inner_item.object.get("isImplicit")) |is_implicit| {
+    for (inner.?.array.items) |*item| {
+        if (item.object.getPtr("isImplicit")) |is_implicit| {
             if (is_implicit.bool) {
-                self.nodes_visited += nodeCount(&inner_item);
+                self.nodes_visited += nodeCount(item);
                 continue;
             }
         }
 
-        const variant_tag = inner_item.object.get("kind").?.string;
-        if (mem.eql(u8, variant_tag, "EnumConstantDecl")) {
-            const variant_name = resolveEnumVariantName(name, inner_item.object.get("name").?.string);
+        const kind = item.object.getPtr("kind").?.string;
+        if (mem.eql(u8, kind, "FullComment")) {
+            // skip
+        } else if (mem.eql(u8, kind, "EnumConstantDecl")) {
+            const decl_inner = item.object.getPtr("inner");
+            try self.writeDocs(decl_inner);
+
+            const variant_name = resolveEnumVariantName(name, item.object.get("name").?.string);
             try self.out.print("    pub const {s}: {s}", .{ variant_name, name });
             // transpile enum value
             try self.out.print(" = .{{ .bits = ", .{});
-            if (inner_item.object.get("inner")) |j_value| {
-                for (j_value.array.items) |j_value_item| {
-                    try self.visit(&j_value_item);
+
+            var value = std.ArrayList(u8).init(self.allocator);
+            defer value.deinit();
+
+            // try to generate the variant value
+            if (decl_inner != null) {
+                const out = self.out;
+                self.out = value.writer();
+
+                for (decl_inner.?.array.items) |*body_item| {
+                    try self.visit(body_item);
                 }
+
+                self.out = out;
+            }
+
+            if (value.items.len > 0) {
+                _ = try self.out.write(value.items);
+
                 variant_prev = variant_name;
                 variant_counter = 1;
             } else {
@@ -1103,9 +1175,10 @@ fn visitEnumDecl(self: *Self, value: *const json.Value) !void {
                 }
                 variant_counter += 1;
             }
+
             try self.out.print(" }};\n", .{});
         } else {
-            log.err("unhandled `{s}` in enum `{s}`", .{ variant_tag, name });
+            log.err("unhandled `{s}` in enum `{s}`", .{ kind, name });
             continue;
         }
 
@@ -1222,8 +1295,8 @@ fn visitNamespaceDecl(self: *Self, value: *const json.Value) !void {
         try self.out.print("pub const {s} = struct {{\n", .{name.string});
     }
 
-    for (inner.?.array.items) |inner_item| {
-        try self.visit(&inner_item);
+    for (inner.?.array.items) |*item| {
+        try self.visit(item);
     }
 
     try self.endNamespace(parent_namespace);
@@ -1342,7 +1415,7 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
 
             const parent_namespace = self.beginNamespace();
 
-            for (inner_inner.?.array.items) |inner_item| {
+            for (inner_inner.?.array.items) |*inner_item| {
                 self.nodes_visited += 1;
 
                 const inner_item_kind = inner_item.object.get("kind").?.string;
@@ -1350,18 +1423,18 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
                     // class or struct
                 } else if (mem.eql(u8, inner_item_kind, "FieldDecl")) {
                     const field_name = inner_item.object.get("name").?.string;
-                    var field_type = try self.transpileType(typeQualifier(&inner_item).?);
+                    var field_type = try self.transpileType(typeQualifier(inner_item).?);
                     defer self.allocator.free(field_type);
                     try self.out.print("        {s}: {s},\n", .{ field_name, field_type });
                 } else if (mem.eql(u8, inner_item_kind, "CXXMethodDecl")) {
                     const tmp = self.out;
                     self.out = functions.writer();
-                    try self.visitCXXMethodDecl(&inner_item, "Self");
+                    try self.visitCXXMethodDecl(inner_item, "Self");
                     self.out = tmp;
                 } else if (mem.eql(u8, inner_item_kind, "TypedefDecl")) {
                     const out = self.out;
                     self.out = functions.writer();
-                    try self.visitTypedefDecl(&inner_item);
+                    try self.visitTypedefDecl(inner_item);
                     self.out = out;
                 } else {
                     self.nodes_visited -= 1;
@@ -1404,8 +1477,8 @@ fn visitCompoundStmt(self: *Self, value: *const json.Value) !void {
 
     self.semicolon = true;
 
-    for (inner.?.array.items) |inner_item| {
-        try self.visit(&inner_item);
+    for (inner.?.array.items) |*item| {
+        try self.visit(item);
 
         if (self.semicolon) {
             _ = try self.out.write(";\n");
@@ -1922,6 +1995,20 @@ fn visitCXXOperatorCallExpr(self: *Self, node: *const json.Value) !void {
                 op_name = "mulInto";
             } else if (mem.eql(u8, name, "operator/=")) {
                 op_name = "divInto";
+            } else if (mem.eql(u8, name, "operator<")) {
+                op_name = "lessThan";
+            } else if (mem.eql(u8, name, "operator<=")) {
+                op_name = "lessEqThan";
+            } else if (mem.eql(u8, name, "operator>")) {
+                op_name = "greaterThan";
+            } else if (mem.eql(u8, name, "operator>=")) {
+                op_name = "greaterEqThan";
+            } else if (mem.eql(u8, name, "operator==")) {
+                op_name = "equalTo";
+            } else if (mem.eql(u8, name, "operator<<")) {
+                op_name = "shiftLeft";
+            } else if (mem.eql(u8, name, "operator>>")) {
+                op_name = "shiftRight";
             } else {
                 log.err("unhandled operator `{s}` in `CXXOperatorCallExpr`", .{name});
                 return;
@@ -1987,6 +2074,48 @@ fn visitStringLiteral(self: *Self, node: *const json.Value) !void {
     _ = try self.out.write("\"");
     try self.out.print("{}", .{std.zig.fmtEscapes(node.object.getPtr("value").?.string)});
     _ = try self.out.write("\"");
+}
+
+fn visitFriendDecl(self: *Self, node: *const json.Value) !void {
+    self.nodes_visited += 1;
+
+    for (node.object.getPtr("inner").?.array.items) |*item| {
+        const kind = item.object.getPtr("kind").?.string;
+        if (mem.eql(u8, kind, "FunctionDecl")) {
+            try self.visitFunctionDecl(item);
+        } else {
+            log.err("unhandled `{s}` in `FriendDecl`", .{kind});
+        }
+    }
+}
+
+fn visitFullComment(self: *Self, node: *const json.Value) !void {
+    self.nodes_visited += 1;
+    for (node.object.getPtr("inner").?.array.items) |*item| {
+        const kind = item.object.getPtr("kind").?.string;
+        if (mem.eql(u8, kind, "ParagraphComment")) {
+            try self.visitParagraphComment(item);
+        } else {
+            log.err("unhandled `{s}` in `FullComment`", .{kind});
+        }
+    }
+}
+
+fn visitParagraphComment(self: *Self, node: *const json.Value) !void {
+    self.nodes_visited += 1;
+    for (node.object.getPtr("inner").?.array.items) |*item| {
+        const kind = item.object.getPtr("kind").?.string;
+        self.nodes_visited += 1;
+        if (mem.eql(u8, kind, "TextComment")) {
+            self.nodes_visited += 1;
+            const text = item.object.getPtr("text").?.string;
+            _ = try self.out.write("///");
+            _ = try self.out.write(text);
+            _ = try self.out.write("\n");
+        } else {
+            log.err("unhandled `{s}` in `ParagraphComment`", .{kind});
+        }
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2127,6 +2256,8 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         try self.transpileArgs(ttname[less_than..], &args, &index);
 
         return try fmt.allocPrint(self.allocator, "{s}{s}", .{ root, args.items });
+    } else if (mem.startsWith(u8, ttname, "enum ")) {
+        return try self.transpileType(ttname["enum ".len..]);
     } else {
         // common primitives
         if (PrimitivesTypeLUT.get(ttname)) |pname| {

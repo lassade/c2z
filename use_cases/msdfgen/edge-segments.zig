@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const EdgeColor = @import("EdgeColor.zig").EdgeColor;
+const SignedDistance = @import("SignedDistance.zig").SignedDistance;
 const Vector2 = @import("Vector2.zig").Vector2;
 const Point2 = Vector2;
 
