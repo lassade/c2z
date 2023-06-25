@@ -1,9 +1,5 @@
 const std = @import("std");
 
-pub const ImGuiContext = anyopaque;
-pub const ImFontBuilderIO = anyopaque;
-pub const ImDrawListSharedData = anyopaque;
-
 pub extern fn ImAssert(_: bool) void;
 pub const ImGuiCol = c_int;
 
@@ -3682,12 +3678,12 @@ pub const ImGuiViewport = extern struct {
         self._ZN13ImGuiViewportD1Ev();
     }
 
-    // pub fn GetCenter(self: *const ImGuiViewport) ImVec2 {
-    //     return;
-    // }
-    // pub fn GetWorkCenter(self: *const ImGuiViewport) ImVec2 {
-    //     return;
-    // }
+    pub fn GetCenter(self: *const ImGuiViewport) ImVec2 {
+        return;
+    }
+    pub fn GetWorkCenter(self: *const ImGuiViewport) ImVec2 {
+        return;
+    }
 };
 
 pub const ImGuiPlatformIO = extern struct {
@@ -3757,3 +3753,9 @@ pub inline fn GetKeyIndex(key: ImGuiKey) ImGuiKey {
     ImAssert(@intCast(c_int, key) >= @intCast(c_int, ImGuiKey._NamedKey_BEGIN.bits) and @intCast(c_int, key) < @intCast(c_int, ImGuiKey._NamedKey_END.bits) and @as(bool, @as([*c]const u8, "\"ImGuiKey and native_index was merged together and native_index is disabled by IMGUI_DISABLE_OBSOLETE_KEYIO. Please switch to ImGuiKey.\"")));
     return key;
 }
+
+// opaques
+
+const ImDrawListSharedData = anyopaque;
+const ImGuiContext = anyopaque;
+const ImFontBuilderIO = anyopaque;

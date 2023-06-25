@@ -158,6 +158,9 @@ pub fn run(self: *Self, value: *const json.Value) anyerror!void {
     _ = try self.out.write("const std = @import(\"std\");\n\n");
 
     try self.visit(value);
+
+    // odd but it works ...
+    try self.endNamespace(NamespaceScope.init(self.allocator));
 }
 
 fn beginNamespace(self: *Self) NamespaceScope {
