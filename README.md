@@ -13,32 +13,38 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Todo
 
-- `if (*data++ == v) { ... }` should generate `{ data += 1; if (data.* == v) { ... } }`
-- solve `UnresolvedMemberExpr`, maybe when integrating clang ast directly
-- format bits inline functions with `zig fmt --stdin` and output them commented out?
-- figure out a way of calling destructors when never necessary
-- handle private members, class is default private, struct default public, in code is referenced as `self.public`
-- better input file not found error
-- fail when clang ast-bump has failed, because missing headers or worng code
-- more operators
-- use `getPtr` in `json.Value`
-- static methods inside classes
-- auto resolve naming conflics by adding a counter at the end of the function name
-- handle typedefs of named structs
-- constexpr
+- (easy) verbose option
+- (easy) better input file not found error
+- (easy) format code blocks with `zig fmt --stdin`
+- (easy) comment out transpiled functions as they might be worng and need manual check
+- (easy) auto resolve naming conflics by apending a number in the funcion name
+- (easy) fail when clang ast-bump has failed, because missing headers or worng code
+- (easy) handle primitive type `ptrdiff_t`
+- (hard) `if (*data++ == v) { ... }` should generate `{ data += 1; if (data.* == v) { ... } }`
+- (hard) solve `UnresolvedMemberExpr`, maybe when integrating clang ast directly
+- (hard) solve implicit destructors call
+- (easy) handle private members, class is default private, struct default public, in code is referenced as `self.public`
 - use `@compileError` for objects that couldn't be transpiled
 - write layout tests
 
-test with: other libraries from: https://github.com/godotengine/godot/tree/master/modules
-- SDL2
-- stbi
-- basis_universal
-- meshoptimizer
-- xatlas
-- JoltPhysics
-- minimp3
-- tinyexr
-- msdfgen
-- astc-encoder
-- raylib
-- astcenc
+## Test cases
+
+### C++ libs
+
+- [x] fpng
+- [ ] xatlas
+- [ ] imgui
+- [ ] box2d
+- [ ] basis_universal
+- [ ] JoltPhysics
+- [ ] msdfgen
+- [ ] astc-encoder
+
+### C libs (or with builtin C bindings)
+
+- [ ] SDL2
+- [ ] stbi
+- [ ] raylib
+- [ ] meshoptimizer
+- [ ] tinyexr
+- [ ] minimp3
