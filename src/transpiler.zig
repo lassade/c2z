@@ -182,6 +182,50 @@ fn endNamespace(self: *Self, parent: NamespaceScope) !void {
     self.namespace = parent;
 }
 
+fn fmtCode(self: *Self, code: *std.ArrayList(u8)) !bool {
+    // prepare input
+    try code.append(0);
+    const input = code.items[0 .. code.items.len - 1 :0];
+
+    var tree = try std.zig.Ast.parse(self.allocator, input, .zig);
+    defer tree.deinit(self.allocator);
+
+    if (tree.errors.len > 0) {
+        return false;
+    }
+
+    // todo: ast checks https://github.com/ziglang/zig/blob/146b79af153bbd5dafda0ba12a040385c7fc58f8/src/main.zig#L4656 ???
+
+    // format code
+    const formatted = try tree.render(self.allocator);
+    defer self.allocator.free(formatted);
+
+    try code.ensureTotalCapacity(formatted.len);
+    code.clearRetainingCapacity();
+    code.appendSliceAssumeCapacity(formatted);
+
+    return true;
+}
+
+fn commentCode(self: *Self, code: *std.ArrayList(u8)) !void {
+    const commented = try mem.replaceOwned(u8, self.allocator, code.items, "\n", "\n// ");
+    defer self.allocator.free(commented);
+
+    try code.ensureTotalCapacity("// ".len + commented.len);
+    code.clearRetainingCapacity();
+    code.appendSliceAssumeCapacity("// ");
+    code.appendSliceAssumeCapacity(commented);
+}
+
+fn writeCommentedCode(self: *Self, code: []const u8) !void {
+    var block = code;
+    while (mem.indexOf(u8, block, "\n")) |i| {
+        _ = try self.out.write("// ");
+        _ = try self.out.write(block[0 .. i + 1]);
+        block = block[i + 1 ..];
+    }
+}
+
 fn visit(self: *Self, value: *const json.Value) anyerror!void {
     // ignore empty nodes
     if (value.object.count() == 0) return;
@@ -645,12 +689,12 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
     self.scope.ctors += 1;
 }
 
-fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8) !void {
+fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const u8) !void {
     const sig = parseFnSignature(value).?;
 
-    var method_name = value.object.get("name").?.string;
-    if (mem.startsWith(u8, method_name, "operator")) {
-        var op = method_name["operator".len..];
+    var name = value.object.get("name").?.string;
+    if (mem.startsWith(u8, name, "operator")) {
+        var op = name["operator".len..];
         if (op.len > 0 and std.ascii.isAlphanumeric(op[0])) {
             // just a function starting with operator
         } else {
@@ -658,19 +702,19 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
             if (mem.eql(u8, op, "[]")) {
                 if (!sig.const_self and mem.endsWith(u8, sig.ret_type, "&")) {
                     // class[i] = value;
-                    method_name = "getPtr";
+                    name = "getPtr";
                 } else {
                     // value = class[i];
-                    method_name = "get";
+                    name = "get";
                 }
             } else if (mem.eql(u8, op, "=")) {
                 // assign
-                method_name = "copyFrom";
+                name = "copyFrom";
             }
             // } else if (mem.eql(u8, op, " new")) {
             // } else if (mem.eql(u8, op, " delete")) {
             else {
-                log.err("unhandled operator `{s}` in `{?s}`", .{ op, parent });
+                log.err("unhandled operator `{s}` in `{?s}`", .{ op, this_opt });
                 return;
             }
         }
@@ -678,14 +722,14 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
 
     if (value.object.get("isInvalid")) |invalid| {
         if (invalid.bool) {
-            log.err("invalid method `{?s}::{s}`", .{ parent, method_name });
+            log.err("invalid method `{?s}::{s}`", .{ this_opt, name });
             return;
         }
     }
 
     if (value.object.get("constexpr")) |constexpr| {
         if (constexpr.bool) {
-            log.err("unhandled constexpr method `{?s}::{s}`", .{ parent, method_name });
+            log.err("unhandled constexpr method `{?s}::{s}`", .{ this_opt, name });
             return;
         }
     }
@@ -698,14 +742,14 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
     defer self.allocator.free(method_tret);
 
     var is_mangled: bool = undefined;
-    var method_mangled_name: []const u8 = undefined;
+    var mangled_name: []const u8 = undefined;
     // template function doent have the `mangledName` field
     if (value.object.get("mangledName")) |v_mangled_name| {
-        method_mangled_name = v_mangled_name.string;
+        mangled_name = v_mangled_name.string;
         // functions decorated with `extern "C"` won't be mangled
-        is_mangled = !mem.eql(u8, method_mangled_name, method_name);
+        is_mangled = !mem.eql(u8, mangled_name, name);
     } else {
-        method_mangled_name = method_name;
+        mangled_name = name;
         is_mangled = false;
     }
 
@@ -716,25 +760,31 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
         has_body = mem.eql(u8, item_kind, "CompoundStmt");
     }
 
+    const out = self.out;
+    var code = std.ArrayList(u8).init(self.allocator);
+    defer code.deinit();
+
     if (has_body) {
+        self.out = code.writer();
+
         try self.out.print("pub ", .{});
         if (value.object.get("inline")) |v_inline| {
             if (v_inline.bool) try self.out.print("inline ", .{});
         }
-        try self.out.print("fn {s}(", .{method_name});
+        try self.out.print("fn {s}(", .{name});
     } else {
         if (!is_mangled) try self.out.print("pub ", .{});
-        try self.out.print("extern fn {s}(", .{method_mangled_name});
+        try self.out.print("extern fn {s}(", .{mangled_name});
     }
 
     var comma = false;
 
-    if (parent) |name| {
+    if (this_opt) |this| {
         comma = true;
         if (sig.const_self) {
-            try self.out.print("self: *const {s}", .{name});
+            try self.out.print("self: *const {s}", .{this});
         } else {
-            try self.out.print("self: *{s}", .{name});
+            try self.out.print("self: *{s}", .{this});
         }
     }
 
@@ -777,12 +827,12 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
                 // varidatic function with the same properties as printf
                 self.nodes_visited += 1;
             } else if (mem.eql(u8, arg_kind, "CompoundStmt")) {
-                const tmp = self.out;
+                const out2 = self.out;
                 self.out = body.writer();
                 try self.visitCompoundStmt(&v_item);
-                self.out = tmp;
+                self.out = out2;
             } else {
-                log.err("unhandled `{s}` in function `{?s}::{s}`", .{ arg_kind, parent, method_name });
+                log.err("unhandled `{s}` in function `{?s}::{s}`", .{ arg_kind, this_opt, name });
                 continue;
             }
         }
@@ -800,10 +850,24 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, parent: ?[]const u8
     // body must be after fields
     if (has_body) {
         try self.out.print(" {s}\n\n", .{body.items});
+
+        self.out = out;
+
+        if (code.items.len > 0) {
+            if (try self.fmtCode(&code)) {
+                // write formated code ...
+                _ = try self.out.write(code.items);
+            } else {
+                // bad code
+                log.err("syntax errors in `{?s}.{s}`", .{ this_opt, name });
+                _ = try self.out.write("// syntax errors:\n");
+                try self.writeCommentedCode(code.items);
+            }
+        }
     } else {
         try self.out.print(";\n", .{});
         if (is_mangled) {
-            try self.out.print("pub const {s} = {s};\n\n", .{ method_name, method_mangled_name });
+            try self.out.print("pub const {s} = {s};\n\n", .{ name, mangled_name });
         }
     }
 }
