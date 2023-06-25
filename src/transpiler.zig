@@ -10,9 +10,10 @@ const Allocator = mem.Allocator;
 const Self = @This();
 
 const FnSig = struct {
-    const_self: bool = false,
-    varidatic: bool = false,
-    ret_type: []const u8 = "",
+    raw: []const u8,
+    const_self: bool,
+    varidatic: bool,
+    ret: []const u8,
 };
 
 const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
@@ -65,20 +66,40 @@ const NamespaceScope = struct {
     unnamed_nodes: std.AutoHashMap(u64, json.Value),
     // todo: didn't find a hashset, maybe by using the key as `void` no extra allocations will be made?
     opaques: std.StringArrayHashMap(void),
-    // todo: overloads: std.StringArrayHashMap(usize),
+    overloads: std.StringArrayHashMap(std.StringArrayHashMap(usize)),
 
     fn init(allocator: Allocator) NamespaceScope {
         return .{
             .unnamed_nodes = std.AutoHashMap(u64, json.Value).init(allocator),
             .opaques = std.StringArrayHashMap(void).init(allocator),
-            // todo: .overloads = std.StringArrayHashMap(usize).init(allocator),
+            .overloads = std.StringArrayHashMap(std.StringArrayHashMap(usize)).init(allocator),
         };
+    }
+
+    fn resolveOverloadIndex(self: *NamespaceScope, name: []const u8, signature: []const u8) !?usize {
+        if (self.overloads.getPtr(name)) |lut| {
+            if (lut.get(signature)) |index| {
+                return index;
+            } else {
+                var index: usize = lut.count() + 2;
+                try lut.put(signature, index);
+                return index;
+            }
+        } else {
+            try self.overloads.put(name, std.StringArrayHashMap(usize).init(self.overloads.allocator));
+            return null;
+        }
     }
 
     fn deinit(self: *NamespaceScope) void {
         self.unnamed_nodes.deinit();
         self.opaques.deinit();
-        // todo: self.overloads.deinit();
+
+        var it = self.overloads.iterator();
+        while (it.next()) |entry| {
+            entry.value_ptr.deinit();
+        }
+        self.overloads.deinit();
     }
 };
 
@@ -700,7 +721,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
         } else {
             // todo: implicit casting
             if (mem.eql(u8, op, "[]")) {
-                if (!sig.const_self and mem.endsWith(u8, sig.ret_type, "&")) {
+                if (!sig.const_self and mem.endsWith(u8, sig.ret, "&")) {
                     // class[i] = value;
                     name = "getPtr";
                 } else {
@@ -738,7 +759,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
 
     // note: if the function has a `= 0` at the end it will have "pure" = true attribute
 
-    const method_tret = try self.transpileType(sig.ret_type);
+    const method_tret = try self.transpileType(sig.ret);
     defer self.allocator.free(method_tret);
 
     var is_mangled: bool = undefined;
@@ -764,6 +785,8 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
     var code = std.ArrayList(u8).init(self.allocator);
     defer code.deinit();
 
+    var overload_opt = try self.namespace.resolveOverloadIndex(name, sig.raw);
+
     if (has_body) {
         self.out = code.writer();
 
@@ -771,7 +794,12 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
         if (value.object.get("inline")) |v_inline| {
             if (v_inline.bool) try self.out.print("inline ", .{});
         }
-        try self.out.print("fn {s}(", .{name});
+
+        if (overload_opt) |i| {
+            try self.out.print("fn {s}__Overload{d}(", .{ name, i });
+        } else {
+            try self.out.print("fn {s}(", .{name});
+        }
     } else {
         if (!is_mangled) try self.out.print("pub ", .{});
         try self.out.print("extern fn {s}(", .{mangled_name});
@@ -832,7 +860,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                 try self.visitCompoundStmt(&v_item);
                 self.out = out2;
             } else {
-                log.err("unhandled `{s}` in function `{?s}::{s}`", .{ arg_kind, this_opt, name });
+                log.err("unhandled `{s}` in function `{?s}.{s}`", .{ arg_kind, this_opt, name });
                 continue;
             }
         }
@@ -867,7 +895,11 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
     } else {
         try self.out.print(";\n", .{});
         if (is_mangled) {
-            try self.out.print("pub const {s} = {s};\n\n", .{ name, mangled_name });
+            if (overload_opt) |i| {
+                try self.out.print("pub const {s}__Overload{d} = {s};\n\n", .{ name, i, mangled_name });
+            } else {
+                try self.out.print("pub const {s} = {s};\n\n", .{ name, mangled_name });
+            }
         }
     }
 }
@@ -912,7 +944,7 @@ fn visitFunctionTemplateDecl(self: *Self, node: *const json.Value) !void {
             const sig = parseFnSignature(item).?;
             const method_name = item.object.get("name").?.string;
 
-            const ret = try self.transpileType(sig.ret_type);
+            const ret = try self.transpileType(sig.ret);
             defer self.allocator.free(ret);
 
             try self.out.print("pub ", .{});
@@ -1813,7 +1845,7 @@ fn visitCXXOperatorCallExpr(self: *Self, node: *const json.Value) !void {
             const name = ref.object.getPtr("name").?.string;
             if (mem.eql(u8, name, "operator[]")) {
                 const sig = parseFnSignature(ref).?;
-                if (!sig.const_self and mem.endsWith(u8, sig.ret_type, "&")) {
+                if (!sig.const_self and mem.endsWith(u8, sig.ret, "&")) {
                     // class[i] = value;
                     op_name = "getPtr";
                     deref = true;
@@ -1906,17 +1938,18 @@ inline fn resolveEnumVariantName(base: []const u8, variant: []const u8) []const 
 }
 
 fn parseFnSignature(value: *const json.Value) ?FnSig {
-    if (typeQualifier(value)) |sig| {
-        var meta: FnSig = undefined;
+    if (typeQualifier(value)) |raw| {
+        var sig: FnSig = undefined;
+        sig.raw = raw;
 
-        var lp = mem.lastIndexOf(u8, sig, ")").?;
-        meta.const_self = mem.endsWith(u8, sig[lp..], ") const");
-        meta.varidatic = mem.endsWith(u8, sig[0 .. lp + 1], "... )");
+        var lp = mem.lastIndexOf(u8, raw, ")").?;
+        sig.const_self = mem.endsWith(u8, raw[lp..], ") const");
+        sig.varidatic = mem.endsWith(u8, raw[0 .. lp + 1], "... )");
 
-        var s = mem.split(u8, sig, "(");
-        meta.ret_type = s.first();
+        var s = mem.split(u8, raw, "(");
+        sig.ret = s.first();
 
-        return meta;
+        return sig;
     }
     return null;
 }

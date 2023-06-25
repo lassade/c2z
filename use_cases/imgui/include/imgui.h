@@ -1,6 +1,8 @@
 // custom defines and other configurations
 extern "C" void ImAssert(bool);
 #define IM_ASSERT(exp) ImAssert(exp)
+#define IMGUI_DISABLE_OBSOLETE_KEYIO 1
+#define IMGUI_DISABLE_OBSOLETE_FUNCTIONS 1
 
 // dear imgui, v1.89.5
 // (headers)

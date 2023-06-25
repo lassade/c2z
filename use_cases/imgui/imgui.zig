@@ -1,5 +1,9 @@
 const std = @import("std");
 
+pub const ImGuiContext = anyopaque;
+pub const ImFontBuilderIO = anyopaque;
+pub const ImDrawListSharedData = anyopaque;
+
 pub extern fn ImAssert(_: bool) void;
 pub const ImGuiCol = c_int;
 
@@ -97,28 +101,26 @@ pub const ImWchar32 = c_uint;
 
 pub const ImWchar = ImWchar16;
 
-pub const ImGuiInputTextCallback = ?*const fn([*c]ImGuiInputTextCallbackData) callconv(.C) c_int ;
+pub const ImGuiInputTextCallback = ?*const fn ([*c]ImGuiInputTextCallbackData) callconv(.C) c_int;
 
-pub const ImGuiSizeCallback = ?*const fn([*c]ImGuiSizeCallbackData) callconv(.C) void ;
+pub const ImGuiSizeCallback = ?*const fn ([*c]ImGuiSizeCallbackData) callconv(.C) void;
 
-pub const ImGuiMemAllocFunc = ?*const fn(usize,?*anyopaque) callconv(.C) ?*anyopaque ;
+pub const ImGuiMemAllocFunc = ?*const fn (usize, ?*anyopaque) callconv(.C) ?*anyopaque;
 
-pub const ImGuiMemFreeFunc = ?*const fn(?*anyopaque,?*anyopaque) callconv(.C) void ;
+pub const ImGuiMemFreeFunc = ?*const fn (?*anyopaque, ?*anyopaque) callconv(.C) void;
 
 pub const ImVec2 = extern struct {
     x: f32,
     y: f32,
 
-pub fn getPtr(self: *ImVec2, idx: usize) *f32 {
-ImAssert(idx == @intCast(usize, 0) or idx == @intCast(usize, 1));
-return (@ptrCast([*c]f32, @bitCast(?*anyopaque, @ptrCast([*c]u8, self))))[idx];
-}
-
-pub fn get(self: *const ImVec2, idx: usize) f32 {
-ImAssert(idx == @intCast(usize, 0) or idx == @intCast(usize, 1));
-return (@ptrCast([*c]const f32, @bitCast(?*const anyopaque, @ptrCast([*c]const u8, self))))[idx];
-}
-
+    pub fn getPtr(self: *ImVec2, idx: usize) *f32 {
+        ImAssert(idx == @intCast(usize, 0) or idx == @intCast(usize, 1));
+        return (@ptrCast([*c]f32, @bitCast(?*anyopaque, @ptrCast([*c]u8, self))))[idx];
+    }
+    pub fn get(self: *const ImVec2, idx: usize) f32 {
+        ImAssert(idx == @intCast(usize, 0) or idx == @intCast(usize, 1));
+        return (@ptrCast([*c]const f32, @bitCast(?*const anyopaque, @ptrCast([*c]const u8, self))))[idx];
+    }
 };
 
 pub const ImVec4 = extern struct {
@@ -128,17 +130,16 @@ pub const ImVec4 = extern struct {
     w: f32,
 };
 
-pub const ImGui = struct {
-extern fn _ZN5ImGui13CreateContextEP11ImFontAtlas(shared_font_atlas: [*c]ImFontAtlas) [*c]ImGuiContext;
+extern fn _ZN5ImGui13CreateContextEP11ImFontAtlas(shared_font_atlas: [*c]ImFontAtlas) ?*ImGuiContext;
 pub const CreateContext = _ZN5ImGui13CreateContextEP11ImFontAtlas;
 
-extern fn _ZN5ImGui14DestroyContextEP12ImGuiContext(ctx: [*c]ImGuiContext) void;
+extern fn _ZN5ImGui14DestroyContextEP12ImGuiContext(ctx: ?*ImGuiContext) void;
 pub const DestroyContext = _ZN5ImGui14DestroyContextEP12ImGuiContext;
 
-extern fn _ZN5ImGui17GetCurrentContextEv() [*c]ImGuiContext;
+extern fn _ZN5ImGui17GetCurrentContextEv() ?*ImGuiContext;
 pub const GetCurrentContext = _ZN5ImGui17GetCurrentContextEv;
 
-extern fn _ZN5ImGui17SetCurrentContextEP12ImGuiContext(ctx: [*c]ImGuiContext) void;
+extern fn _ZN5ImGui17SetCurrentContextEP12ImGuiContext(ctx: ?*ImGuiContext) void;
 pub const SetCurrentContext = _ZN5ImGui17SetCurrentContextEP12ImGuiContext;
 
 extern fn _ZN5ImGui5GetIOEv() *ImGuiIO;
@@ -208,7 +209,7 @@ extern fn _ZN5ImGui10BeginChildEPKcRK6ImVec2bi(str_id: [*c]const u8, size: *cons
 pub const BeginChild = _ZN5ImGui10BeginChildEPKcRK6ImVec2bi;
 
 extern fn _ZN5ImGui10BeginChildEjRK6ImVec2bi(id: ImGuiID, size: *const ImVec2, border: bool, flags: ImGuiWindowFlags) bool;
-pub const BeginChild = _ZN5ImGui10BeginChildEjRK6ImVec2bi;
+pub const BeginChild__Overload2 = _ZN5ImGui10BeginChildEjRK6ImVec2bi;
 
 extern fn _ZN5ImGui8EndChildEv() void;
 pub const EndChild = _ZN5ImGui8EndChildEv;
@@ -289,16 +290,16 @@ extern fn _ZN5ImGui18SetWindowFontScaleEf(scale: f32) void;
 pub const SetWindowFontScale = _ZN5ImGui18SetWindowFontScaleEf;
 
 extern fn _ZN5ImGui12SetWindowPosEPKcRK6ImVec2i(name: [*c]const u8, pos: *const ImVec2, cond: ImGuiCond) void;
-pub const SetWindowPos = _ZN5ImGui12SetWindowPosEPKcRK6ImVec2i;
+pub const SetWindowPos__Overload2 = _ZN5ImGui12SetWindowPosEPKcRK6ImVec2i;
 
 extern fn _ZN5ImGui13SetWindowSizeEPKcRK6ImVec2i(name: [*c]const u8, size: *const ImVec2, cond: ImGuiCond) void;
-pub const SetWindowSize = _ZN5ImGui13SetWindowSizeEPKcRK6ImVec2i;
+pub const SetWindowSize__Overload2 = _ZN5ImGui13SetWindowSizeEPKcRK6ImVec2i;
 
 extern fn _ZN5ImGui18SetWindowCollapsedEPKcbi(name: [*c]const u8, collapsed: bool, cond: ImGuiCond) void;
-pub const SetWindowCollapsed = _ZN5ImGui18SetWindowCollapsedEPKcbi;
+pub const SetWindowCollapsed__Overload2 = _ZN5ImGui18SetWindowCollapsedEPKcbi;
 
 extern fn _ZN5ImGui14SetWindowFocusEPKc(name: [*c]const u8) void;
-pub const SetWindowFocus = _ZN5ImGui14SetWindowFocusEPKc;
+pub const SetWindowFocus__Overload2 = _ZN5ImGui14SetWindowFocusEPKc;
 
 extern fn _ZN5ImGui21GetContentRegionAvailEv() ImVec2;
 pub const GetContentRegionAvail = _ZN5ImGui21GetContentRegionAvailEv;
@@ -352,7 +353,7 @@ extern fn _ZN5ImGui14PushStyleColorEij(idx: ImGuiCol, col: ImU32) void;
 pub const PushStyleColor = _ZN5ImGui14PushStyleColorEij;
 
 extern fn _ZN5ImGui14PushStyleColorEiRK6ImVec4(idx: ImGuiCol, col: *const ImVec4) void;
-pub const PushStyleColor = _ZN5ImGui14PushStyleColorEiRK6ImVec4;
+pub const PushStyleColor__Overload2 = _ZN5ImGui14PushStyleColorEiRK6ImVec4;
 
 extern fn _ZN5ImGui13PopStyleColorEi(count: c_int) void;
 pub const PopStyleColor = _ZN5ImGui13PopStyleColorEi;
@@ -361,7 +362,7 @@ extern fn _ZN5ImGui12PushStyleVarEif(idx: ImGuiStyleVar, val: f32) void;
 pub const PushStyleVar = _ZN5ImGui12PushStyleVarEif;
 
 extern fn _ZN5ImGui12PushStyleVarEiRK6ImVec2(idx: ImGuiStyleVar, val: *const ImVec2) void;
-pub const PushStyleVar = _ZN5ImGui12PushStyleVarEiRK6ImVec2;
+pub const PushStyleVar__Overload2 = _ZN5ImGui12PushStyleVarEiRK6ImVec2;
 
 extern fn _ZN5ImGui11PopStyleVarEi(count: c_int) void;
 pub const PopStyleVar = _ZN5ImGui11PopStyleVarEi;
@@ -409,10 +410,10 @@ extern fn _ZN5ImGui11GetColorU32Eif(idx: ImGuiCol, alpha_mul: f32) ImU32;
 pub const GetColorU32 = _ZN5ImGui11GetColorU32Eif;
 
 extern fn _ZN5ImGui11GetColorU32ERK6ImVec4(col: *const ImVec4) ImU32;
-pub const GetColorU32 = _ZN5ImGui11GetColorU32ERK6ImVec4;
+pub const GetColorU32__Overload2 = _ZN5ImGui11GetColorU32ERK6ImVec4;
 
 extern fn _ZN5ImGui11GetColorU32Ej(col: ImU32) ImU32;
-pub const GetColorU32 = _ZN5ImGui11GetColorU32Ej;
+pub const GetColorU32__Overload3 = _ZN5ImGui11GetColorU32Ej;
 
 extern fn _ZN5ImGui17GetStyleColorVec4Ei(idx: ImGuiCol) *const ImVec4;
 pub const GetStyleColorVec4 = _ZN5ImGui17GetStyleColorVec4Ei;
@@ -490,13 +491,13 @@ extern fn _ZN5ImGui6PushIDEPKc(str_id: [*c]const u8) void;
 pub const PushID = _ZN5ImGui6PushIDEPKc;
 
 extern fn _ZN5ImGui6PushIDEPKcS1_(str_id_begin: [*c]const u8, str_id_end: [*c]const u8) void;
-pub const PushID = _ZN5ImGui6PushIDEPKcS1_;
+pub const PushID__Overload2 = _ZN5ImGui6PushIDEPKcS1_;
 
 extern fn _ZN5ImGui6PushIDEPKv(ptr_id: ?*const anyopaque) void;
-pub const PushID = _ZN5ImGui6PushIDEPKv;
+pub const PushID__Overload3 = _ZN5ImGui6PushIDEPKv;
 
 extern fn _ZN5ImGui6PushIDEi(int_id: c_int) void;
-pub const PushID = _ZN5ImGui6PushIDEi;
+pub const PushID__Overload4 = _ZN5ImGui6PushIDEi;
 
 extern fn _ZN5ImGui5PopIDEv() void;
 pub const PopID = _ZN5ImGui5PopIDEv;
@@ -505,10 +506,10 @@ extern fn _ZN5ImGui5GetIDEPKc(str_id: [*c]const u8) ImGuiID;
 pub const GetID = _ZN5ImGui5GetIDEPKc;
 
 extern fn _ZN5ImGui5GetIDEPKcS1_(str_id_begin: [*c]const u8, str_id_end: [*c]const u8) ImGuiID;
-pub const GetID = _ZN5ImGui5GetIDEPKcS1_;
+pub const GetID__Overload2 = _ZN5ImGui5GetIDEPKcS1_;
 
 extern fn _ZN5ImGui5GetIDEPKv(ptr_id: ?*const anyopaque) ImGuiID;
-pub const GetID = _ZN5ImGui5GetIDEPKv;
+pub const GetID__Overload3 = _ZN5ImGui5GetIDEPKv;
 
 extern fn _ZN5ImGui15TextUnformattedEPKcS1_(text: [*c]const u8, text_end: [*c]const u8) void;
 pub const TextUnformatted = _ZN5ImGui15TextUnformattedEPKcS1_;
@@ -571,13 +572,13 @@ extern fn _ZN5ImGui13CheckboxFlagsEPKcPii(label: [*c]const u8, flags: [*c]c_int,
 pub const CheckboxFlags = _ZN5ImGui13CheckboxFlagsEPKcPii;
 
 extern fn _ZN5ImGui13CheckboxFlagsEPKcPjj(label: [*c]const u8, flags: [*c]c_uint, flags_value: c_uint) bool;
-pub const CheckboxFlags = _ZN5ImGui13CheckboxFlagsEPKcPjj;
+pub const CheckboxFlags__Overload2 = _ZN5ImGui13CheckboxFlagsEPKcPjj;
 
 extern fn _ZN5ImGui11RadioButtonEPKcb(label: [*c]const u8, active: bool) bool;
 pub const RadioButton = _ZN5ImGui11RadioButtonEPKcb;
 
 extern fn _ZN5ImGui11RadioButtonEPKcPii(label: [*c]const u8, v: [*c]c_int, v_button: c_int) bool;
-pub const RadioButton = _ZN5ImGui11RadioButtonEPKcPii;
+pub const RadioButton__Overload2 = _ZN5ImGui11RadioButtonEPKcPii;
 
 extern fn _ZN5ImGui11ProgressBarEfRK6ImVec2PKc(fraction: f32, size_arg: *const ImVec2, overlay: [*c]const u8) void;
 pub const ProgressBar = _ZN5ImGui11ProgressBarEfRK6ImVec2PKc;
@@ -601,10 +602,10 @@ extern fn _ZN5ImGui5ComboEPKcPiPKS1_ii(label: [*c]const u8, current_item: [*c]c_
 pub const Combo = _ZN5ImGui5ComboEPKcPiPKS1_ii;
 
 extern fn _ZN5ImGui5ComboEPKcPiS1_i(label: [*c]const u8, current_item: [*c]c_int, items_separated_by_zeros: [*c]const u8, popup_max_height_in_items: c_int) bool;
-pub const Combo = _ZN5ImGui5ComboEPKcPiS1_i;
+pub const Combo__Overload2 = _ZN5ImGui5ComboEPKcPiS1_i;
 
-extern fn _ZN5ImGui5ComboEPKcPiPFbPviPS1_ES3_ii(label: [*c]const u8, current_item: [*c]c_int, items_getter: ?*const fn(?*anyopaque,c_int,[*c]const [*c]u8) callconv(.C) bool , data: ?*anyopaque, items_count: c_int, popup_max_height_in_items: c_int) bool;
-pub const Combo = _ZN5ImGui5ComboEPKcPiPFbPviPS1_ES3_ii;
+extern fn _ZN5ImGui5ComboEPKcPiPFbPviPS1_ES3_ii(label: [*c]const u8, current_item: [*c]c_int, items_getter: ?*const fn (?*anyopaque, c_int, [*c]const [*c]u8) callconv(.C) bool, data: ?*anyopaque, items_count: c_int, popup_max_height_in_items: c_int) bool;
+pub const Combo__Overload3 = _ZN5ImGui5ComboEPKcPiPFbPviPS1_ES3_ii;
 
 extern fn _ZN5ImGui9DragFloatEPKcPffffS1_i(label: [*c]const u8, v: [*c]f32, v_speed: f32, v_min: f32, v_max: f32, format: [*c]const u8, flags: ImGuiSliderFlags) bool;
 pub const DragFloat = _ZN5ImGui9DragFloatEPKcPffffS1_i;
@@ -748,37 +749,37 @@ extern fn _ZN5ImGui8TreeNodeEPKc(label: [*c]const u8) bool;
 pub const TreeNode = _ZN5ImGui8TreeNodeEPKc;
 
 extern fn _ZN5ImGui8TreeNodeEPKcS1_z(str_id: [*c]const u8, fmt: [*c]const u8) bool;
-pub const TreeNode = _ZN5ImGui8TreeNodeEPKcS1_z;
+pub const TreeNode__Overload2 = _ZN5ImGui8TreeNodeEPKcS1_z;
 
 extern fn _ZN5ImGui8TreeNodeEPKvPKcz(ptr_id: ?*const anyopaque, fmt: [*c]const u8) bool;
-pub const TreeNode = _ZN5ImGui8TreeNodeEPKvPKcz;
+pub const TreeNode__Overload3 = _ZN5ImGui8TreeNodeEPKvPKcz;
 
 extern fn _ZN5ImGui9TreeNodeVEPKcS1_Pc(str_id: [*c]const u8, fmt: [*c]const u8, args: [*c]u8) bool;
 pub const TreeNodeV = _ZN5ImGui9TreeNodeVEPKcS1_Pc;
 
 extern fn _ZN5ImGui9TreeNodeVEPKvPKcPc(ptr_id: ?*const anyopaque, fmt: [*c]const u8, args: [*c]u8) bool;
-pub const TreeNodeV = _ZN5ImGui9TreeNodeVEPKvPKcPc;
+pub const TreeNodeV__Overload2 = _ZN5ImGui9TreeNodeVEPKvPKcPc;
 
 extern fn _ZN5ImGui10TreeNodeExEPKci(label: [*c]const u8, flags: ImGuiTreeNodeFlags) bool;
 pub const TreeNodeEx = _ZN5ImGui10TreeNodeExEPKci;
 
 extern fn _ZN5ImGui10TreeNodeExEPKciS1_z(str_id: [*c]const u8, flags: ImGuiTreeNodeFlags, fmt: [*c]const u8) bool;
-pub const TreeNodeEx = _ZN5ImGui10TreeNodeExEPKciS1_z;
+pub const TreeNodeEx__Overload2 = _ZN5ImGui10TreeNodeExEPKciS1_z;
 
 extern fn _ZN5ImGui10TreeNodeExEPKviPKcz(ptr_id: ?*const anyopaque, flags: ImGuiTreeNodeFlags, fmt: [*c]const u8) bool;
-pub const TreeNodeEx = _ZN5ImGui10TreeNodeExEPKviPKcz;
+pub const TreeNodeEx__Overload3 = _ZN5ImGui10TreeNodeExEPKviPKcz;
 
 extern fn _ZN5ImGui11TreeNodeExVEPKciS1_Pc(str_id: [*c]const u8, flags: ImGuiTreeNodeFlags, fmt: [*c]const u8, args: [*c]u8) bool;
 pub const TreeNodeExV = _ZN5ImGui11TreeNodeExVEPKciS1_Pc;
 
 extern fn _ZN5ImGui11TreeNodeExVEPKviPKcPc(ptr_id: ?*const anyopaque, flags: ImGuiTreeNodeFlags, fmt: [*c]const u8, args: [*c]u8) bool;
-pub const TreeNodeExV = _ZN5ImGui11TreeNodeExVEPKviPKcPc;
+pub const TreeNodeExV__Overload2 = _ZN5ImGui11TreeNodeExVEPKviPKcPc;
 
 extern fn _ZN5ImGui8TreePushEPKc(str_id: [*c]const u8) void;
 pub const TreePush = _ZN5ImGui8TreePushEPKc;
 
 extern fn _ZN5ImGui8TreePushEPKv(ptr_id: ?*const anyopaque) void;
-pub const TreePush = _ZN5ImGui8TreePushEPKv;
+pub const TreePush__Overload2 = _ZN5ImGui8TreePushEPKv;
 
 extern fn _ZN5ImGui7TreePopEv() void;
 pub const TreePop = _ZN5ImGui7TreePopEv;
@@ -790,7 +791,7 @@ extern fn _ZN5ImGui16CollapsingHeaderEPKci(label: [*c]const u8, flags: ImGuiTree
 pub const CollapsingHeader = _ZN5ImGui16CollapsingHeaderEPKci;
 
 extern fn _ZN5ImGui16CollapsingHeaderEPKcPbi(label: [*c]const u8, p_visible: [*c]bool, flags: ImGuiTreeNodeFlags) bool;
-pub const CollapsingHeader = _ZN5ImGui16CollapsingHeaderEPKcPbi;
+pub const CollapsingHeader__Overload2 = _ZN5ImGui16CollapsingHeaderEPKcPbi;
 
 extern fn _ZN5ImGui15SetNextItemOpenEbi(is_open: bool, cond: ImGuiCond) void;
 pub const SetNextItemOpen = _ZN5ImGui15SetNextItemOpenEbi;
@@ -799,7 +800,7 @@ extern fn _ZN5ImGui10SelectableEPKcbiRK6ImVec2(label: [*c]const u8, selected: bo
 pub const Selectable = _ZN5ImGui10SelectableEPKcbiRK6ImVec2;
 
 extern fn _ZN5ImGui10SelectableEPKcPbiRK6ImVec2(label: [*c]const u8, p_selected: [*c]bool, flags: ImGuiSelectableFlags, size: *const ImVec2) bool;
-pub const Selectable = _ZN5ImGui10SelectableEPKcPbiRK6ImVec2;
+pub const Selectable__Overload2 = _ZN5ImGui10SelectableEPKcPbiRK6ImVec2;
 
 extern fn _ZN5ImGui12BeginListBoxEPKcRK6ImVec2(label: [*c]const u8, size: *const ImVec2) bool;
 pub const BeginListBox = _ZN5ImGui12BeginListBoxEPKcRK6ImVec2;
@@ -810,32 +811,32 @@ pub const EndListBox = _ZN5ImGui10EndListBoxEv;
 extern fn _ZN5ImGui7ListBoxEPKcPiPKS1_ii(label: [*c]const u8, current_item: [*c]c_int, items: [*c]const [*c]const u8, items_count: c_int, height_in_items: c_int) bool;
 pub const ListBox = _ZN5ImGui7ListBoxEPKcPiPKS1_ii;
 
-extern fn _ZN5ImGui7ListBoxEPKcPiPFbPviPS1_ES3_ii(label: [*c]const u8, current_item: [*c]c_int, items_getter: ?*const fn(?*anyopaque,c_int,[*c]const [*c]u8) callconv(.C) bool , data: ?*anyopaque, items_count: c_int, height_in_items: c_int) bool;
-pub const ListBox = _ZN5ImGui7ListBoxEPKcPiPFbPviPS1_ES3_ii;
+extern fn _ZN5ImGui7ListBoxEPKcPiPFbPviPS1_ES3_ii(label: [*c]const u8, current_item: [*c]c_int, items_getter: ?*const fn (?*anyopaque, c_int, [*c]const [*c]u8) callconv(.C) bool, data: ?*anyopaque, items_count: c_int, height_in_items: c_int) bool;
+pub const ListBox__Overload2 = _ZN5ImGui7ListBoxEPKcPiPFbPviPS1_ES3_ii;
 
 extern fn _ZN5ImGui9PlotLinesEPKcPKfiiS1_ff6ImVec2i(label: [*c]const u8, values: [*c]const f32, values_count: c_int, values_offset: c_int, overlay_text: [*c]const u8, scale_min: f32, scale_max: f32, graph_size: ImVec2, stride: c_int) void;
 pub const PlotLines = _ZN5ImGui9PlotLinesEPKcPKfiiS1_ff6ImVec2i;
 
-extern fn _ZN5ImGui9PlotLinesEPKcPFfPviES2_iiS1_ff6ImVec2(label: [*c]const u8, values_getter: ?*const fn(?*anyopaque,c_int) callconv(.C) f32 , data: ?*anyopaque, values_count: c_int, values_offset: c_int, overlay_text: [*c]const u8, scale_min: f32, scale_max: f32, graph_size: ImVec2) void;
-pub const PlotLines = _ZN5ImGui9PlotLinesEPKcPFfPviES2_iiS1_ff6ImVec2;
+extern fn _ZN5ImGui9PlotLinesEPKcPFfPviES2_iiS1_ff6ImVec2(label: [*c]const u8, values_getter: ?*const fn (?*anyopaque, c_int) callconv(.C) f32, data: ?*anyopaque, values_count: c_int, values_offset: c_int, overlay_text: [*c]const u8, scale_min: f32, scale_max: f32, graph_size: ImVec2) void;
+pub const PlotLines__Overload2 = _ZN5ImGui9PlotLinesEPKcPFfPviES2_iiS1_ff6ImVec2;
 
 extern fn _ZN5ImGui13PlotHistogramEPKcPKfiiS1_ff6ImVec2i(label: [*c]const u8, values: [*c]const f32, values_count: c_int, values_offset: c_int, overlay_text: [*c]const u8, scale_min: f32, scale_max: f32, graph_size: ImVec2, stride: c_int) void;
 pub const PlotHistogram = _ZN5ImGui13PlotHistogramEPKcPKfiiS1_ff6ImVec2i;
 
-extern fn _ZN5ImGui13PlotHistogramEPKcPFfPviES2_iiS1_ff6ImVec2(label: [*c]const u8, values_getter: ?*const fn(?*anyopaque,c_int) callconv(.C) f32 , data: ?*anyopaque, values_count: c_int, values_offset: c_int, overlay_text: [*c]const u8, scale_min: f32, scale_max: f32, graph_size: ImVec2) void;
-pub const PlotHistogram = _ZN5ImGui13PlotHistogramEPKcPFfPviES2_iiS1_ff6ImVec2;
+extern fn _ZN5ImGui13PlotHistogramEPKcPFfPviES2_iiS1_ff6ImVec2(label: [*c]const u8, values_getter: ?*const fn (?*anyopaque, c_int) callconv(.C) f32, data: ?*anyopaque, values_count: c_int, values_offset: c_int, overlay_text: [*c]const u8, scale_min: f32, scale_max: f32, graph_size: ImVec2) void;
+pub const PlotHistogram__Overload2 = _ZN5ImGui13PlotHistogramEPKcPFfPviES2_iiS1_ff6ImVec2;
 
 extern fn _ZN5ImGui5ValueEPKcb(prefix: [*c]const u8, b: bool) void;
 pub const Value = _ZN5ImGui5ValueEPKcb;
 
 extern fn _ZN5ImGui5ValueEPKci(prefix: [*c]const u8, v: c_int) void;
-pub const Value = _ZN5ImGui5ValueEPKci;
+pub const Value__Overload2 = _ZN5ImGui5ValueEPKci;
 
 extern fn _ZN5ImGui5ValueEPKcj(prefix: [*c]const u8, v: c_uint) void;
-pub const Value = _ZN5ImGui5ValueEPKcj;
+pub const Value__Overload3 = _ZN5ImGui5ValueEPKcj;
 
 extern fn _ZN5ImGui5ValueEPKcfS1_(prefix: [*c]const u8, v: f32, float_format: [*c]const u8) void;
-pub const Value = _ZN5ImGui5ValueEPKcfS1_;
+pub const Value__Overload4 = _ZN5ImGui5ValueEPKcfS1_;
 
 extern fn _ZN5ImGui12BeginMenuBarEv() bool;
 pub const BeginMenuBar = _ZN5ImGui12BeginMenuBarEv;
@@ -859,7 +860,7 @@ extern fn _ZN5ImGui8MenuItemEPKcS1_bb(label: [*c]const u8, shortcut: [*c]const u
 pub const MenuItem = _ZN5ImGui8MenuItemEPKcS1_bb;
 
 extern fn _ZN5ImGui8MenuItemEPKcS1_Pbb(label: [*c]const u8, shortcut: [*c]const u8, p_selected: [*c]bool, enabled: bool) bool;
-pub const MenuItem = _ZN5ImGui8MenuItemEPKcS1_Pbb;
+pub const MenuItem__Overload2 = _ZN5ImGui8MenuItemEPKcS1_Pbb;
 
 extern fn _ZN5ImGui12BeginTooltipEv() bool;
 pub const BeginTooltip = _ZN5ImGui12BeginTooltipEv;
@@ -886,7 +887,7 @@ extern fn _ZN5ImGui9OpenPopupEPKci(str_id: [*c]const u8, popup_flags: ImGuiPopup
 pub const OpenPopup = _ZN5ImGui9OpenPopupEPKci;
 
 extern fn _ZN5ImGui9OpenPopupEji(id: ImGuiID, popup_flags: ImGuiPopupFlags) void;
-pub const OpenPopup = _ZN5ImGui9OpenPopupEji;
+pub const OpenPopup__Overload2 = _ZN5ImGui9OpenPopupEji;
 
 extern fn _ZN5ImGui20OpenPopupOnItemClickEPKci(str_id: [*c]const u8, popup_flags: ImGuiPopupFlags) void;
 pub const OpenPopupOnItemClick = _ZN5ImGui20OpenPopupOnItemClickEPKci;
@@ -1141,16 +1142,16 @@ extern fn _ZN5ImGui21GetForegroundDrawListEv() [*c]ImDrawList;
 pub const GetForegroundDrawList = _ZN5ImGui21GetForegroundDrawListEv;
 
 extern fn _ZN5ImGui21GetBackgroundDrawListEP13ImGuiViewport(viewport: [*c]ImGuiViewport) [*c]ImDrawList;
-pub const GetBackgroundDrawList = _ZN5ImGui21GetBackgroundDrawListEP13ImGuiViewport;
+pub const GetBackgroundDrawList__Overload2 = _ZN5ImGui21GetBackgroundDrawListEP13ImGuiViewport;
 
 extern fn _ZN5ImGui21GetForegroundDrawListEP13ImGuiViewport(viewport: [*c]ImGuiViewport) [*c]ImDrawList;
-pub const GetForegroundDrawList = _ZN5ImGui21GetForegroundDrawListEP13ImGuiViewport;
+pub const GetForegroundDrawList__Overload2 = _ZN5ImGui21GetForegroundDrawListEP13ImGuiViewport;
 
 extern fn _ZN5ImGui13IsRectVisibleERK6ImVec2(size: *const ImVec2) bool;
 pub const IsRectVisible = _ZN5ImGui13IsRectVisibleERK6ImVec2;
 
 extern fn _ZN5ImGui13IsRectVisibleERK6ImVec2S2_(rect_min: *const ImVec2, rect_max: *const ImVec2) bool;
-pub const IsRectVisible = _ZN5ImGui13IsRectVisibleERK6ImVec2S2_;
+pub const IsRectVisible__Overload2 = _ZN5ImGui13IsRectVisibleERK6ImVec2S2_;
 
 extern fn _ZN5ImGui7GetTimeEv() f64;
 pub const GetTime = _ZN5ImGui7GetTimeEv;
@@ -1158,7 +1159,7 @@ pub const GetTime = _ZN5ImGui7GetTimeEv;
 extern fn _ZN5ImGui13GetFrameCountEv() c_int;
 pub const GetFrameCount = _ZN5ImGui13GetFrameCountEv;
 
-extern fn _ZN5ImGui21GetDrawListSharedDataEv() [*c]ImDrawListSharedData;
+extern fn _ZN5ImGui21GetDrawListSharedDataEv() ?*ImDrawListSharedData;
 pub const GetDrawListSharedData = _ZN5ImGui21GetDrawListSharedDataEv;
 
 extern fn _ZN5ImGui17GetStyleColorNameEi(idx: ImGuiCol) [*c]const u8;
@@ -1310,8 +1311,6 @@ pub const FindViewportByID = _ZN5ImGui16FindViewportByIDEj;
 
 extern fn _ZN5ImGui28FindViewportByPlatformHandleEPv(platform_handle: ?*anyopaque) [*c]ImGuiViewport;
 pub const FindViewportByPlatformHandle = _ZN5ImGui28FindViewportByPlatformHandleEPv;
-
-};
 
 pub const ImGuiWindowFlags_ = extern struct {
     bits: c_int = 0,
@@ -1847,39 +1846,10 @@ pub const ImGuiKey = extern struct {
     pub const _NamedKey_BEGIN: ImGuiKey = .{ .bits = 512 };
     pub const _NamedKey_END: ImGuiKey = .{ .bits = ImGuiKey._COUNT.bits };
     pub const _NamedKey_COUNT: ImGuiKey = .{ .bits = ImGuiKey._NamedKey_END.bits - ImGuiKey._NamedKey_BEGIN.bits };
-    pub const _KeysData_SIZE: ImGuiKey = .{ .bits = ImGuiKey._COUNT.bits };
-    pub const _KeysData_OFFSET: ImGuiKey = .{ .bits = 0 };
-    pub const _ModCtrl: ImGuiKey = .{ .bits = ImGuiKey.ImGuiMod_Ctrl.bits };
-    pub const _ModShift: ImGuiKey = .{ .bits = ImGuiKey.ImGuiMod_Shift.bits };
-    pub const _ModAlt: ImGuiKey = .{ .bits = ImGuiKey.ImGuiMod_Alt.bits };
-    pub const _ModSuper: ImGuiKey = .{ .bits = ImGuiKey.ImGuiMod_Super.bits };
-    pub const _KeyPadEnter: ImGuiKey = .{ .bits = ImGuiKey._KeypadEnter.bits };
+    pub const _KeysData_SIZE: ImGuiKey = .{ .bits = ImGuiKey._NamedKey_COUNT.bits };
+    pub const _KeysData_OFFSET: ImGuiKey = .{ .bits = ImGuiKey._NamedKey_BEGIN.bits };
 
     // pub usingnamespace cpp.FlagsMixin(ImGuiKey);
-};
-
-pub const ImGuiNavInput = extern struct {
-    bits: c_int = 0,
-
-    pub const _Activate: ImGuiNavInput = .{ .bits = 0 };
-    pub const _Cancel: ImGuiNavInput = .{ .bits = 1 };
-    pub const _Input: ImGuiNavInput = .{ .bits = 2 };
-    pub const _Menu: ImGuiNavInput = .{ .bits = 3 };
-    pub const _DpadLeft: ImGuiNavInput = .{ .bits = 4 };
-    pub const _DpadRight: ImGuiNavInput = .{ .bits = 5 };
-    pub const _DpadUp: ImGuiNavInput = .{ .bits = 6 };
-    pub const _DpadDown: ImGuiNavInput = .{ .bits = 7 };
-    pub const _LStickLeft: ImGuiNavInput = .{ .bits = 8 };
-    pub const _LStickRight: ImGuiNavInput = .{ .bits = 9 };
-    pub const _LStickUp: ImGuiNavInput = .{ .bits = 10 };
-    pub const _LStickDown: ImGuiNavInput = .{ .bits = 11 };
-    pub const _FocusPrev: ImGuiNavInput = .{ .bits = 12 };
-    pub const _FocusNext: ImGuiNavInput = .{ .bits = 13 };
-    pub const _TweakSlow: ImGuiNavInput = .{ .bits = 14 };
-    pub const _TweakFast: ImGuiNavInput = .{ .bits = 15 };
-    pub const _COUNT: ImGuiNavInput = .{ .bits = 16 };
-
-    // pub usingnamespace cpp.FlagsMixin(ImGuiNavInput);
 };
 
 pub const ImGuiConfigFlags_ = extern struct {
@@ -2130,14 +2100,14 @@ pub const ImGuiCond_ = extern struct {
     // pub usingnamespace cpp.FlagsMixin(ImGuiCond_);
 };
 
-pub const ImNewWrapper = extern struct {
-};
+pub const ImNewWrapper = extern struct {};
 
 pub fn IM_DELETE(comptime T: type, p: [*c]T) void {
- if (p) {
-p.deinit();
-MemFree(p);
-}}
+    if (p) {
+        p.deinit();
+        MemFree(p);
+    }
+}
 
 pub fn ImVector(comptime T: type) type {
     return extern struct {
@@ -2147,242 +2117,222 @@ pub fn ImVector(comptime T: type) type {
         Capacity: c_int,
         Data: [*c]T,
 
-pub const value_type = T;
+        pub const value_type = T;
 
-pub const iterator = [*c]value_type;
+        pub const iterator = [*c]value_type;
 
-pub const const_iterator = [*c]const value_type;
+        pub const const_iterator = [*c]const value_type;
 
-pub inline fn copyFrom(self: *Self, src: *const ImVector(T)) *ImVector(T) {
-self.clear();
-@"unresolvedMemberExpr!"(src.Size);
- if (src.Data) memcpy(self.Data, src.Data, @as(usize, self.Size) * @sizeOf(T));
-return self.*;
-}
-
-pub inline fn clear(self: *Self) void {
- if (self.Data) {
-self.Size = self.Capacity = 0;
-MemFree(self.Data);
-self.Data = 0;
-}}
-
-pub inline fn clear_delete(self: *Self) void {
-{ var n: c_int = 0; while (n < self.Size) : (n += 1)IM_DELETE(self.Data[n]); } self.clear();
-}
-
-pub inline fn clear_destruct(self: *Self) void {
-{ var n: c_int = 0; while (n < self.Size) : (n += 1)self.Data[n].deinit(); } self.clear();
-}
-
-pub inline fn empty(self: *const Self) bool {
-return self.Size == 0;
-}
-
-pub inline fn size(self: *const Self) c_int {
-return self.Size;
-}
-
-pub inline fn size_in_bytes(self: *const Self) c_int {
-return self.Size * @as(c_int, @sizeOf(T));
-}
-
-pub inline fn max_size(self: *const Self) c_int {
-return 2147483647 / @as(c_int, @sizeOf(T));
-}
-
-pub inline fn capacity(self: *const Self) c_int {
-return self.Capacity;
-}
-
-pub inline fn getPtr(self: *Self, i: c_int) *T {
-ImAssert(i >= 0 and i < self.Size);
-return self.Data[i];
-}
-
-pub inline fn get(self: *const Self, i: c_int) *const T {
-ImAssert(i >= 0 and i < self.Size);
-return self.Data[i];
-}
-
-pub inline fn begin(self: *Self) [*c]T {
-return self.Data;
-}
-
-pub inline fn begin(self: *const Self) [*c]const T {
-return self.Data;
-}
-
-pub inline fn end(self: *Self) [*c]T {
-return self.Data + self.Size;
-}
-
-pub inline fn end(self: *const Self) [*c]const T {
-return self.Data + self.Size;
-}
-
-pub inline fn front(self: *Self) *T {
-ImAssert(self.Size > 0);
-return self.Data[0];
-}
-
-pub inline fn front(self: *const Self) *const T {
-ImAssert(self.Size > 0);
-return self.Data[0];
-}
-
-pub inline fn back(self: *Self) *T {
-ImAssert(self.Size > 0);
-return self.Data[self.Size - 1];
-}
-
-pub inline fn back(self: *const Self) *const T {
-ImAssert(self.Size > 0);
-return self.Data[self.Size - 1];
-}
-
-pub inline fn swap(self: *Self, rhs: *ImVector(T)) void {
-var rhs_size: c_int = rhs.Size;
-rhs.Size = self.Size;
-self.Size = rhs_size;
-var rhs_cap: c_int = rhs.Capacity;
-rhs.Capacity = self.Capacity;
-self.Capacity = rhs_cap;
-var rhs_data: [*c]T = rhs.Data;
-rhs.Data = self.Data;
-self.Data = rhs_data;
-}
-
-pub inline fn _grow_capacity(self: *const Self, sz: c_int) c_int {
-var new_capacity: c_int =  if (((self.Capacity) != 0)) (self.Capacity + self.Capacity / 2) else 8 ;
-return  if (new_capacity > sz) new_capacity else sz ;
-}
-
-pub inline fn resize(self: *Self, new_size: c_int) void {
- if (new_size > self.Capacity) self.reserve(self._grow_capacity(new_size));
-self.Size = new_size;
-}
-
-pub inline fn resize(self: *Self, new_size: c_int, v: *const T) void {
- if (new_size > self.Capacity) self.reserve(self._grow_capacity(new_size));
- if (new_size > self.Size) { var n: c_int = self.Size; while (n < new_size) : (n += 1)memcpy(&self.Data[n], &v, @sizeOf(v)); } self.Size = new_size;
-}
-
-pub inline fn shrink(self: *Self, new_size: c_int) void {
-ImAssert(new_size <= self.Size);
-self.Size = new_size;
-}
-
-pub inline fn reserve(self: *Self, new_capacity: c_int) void {
- if (new_capacity <= self.Capacity) return;
-var new_data: [*c]T = @as([*c]T, MemAlloc(@intCast(usize, new_capacity) * @sizeOf(T)));
- if (self.Data) {
-memcpy(new_data, self.Data, @as(usize, self.Size) * @sizeOf(T));
-MemFree(self.Data);
-}self.Data = new_data;
-self.Capacity = new_capacity;
-}
-
-pub inline fn reserve_discard(self: *Self, new_capacity: c_int) void {
- if (new_capacity <= self.Capacity) return;
- if (self.Data) MemFree(self.Data);
-self.Data = @as([*c]T, MemAlloc(@intCast(usize, new_capacity) * @sizeOf(T)));
-self.Capacity = new_capacity;
-}
-
-pub inline fn push_back(self: *Self, v: *const T) void {
- if (self.Size == self.Capacity) self.reserve(self._grow_capacity(self.Size + 1));
-memcpy(&self.Data[self.Size], &v, @sizeOf(v));
-self.Size += 1;
-}
-
-pub inline fn pop_back(self: *Self) void {
-ImAssert(self.Size > 0);
-self.Size -= 1;
-}
-
-pub inline fn push_front(self: *Self, v: *const T) void {
- if (self.Size == 0) self.push_back(v) else self.insert(self.Data, v);
-}
-
-pub inline fn erase(self: *Self, it: [*c]const T) [*c]T {
-ImAssert(it >= self.Data and it < self.Data + self.Size);
-const off: ptrdiff_t = it - self.Data;
-memmove(self.Data + off, self.Data + off + 1, (@as(usize, self.Size) - @as(usize, off) - @intCast(usize, 1)) * @sizeOf(T));
-self.Size -= 1;
-return self.Data + off;
-}
-
-pub inline fn erase(self: *Self, it: [*c]const T, it_last: [*c]const T) [*c]T {
-ImAssert(it >= self.Data and it < self.Data + self.Size and it_last >= it and it_last <= self.Data + self.Size);
-const count: ptrdiff_t = it_last - it;
-const off: ptrdiff_t = it - self.Data;
-memmove(self.Data + off, self.Data + off + count, (@as(usize, self.Size) - @as(usize, off) - @as(usize, count)) * @sizeOf(T));
-self.Size -= @as(c_int, count);
-return self.Data + off;
-}
-
-pub inline fn erase_unsorted(self: *Self, it: [*c]const T) [*c]T {
-ImAssert(it >= self.Data and it < self.Data + self.Size);
-const off: ptrdiff_t = it - self.Data;
- if (it < self.Data + self.Size - 1) memcpy(self.Data + off, self.Data + self.Size - 1, @sizeOf(T));
-self.Size -= 1;
-return self.Data + off;
-}
-
-pub inline fn insert(self: *Self, it: [*c]const T, v: *const T) [*c]T {
-ImAssert(it >= self.Data and it <= self.Data + self.Size);
-const off: ptrdiff_t = it - self.Data;
- if (self.Size == self.Capacity) self.reserve(self._grow_capacity(self.Size + 1));
- if (off < @intCast(ptrdiff_t, @as(c_int, self.Size))) memmove(self.Data + off + 1, self.Data + off, (@as(usize, self.Size) - @as(usize, off)) * @sizeOf(T));
-memcpy(&self.Data[off], &v, @sizeOf(v));
-self.Size += 1;
-return self.Data + off;
-}
-
-pub inline fn contains(self: *const Self, v: *const T) bool {
-const data: [*c]T = self.Data;
-const data_end: [*c]T = self.Data + self.Size;
-while (data < data_end) if ((data += 1).* == v) return true;
-return false;
-}
-
-pub inline fn find(self: *Self, v: *const T) [*c]T {
-var data: [*c]T = self.Data;
-const data_end: [*c]T = self.Data + self.Size;
-while (data < data_end) if (data.* == v) break else data += 1;
-return data;
-}
-
-pub inline fn find(self: *const Self, v: *const T) [*c]const T {
-const data: [*c]T = self.Data;
-const data_end: [*c]T = self.Data + self.Size;
-while (data < data_end) if (data.* == v) break else data += 1;
-return data;
-}
-
-pub inline fn find_erase(self: *Self, v: *const T) bool {
-const it: [*c]T = @"unresolvedMemberExpr!"(v);
- if (it < self.Data + self.Size) {
-@"unresolvedMemberExpr!"(it);
-return true;
-}return false;
-}
-
-pub inline fn find_erase_unsorted(self: *Self, v: *const T) bool {
-const it: [*c]T = @"unresolvedMemberExpr!"(v);
- if (it < self.Data + self.Size) {
-self.erase_unsorted(it);
-return true;
-}return false;
-}
-
-pub inline fn index_from_ptr(self: *const Self, it: [*c]const T) c_int {
-ImAssert(it >= self.Data and it < self.Data + self.Size);
-const off: ptrdiff_t = it - self.Data;
-return @as(c_int, off);
-}
-
+        pub inline fn copyFrom(self: *Self, src: *const ImVector(T)) *ImVector(T) {
+            self.clear();
+            @"unresolvedMemberExpr!"(src.Size);
+            if (src.Data) memcpy(self.Data, src.Data, @as(usize, self.Size) * @sizeOf(T));
+            return self.*;
+        }
+        // syntax errors:
+        // pub inline fn clear(self: *Self) void {
+        //  if (self.Data) {
+        // self.Size = self.Capacity = 0;
+        // MemFree(self.Data);
+        // self.Data = 0;
+        // }}
+        //
+        pub inline fn clear_delete(self: *Self) void {
+            {
+                var n: c_int = 0;
+                while (n < self.Size) : (n += 1) IM_DELETE(self.Data[n]);
+            }
+            self.clear();
+        }
+        pub inline fn clear_destruct(self: *Self) void {
+            {
+                var n: c_int = 0;
+                while (n < self.Size) : (n += 1) self.Data[n].deinit();
+            }
+            self.clear();
+        }
+        pub inline fn empty(self: *const Self) bool {
+            return self.Size == 0;
+        }
+        pub inline fn size(self: *const Self) c_int {
+            return self.Size;
+        }
+        pub inline fn size_in_bytes(self: *const Self) c_int {
+            return self.Size * @as(c_int, @sizeOf(T));
+        }
+        pub inline fn max_size(self: *const Self) c_int {
+            return 2147483647 / @as(c_int, @sizeOf(T));
+        }
+        pub inline fn capacity(self: *const Self) c_int {
+            return self.Capacity;
+        }
+        pub inline fn getPtr(self: *Self, i: c_int) *T {
+            ImAssert(i >= 0 and i < self.Size);
+            return self.Data[i];
+        }
+        pub inline fn get(self: *const Self, i: c_int) *const T {
+            ImAssert(i >= 0 and i < self.Size);
+            return self.Data[i];
+        }
+        pub inline fn begin(self: *Self) [*c]T {
+            return self.Data;
+        }
+        pub inline fn begin__Overload2(self: *const Self) [*c]const T {
+            return self.Data;
+        }
+        pub inline fn end(self: *Self) [*c]T {
+            return self.Data + self.Size;
+        }
+        pub inline fn end__Overload2(self: *const Self) [*c]const T {
+            return self.Data + self.Size;
+        }
+        pub inline fn front(self: *Self) *T {
+            ImAssert(self.Size > 0);
+            return self.Data[0];
+        }
+        pub inline fn front__Overload2(self: *const Self) *const T {
+            ImAssert(self.Size > 0);
+            return self.Data[0];
+        }
+        pub inline fn back(self: *Self) *T {
+            ImAssert(self.Size > 0);
+            return self.Data[self.Size - 1];
+        }
+        pub inline fn back__Overload2(self: *const Self) *const T {
+            ImAssert(self.Size > 0);
+            return self.Data[self.Size - 1];
+        }
+        pub inline fn swap(self: *Self, rhs: *ImVector(T)) void {
+            var rhs_size: c_int = rhs.Size;
+            rhs.Size = self.Size;
+            self.Size = rhs_size;
+            var rhs_cap: c_int = rhs.Capacity;
+            rhs.Capacity = self.Capacity;
+            self.Capacity = rhs_cap;
+            var rhs_data: [*c]T = rhs.Data;
+            rhs.Data = self.Data;
+            self.Data = rhs_data;
+        }
+        pub inline fn _grow_capacity(self: *const Self, sz: c_int) c_int {
+            var new_capacity: c_int = if (((self.Capacity) != 0)) (self.Capacity + self.Capacity / 2) else 8;
+            return if (new_capacity > sz) new_capacity else sz;
+        }
+        pub inline fn resize(self: *Self, new_size: c_int) void {
+            if (new_size > self.Capacity) self.reserve(self._grow_capacity(new_size));
+            self.Size = new_size;
+        }
+        pub inline fn resize__Overload2(self: *Self, new_size: c_int, v: *const T) void {
+            if (new_size > self.Capacity) self.reserve(self._grow_capacity(new_size));
+            if (new_size > self.Size) {
+                var n: c_int = self.Size;
+                while (n < new_size) : (n += 1) memcpy(&self.Data[n], &v, @sizeOf(v));
+            }
+            self.Size = new_size;
+        }
+        pub inline fn shrink(self: *Self, new_size: c_int) void {
+            ImAssert(new_size <= self.Size);
+            self.Size = new_size;
+        }
+        pub inline fn reserve(self: *Self, new_capacity: c_int) void {
+            if (new_capacity <= self.Capacity) return;
+            var new_data: [*c]T = @as([*c]T, MemAlloc(@intCast(usize, new_capacity) * @sizeOf(T)));
+            if (self.Data) {
+                memcpy(new_data, self.Data, @as(usize, self.Size) * @sizeOf(T));
+                MemFree(self.Data);
+            }
+            self.Data = new_data;
+            self.Capacity = new_capacity;
+        }
+        pub inline fn reserve_discard(self: *Self, new_capacity: c_int) void {
+            if (new_capacity <= self.Capacity) return;
+            if (self.Data) MemFree(self.Data);
+            self.Data = @as([*c]T, MemAlloc(@intCast(usize, new_capacity) * @sizeOf(T)));
+            self.Capacity = new_capacity;
+        }
+        pub inline fn push_back(self: *Self, v: *const T) void {
+            if (self.Size == self.Capacity) self.reserve(self._grow_capacity(self.Size + 1));
+            memcpy(&self.Data[self.Size], &v, @sizeOf(v));
+            self.Size += 1;
+        }
+        pub inline fn pop_back(self: *Self) void {
+            ImAssert(self.Size > 0);
+            self.Size -= 1;
+        }
+        pub inline fn push_front(self: *Self, v: *const T) void {
+            if (self.Size == 0) self.push_back(v) else self.insert(self.Data, v);
+        }
+        pub inline fn erase(self: *Self, it: [*c]const T) [*c]T {
+            ImAssert(it >= self.Data and it < self.Data + self.Size);
+            const off: ptrdiff_t = it - self.Data;
+            memmove(self.Data + off, self.Data + off + 1, (@as(usize, self.Size) - @as(usize, off) - @intCast(usize, 1)) * @sizeOf(T));
+            self.Size -= 1;
+            return self.Data + off;
+        }
+        pub inline fn erase__Overload2(self: *Self, it: [*c]const T, it_last: [*c]const T) [*c]T {
+            ImAssert(it >= self.Data and it < self.Data + self.Size and it_last >= it and it_last <= self.Data + self.Size);
+            const count: ptrdiff_t = it_last - it;
+            const off: ptrdiff_t = it - self.Data;
+            memmove(self.Data + off, self.Data + off + count, (@as(usize, self.Size) - @as(usize, off) - @as(usize, count)) * @sizeOf(T));
+            self.Size -= @as(c_int, count);
+            return self.Data + off;
+        }
+        pub inline fn erase_unsorted(self: *Self, it: [*c]const T) [*c]T {
+            ImAssert(it >= self.Data and it < self.Data + self.Size);
+            const off: ptrdiff_t = it - self.Data;
+            if (it < self.Data + self.Size - 1) memcpy(self.Data + off, self.Data + self.Size - 1, @sizeOf(T));
+            self.Size -= 1;
+            return self.Data + off;
+        }
+        pub inline fn insert(self: *Self, it: [*c]const T, v: *const T) [*c]T {
+            ImAssert(it >= self.Data and it <= self.Data + self.Size);
+            const off: ptrdiff_t = it - self.Data;
+            if (self.Size == self.Capacity) self.reserve(self._grow_capacity(self.Size + 1));
+            if (off < @intCast(ptrdiff_t, @as(c_int, self.Size))) memmove(self.Data + off + 1, self.Data + off, (@as(usize, self.Size) - @as(usize, off)) * @sizeOf(T));
+            memcpy(&self.Data[off], &v, @sizeOf(v));
+            self.Size += 1;
+            return self.Data + off;
+        }
+        // syntax errors:
+        // pub inline fn contains(self: *const Self, v: *const T) bool {
+        // const data: [*c]T = self.Data;
+        // const data_end: [*c]T = self.Data + self.Size;
+        // while (data < data_end) if ((data += 1).* == v) return true;
+        // return false;
+        // }
+        //
+        pub inline fn find(self: *Self, v: *const T) [*c]T {
+            var data: [*c]T = self.Data;
+            const data_end: [*c]T = self.Data + self.Size;
+            while (data < data_end) if (data.* == v) break else data += 1;
+            return data;
+        }
+        pub inline fn find__Overload2(self: *const Self, v: *const T) [*c]const T {
+            const data: [*c]T = self.Data;
+            const data_end: [*c]T = self.Data + self.Size;
+            while (data < data_end) if (data.* == v) break else data += 1;
+            return data;
+        }
+        pub inline fn find_erase(self: *Self, v: *const T) bool {
+            const it: [*c]T = @"unresolvedMemberExpr!"(v);
+            if (it < self.Data + self.Size) {
+                @"unresolvedMemberExpr!"(it);
+                return true;
+            }
+            return false;
+        }
+        pub inline fn find_erase_unsorted(self: *Self, v: *const T) bool {
+            const it: [*c]T = @"unresolvedMemberExpr!"(v);
+            if (it < self.Data + self.Size) {
+                self.erase_unsorted(it);
+                return true;
+            }
+            return false;
+        }
+        pub inline fn index_from_ptr(self: *const Self, it: [*c]const T) c_int {
+            ImAssert(it >= self.Data and it < self.Data + self.Size);
+            const off: ptrdiff_t = it - self.Data;
+            return @as(c_int, off);
+        }
     };
 }
 
@@ -2432,15 +2382,15 @@ pub const ImGuiStyle = extern struct {
     CircleTessellationMaxError: f32,
     Colors: [55]ImVec4,
 
-extern fn _ZN10ImGuiStyleC1Ev(self: *ImGuiStyle) void;
-pub inline fn init() ImGuiStyle {
-    var self: ImGuiStyle = undefined;
-    _ZN10ImGuiStyleC1Ev(&self);    return self;
-}
+    extern fn _ZN10ImGuiStyleC1Ev(self: *ImGuiStyle) void;
+    pub inline fn init() ImGuiStyle {
+        var self: ImGuiStyle = undefined;
+        _ZN10ImGuiStyleC1Ev(&self);
+        return self;
+    }
 
-extern fn _ZN10ImGuiStyle13ScaleAllSizesEf(self: *ImGuiStyle, scale_factor: f32) void;
-pub const ScaleAllSizes = _ZN10ImGuiStyle13ScaleAllSizesEf;
-
+    extern fn _ZN10ImGuiStyle13ScaleAllSizesEf(self: *ImGuiStyle, scale_factor: f32) void;
+    pub const ScaleAllSizes = _ZN10ImGuiStyle13ScaleAllSizesEf;
 };
 
 pub const ImGuiKeyData = extern struct {
@@ -2495,11 +2445,11 @@ pub const ImGuiIO = extern struct {
     BackendPlatformUserData: ?*anyopaque,
     BackendRendererUserData: ?*anyopaque,
     BackendLanguageUserData: ?*anyopaque,
-    GetClipboardTextFn: ?*const fn(?*anyopaque) callconv(.C) [*c]const u8 ,
-    SetClipboardTextFn: ?*const fn(?*anyopaque,[*c]const u8) callconv(.C) void ,
+    GetClipboardTextFn: ?*const fn (?*anyopaque) callconv(.C) [*c]const u8,
+    SetClipboardTextFn: ?*const fn (?*anyopaque, [*c]const u8) callconv(.C) void,
     ClipboardUserData: ?*anyopaque,
-    SetPlatformImeDataFn: ?*const fn([*c]ImGuiViewport,[*c]ImGuiPlatformImeData) callconv(.C) void ,
-    ImeWindowHandle: ?*anyopaque,
+    SetPlatformImeDataFn: ?*const fn ([*c]ImGuiViewport, [*c]ImGuiPlatformImeData) callconv(.C) void,
+    _UnusedPadding: ?*anyopaque,
     WantCaptureMouse: bool,
     WantCaptureKeyboard: bool,
     WantTextInput: bool,
@@ -2514,10 +2464,7 @@ pub const ImGuiIO = extern struct {
     MetricsActiveWindows: c_int,
     MetricsActiveAllocations: c_int,
     MouseDelta: ImVec2,
-    KeyMap: [652]c_int,
-    KeysDown: [652]bool,
-    NavInputs: [16]f32,
-    Ctx: [*c]ImGuiContext,
+    Ctx: ?*ImGuiContext,
     MousePos: ImVec2,
     MouseDown: [5]bool,
     MouseWheel: f32,
@@ -2529,7 +2476,7 @@ pub const ImGuiIO = extern struct {
     KeyAlt: bool,
     KeySuper: bool,
     KeyMods: ImGuiKeyChord,
-    KeysData: [652]ImGuiKeyData,
+    KeysData: [140]ImGuiKeyData,
     WantCaptureMouseUnlessPopupClose: bool,
     MousePosPrev: ImVec2,
     MouseClickedPos: [5]ImVec2,
@@ -2554,61 +2501,61 @@ pub const ImGuiIO = extern struct {
     InputQueueSurrogate: ImWchar16,
     InputQueueCharacters: ImVector(ImWchar),
 
-extern fn _ZN7ImGuiIO11AddKeyEventE8ImGuiKeyb(self: *ImGuiIO, key: ImGuiKey, down: bool) void;
-pub const AddKeyEvent = _ZN7ImGuiIO11AddKeyEventE8ImGuiKeyb;
+    extern fn _ZN7ImGuiIO11AddKeyEventE8ImGuiKeyb(self: *ImGuiIO, key: ImGuiKey, down: bool) void;
+    pub const AddKeyEvent = _ZN7ImGuiIO11AddKeyEventE8ImGuiKeyb;
 
-extern fn _ZN7ImGuiIO17AddKeyAnalogEventE8ImGuiKeybf(self: *ImGuiIO, key: ImGuiKey, down: bool, v: f32) void;
-pub const AddKeyAnalogEvent = _ZN7ImGuiIO17AddKeyAnalogEventE8ImGuiKeybf;
+    extern fn _ZN7ImGuiIO17AddKeyAnalogEventE8ImGuiKeybf(self: *ImGuiIO, key: ImGuiKey, down: bool, v: f32) void;
+    pub const AddKeyAnalogEvent = _ZN7ImGuiIO17AddKeyAnalogEventE8ImGuiKeybf;
 
-extern fn _ZN7ImGuiIO16AddMousePosEventEff(self: *ImGuiIO, x: f32, y: f32) void;
-pub const AddMousePosEvent = _ZN7ImGuiIO16AddMousePosEventEff;
+    extern fn _ZN7ImGuiIO16AddMousePosEventEff(self: *ImGuiIO, x: f32, y: f32) void;
+    pub const AddMousePosEvent = _ZN7ImGuiIO16AddMousePosEventEff;
 
-extern fn _ZN7ImGuiIO19AddMouseButtonEventEib(self: *ImGuiIO, button: c_int, down: bool) void;
-pub const AddMouseButtonEvent = _ZN7ImGuiIO19AddMouseButtonEventEib;
+    extern fn _ZN7ImGuiIO19AddMouseButtonEventEib(self: *ImGuiIO, button: c_int, down: bool) void;
+    pub const AddMouseButtonEvent = _ZN7ImGuiIO19AddMouseButtonEventEib;
 
-extern fn _ZN7ImGuiIO18AddMouseWheelEventEff(self: *ImGuiIO, wheel_x: f32, wheel_y: f32) void;
-pub const AddMouseWheelEvent = _ZN7ImGuiIO18AddMouseWheelEventEff;
+    extern fn _ZN7ImGuiIO18AddMouseWheelEventEff(self: *ImGuiIO, wheel_x: f32, wheel_y: f32) void;
+    pub const AddMouseWheelEvent = _ZN7ImGuiIO18AddMouseWheelEventEff;
 
-extern fn _ZN7ImGuiIO19AddMouseSourceEventE16ImGuiMouseSource(self: *ImGuiIO, source: ImGuiMouseSource) void;
-pub const AddMouseSourceEvent = _ZN7ImGuiIO19AddMouseSourceEventE16ImGuiMouseSource;
+    extern fn _ZN7ImGuiIO19AddMouseSourceEventE16ImGuiMouseSource(self: *ImGuiIO, source: ImGuiMouseSource) void;
+    pub const AddMouseSourceEvent = _ZN7ImGuiIO19AddMouseSourceEventE16ImGuiMouseSource;
 
-extern fn _ZN7ImGuiIO21AddMouseViewportEventEj(self: *ImGuiIO, id: ImGuiID) void;
-pub const AddMouseViewportEvent = _ZN7ImGuiIO21AddMouseViewportEventEj;
+    extern fn _ZN7ImGuiIO21AddMouseViewportEventEj(self: *ImGuiIO, id: ImGuiID) void;
+    pub const AddMouseViewportEvent = _ZN7ImGuiIO21AddMouseViewportEventEj;
 
-extern fn _ZN7ImGuiIO13AddFocusEventEb(self: *ImGuiIO, focused: bool) void;
-pub const AddFocusEvent = _ZN7ImGuiIO13AddFocusEventEb;
+    extern fn _ZN7ImGuiIO13AddFocusEventEb(self: *ImGuiIO, focused: bool) void;
+    pub const AddFocusEvent = _ZN7ImGuiIO13AddFocusEventEb;
 
-extern fn _ZN7ImGuiIO17AddInputCharacterEj(self: *ImGuiIO, c: c_uint) void;
-pub const AddInputCharacter = _ZN7ImGuiIO17AddInputCharacterEj;
+    extern fn _ZN7ImGuiIO17AddInputCharacterEj(self: *ImGuiIO, c: c_uint) void;
+    pub const AddInputCharacter = _ZN7ImGuiIO17AddInputCharacterEj;
 
-extern fn _ZN7ImGuiIO22AddInputCharacterUTF16Et(self: *ImGuiIO, c: ImWchar16) void;
-pub const AddInputCharacterUTF16 = _ZN7ImGuiIO22AddInputCharacterUTF16Et;
+    extern fn _ZN7ImGuiIO22AddInputCharacterUTF16Et(self: *ImGuiIO, c: ImWchar16) void;
+    pub const AddInputCharacterUTF16 = _ZN7ImGuiIO22AddInputCharacterUTF16Et;
 
-extern fn _ZN7ImGuiIO22AddInputCharactersUTF8EPKc(self: *ImGuiIO, str: [*c]const u8) void;
-pub const AddInputCharactersUTF8 = _ZN7ImGuiIO22AddInputCharactersUTF8EPKc;
+    extern fn _ZN7ImGuiIO22AddInputCharactersUTF8EPKc(self: *ImGuiIO, str: [*c]const u8) void;
+    pub const AddInputCharactersUTF8 = _ZN7ImGuiIO22AddInputCharactersUTF8EPKc;
 
-extern fn _ZN7ImGuiIO21SetKeyEventNativeDataE8ImGuiKeyiii(self: *ImGuiIO, key: ImGuiKey, native_keycode: c_int, native_scancode: c_int, native_legacy_index: c_int) void;
-pub const SetKeyEventNativeData = _ZN7ImGuiIO21SetKeyEventNativeDataE8ImGuiKeyiii;
+    extern fn _ZN7ImGuiIO21SetKeyEventNativeDataE8ImGuiKeyiii(self: *ImGuiIO, key: ImGuiKey, native_keycode: c_int, native_scancode: c_int, native_legacy_index: c_int) void;
+    pub const SetKeyEventNativeData = _ZN7ImGuiIO21SetKeyEventNativeDataE8ImGuiKeyiii;
 
-extern fn _ZN7ImGuiIO21SetAppAcceptingEventsEb(self: *ImGuiIO, accepting_events: bool) void;
-pub const SetAppAcceptingEvents = _ZN7ImGuiIO21SetAppAcceptingEventsEb;
+    extern fn _ZN7ImGuiIO21SetAppAcceptingEventsEb(self: *ImGuiIO, accepting_events: bool) void;
+    pub const SetAppAcceptingEvents = _ZN7ImGuiIO21SetAppAcceptingEventsEb;
 
-extern fn _ZN7ImGuiIO20ClearInputCharactersEv(self: *ImGuiIO) void;
-pub const ClearInputCharacters = _ZN7ImGuiIO20ClearInputCharactersEv;
+    extern fn _ZN7ImGuiIO20ClearInputCharactersEv(self: *ImGuiIO) void;
+    pub const ClearInputCharacters = _ZN7ImGuiIO20ClearInputCharactersEv;
 
-extern fn _ZN7ImGuiIO14ClearInputKeysEv(self: *ImGuiIO) void;
-pub const ClearInputKeys = _ZN7ImGuiIO14ClearInputKeysEv;
+    extern fn _ZN7ImGuiIO14ClearInputKeysEv(self: *ImGuiIO) void;
+    pub const ClearInputKeys = _ZN7ImGuiIO14ClearInputKeysEv;
 
-extern fn _ZN7ImGuiIOC1Ev(self: *ImGuiIO) void;
-pub inline fn init() ImGuiIO {
-    var self: ImGuiIO = undefined;
-    _ZN7ImGuiIOC1Ev(&self);    return self;
-}
-
+    extern fn _ZN7ImGuiIOC1Ev(self: *ImGuiIO) void;
+    pub inline fn init() ImGuiIO {
+        var self: ImGuiIO = undefined;
+        _ZN7ImGuiIOC1Ev(&self);
+        return self;
+    }
 };
 
 pub const ImGuiInputTextCallbackData = extern struct {
-    Ctx: [*c]ImGuiContext,
+    Ctx: ?*ImGuiContext,
     EventFlag: ImGuiInputTextFlags,
     Flags: ImGuiInputTextFlags,
     UserData: ?*anyopaque,
@@ -2622,31 +2569,31 @@ pub const ImGuiInputTextCallbackData = extern struct {
     SelectionStart: c_int,
     SelectionEnd: c_int,
 
-extern fn _ZN26ImGuiInputTextCallbackDataC1Ev(self: *ImGuiInputTextCallbackData) void;
-pub inline fn init() ImGuiInputTextCallbackData {
-    var self: ImGuiInputTextCallbackData = undefined;
-    _ZN26ImGuiInputTextCallbackDataC1Ev(&self);    return self;
-}
+    extern fn _ZN26ImGuiInputTextCallbackDataC1Ev(self: *ImGuiInputTextCallbackData) void;
+    pub inline fn init() ImGuiInputTextCallbackData {
+        var self: ImGuiInputTextCallbackData = undefined;
+        _ZN26ImGuiInputTextCallbackDataC1Ev(&self);
+        return self;
+    }
 
-extern fn _ZN26ImGuiInputTextCallbackData11DeleteCharsEii(self: *ImGuiInputTextCallbackData, pos: c_int, bytes_count: c_int) void;
-pub const DeleteChars = _ZN26ImGuiInputTextCallbackData11DeleteCharsEii;
+    extern fn _ZN26ImGuiInputTextCallbackData11DeleteCharsEii(self: *ImGuiInputTextCallbackData, pos: c_int, bytes_count: c_int) void;
+    pub const DeleteChars = _ZN26ImGuiInputTextCallbackData11DeleteCharsEii;
 
-extern fn _ZN26ImGuiInputTextCallbackData11InsertCharsEiPKcS1_(self: *ImGuiInputTextCallbackData, pos: c_int, text: [*c]const u8, text_end: [*c]const u8) void;
-pub const InsertChars = _ZN26ImGuiInputTextCallbackData11InsertCharsEiPKcS1_;
+    extern fn _ZN26ImGuiInputTextCallbackData11InsertCharsEiPKcS1_(self: *ImGuiInputTextCallbackData, pos: c_int, text: [*c]const u8, text_end: [*c]const u8) void;
+    pub const InsertChars = _ZN26ImGuiInputTextCallbackData11InsertCharsEiPKcS1_;
 
-pub fn SelectAll(self: *ImGuiInputTextCallbackData) void {
-self.SelectionStart = 0;
-self.SelectionEnd = self.BufTextLen;
-}
-
-pub fn ClearSelection(self: *ImGuiInputTextCallbackData) void {
-self.SelectionStart = self.SelectionEnd = self.BufTextLen;
-}
-
-pub fn HasSelection(self: *const ImGuiInputTextCallbackData) bool {
-return self.SelectionStart != self.SelectionEnd;
-}
-
+    pub fn SelectAll(self: *ImGuiInputTextCallbackData) void {
+        self.SelectionStart = 0;
+        self.SelectionEnd = self.BufTextLen;
+    }
+    // syntax errors:
+    // pub fn ClearSelection(self: *ImGuiInputTextCallbackData) void {
+    // self.SelectionStart = self.SelectionEnd = self.BufTextLen;
+    // }
+    //
+    pub fn HasSelection(self: *const ImGuiInputTextCallbackData) bool {
+        return self.SelectionStart != self.SelectionEnd;
+    }
 };
 
 pub const ImGuiSizeCallbackData = extern struct {
@@ -2666,12 +2613,12 @@ pub const ImGuiWindowClass = extern struct {
     DockingAlwaysTabBar: bool,
     DockingAllowUnclassed: bool,
 
-extern fn _ZN16ImGuiWindowClassC1Ev(self: *ImGuiWindowClass) void;
-pub inline fn init() ImGuiWindowClass {
-    var self: ImGuiWindowClass = undefined;
-    _ZN16ImGuiWindowClassC1Ev(&self);    return self;
-}
-
+    extern fn _ZN16ImGuiWindowClassC1Ev(self: *ImGuiWindowClass) void;
+    pub inline fn init() ImGuiWindowClass {
+        var self: ImGuiWindowClass = undefined;
+        _ZN16ImGuiWindowClassC1Ev(&self);
+        return self;
+    }
 };
 
 pub const ImGuiPayload = extern struct {
@@ -2684,33 +2631,32 @@ pub const ImGuiPayload = extern struct {
     Preview: bool,
     Delivery: bool,
 
-extern fn _ZN12ImGuiPayloadC1Ev(self: *ImGuiPayload) void;
-pub inline fn init() ImGuiPayload {
-    var self: ImGuiPayload = undefined;
-    _ZN12ImGuiPayloadC1Ev(&self);    return self;
-}
+    extern fn _ZN12ImGuiPayloadC1Ev(self: *ImGuiPayload) void;
+    pub inline fn init() ImGuiPayload {
+        var self: ImGuiPayload = undefined;
+        _ZN12ImGuiPayloadC1Ev(&self);
+        return self;
+    }
 
-pub fn Clear(self: *ImGuiPayload) void {
-self.SourceId = self.SourceParentId = @intCast(ImGuiID, 0);
-self.Data = null;
-self.DataSize = 0;
-memset(@bitCast(?*anyopaque, @as([*c]u8, self.DataType)), 0, @sizeOf(self.DataType));
-self.DataFrameCount = -1;
-self.Preview = self.Delivery = false;
-}
-
-pub fn IsDataType(self: *const ImGuiPayload, type: [*c]const u8) bool {
-return self.DataFrameCount != -1 and strcmp(type, @as([*c]const u8, self.DataType)) == 0;
-}
-
-pub fn IsPreview(self: *const ImGuiPayload) bool {
-return self.Preview;
-}
-
-pub fn IsDelivery(self: *const ImGuiPayload) bool {
-return self.Delivery;
-}
-
+    // syntax errors:
+    // pub fn Clear(self: *ImGuiPayload) void {
+    // self.SourceId = self.SourceParentId = @intCast(ImGuiID, 0);
+    // self.Data = null;
+    // self.DataSize = 0;
+    // memset(@bitCast(?*anyopaque, @as([*c]u8, self.DataType)), 0, @sizeOf(self.DataType));
+    // self.DataFrameCount = -1;
+    // self.Preview = self.Delivery = false;
+    // }
+    //
+    pub fn IsDataType(self: *const ImGuiPayload, typeName: [*c]const u8) bool {
+        return self.DataFrameCount != -1 and strcmp(typeName, @as([*c]const u8, self.DataType)) == 0;
+    }
+    pub fn IsPreview(self: *const ImGuiPayload) bool {
+        return self.Preview;
+    }
+    pub fn IsDelivery(self: *const ImGuiPayload) bool {
+        return self.Delivery;
+    }
 };
 
 pub const ImGuiTableColumnSortSpecs = extern struct {
@@ -2719,12 +2665,12 @@ pub const ImGuiTableColumnSortSpecs = extern struct {
     SortOrder: ImS16,
     SortDirection: ImGuiSortDirection,
 
-extern fn _ZN25ImGuiTableColumnSortSpecsC1Ev(self: *ImGuiTableColumnSortSpecs) void;
-pub inline fn init() ImGuiTableColumnSortSpecs {
-    var self: ImGuiTableColumnSortSpecs = undefined;
-    _ZN25ImGuiTableColumnSortSpecsC1Ev(&self);    return self;
-}
-
+    extern fn _ZN25ImGuiTableColumnSortSpecsC1Ev(self: *ImGuiTableColumnSortSpecs) void;
+    pub inline fn init() ImGuiTableColumnSortSpecs {
+        var self: ImGuiTableColumnSortSpecs = undefined;
+        _ZN25ImGuiTableColumnSortSpecsC1Ev(&self);
+        return self;
+    }
 };
 
 pub const ImGuiTableSortSpecs = extern struct {
@@ -2732,221 +2678,211 @@ pub const ImGuiTableSortSpecs = extern struct {
     SpecsCount: c_int,
     SpecsDirty: bool,
 
-extern fn _ZN19ImGuiTableSortSpecsC1Ev(self: *ImGuiTableSortSpecs) void;
-pub inline fn init() ImGuiTableSortSpecs {
-    var self: ImGuiTableSortSpecs = undefined;
-    _ZN19ImGuiTableSortSpecsC1Ev(&self);    return self;
-}
-
+    extern fn _ZN19ImGuiTableSortSpecsC1Ev(self: *ImGuiTableSortSpecs) void;
+    pub inline fn init() ImGuiTableSortSpecs {
+        var self: ImGuiTableSortSpecs = undefined;
+        _ZN19ImGuiTableSortSpecsC1Ev(&self);
+        return self;
+    }
 };
 
 pub const ImGuiOnceUponAFrame = extern struct {
     RefFrame: c_int,
 
-extern fn _ZN19ImGuiOnceUponAFrameC1Ev(self: *ImGuiOnceUponAFrame) void;
-pub inline fn init() ImGuiOnceUponAFrame {
-    var self: ImGuiOnceUponAFrame = undefined;
-    _ZN19ImGuiOnceUponAFrameC1Ev(&self);    return self;
-}
-
+    extern fn _ZN19ImGuiOnceUponAFrameC1Ev(self: *ImGuiOnceUponAFrame) void;
+    pub inline fn init() ImGuiOnceUponAFrame {
+        var self: ImGuiOnceUponAFrame = undefined;
+        _ZN19ImGuiOnceUponAFrameC1Ev(&self);
+        return self;
+    }
 };
 
 pub const ImGuiTextFilter = extern struct {
-pub const ImGuiTextRange = extern struct {
-    b: [*c]const u8,
-    e: [*c]const u8,
+    pub const ImGuiTextRange = extern struct {
+        b: [*c]const u8,
+        e: [*c]const u8,
 
-extern fn _ZN15ImGuiTextFilter14ImGuiTextRangeC1Ev(self: *ImGuiTextRange) void;
-pub inline fn init() ImGuiTextRange {
-    var self: ImGuiTextRange = undefined;
-    _ZN15ImGuiTextFilter14ImGuiTextRangeC1Ev(&self);    return self;
-}
+        extern fn _ZN15ImGuiTextFilter14ImGuiTextRangeC1Ev(self: *ImGuiTextRange) void;
+        pub inline fn init() ImGuiTextRange {
+            var self: ImGuiTextRange = undefined;
+            _ZN15ImGuiTextFilter14ImGuiTextRangeC1Ev(&self);
+            return self;
+        }
 
-extern fn _ZN15ImGuiTextFilter14ImGuiTextRangeC1EPKcS2_(self: *ImGuiTextRange, _b: [*c]const u8, _e: [*c]const u8) void;
-pub inline fn init1(_b: [*c]const u8, _e: [*c]const u8) ImGuiTextRange {
-    var self: ImGuiTextRange = undefined;
-    _ZN15ImGuiTextFilter14ImGuiTextRangeC1EPKcS2_(&self, _b, _e);    return self;
-}
+        extern fn _ZN15ImGuiTextFilter14ImGuiTextRangeC1EPKcS2_(self: *ImGuiTextRange, _b: [*c]const u8, _e: [*c]const u8) void;
+        pub inline fn init1(_b: [*c]const u8, _e: [*c]const u8) ImGuiTextRange {
+            var self: ImGuiTextRange = undefined;
+            _ZN15ImGuiTextFilter14ImGuiTextRangeC1EPKcS2_(&self, _b, _e);
+            return self;
+        }
 
-pub fn empty(self: *const ImGuiTextRange) bool {
-return self.b == self.e;
-}
-
-extern fn _ZNK15ImGuiTextFilter14ImGuiTextRange5splitEcP8ImVectorIS0_E(self: *const ImGuiTextRange, separator: u8, out: [*c]ImVector(ImGuiTextRange)) void;
-pub const split = _ZNK15ImGuiTextFilter14ImGuiTextRange5splitEcP8ImVectorIS0_E;
-
-};
+        pub fn empty(self: *const ImGuiTextRange) bool {
+            return self.b == self.e;
+        }
+        extern fn _ZNK15ImGuiTextFilter14ImGuiTextRange5splitEcP8ImVectorIS0_E(self: *const ImGuiTextRange, separator: u8, out: [*c]ImVector(ImGuiTextRange)) void;
+        pub const split = _ZNK15ImGuiTextFilter14ImGuiTextRange5splitEcP8ImVectorIS0_E;
+    };
 
     InputBuf: [256]u8,
     Filters: ImVector(ImGuiTextRange),
     CountGrep: c_int,
 
-extern fn _ZN15ImGuiTextFilterC1EPKc(self: *ImGuiTextFilter, default_filter: [*c]const u8) void;
-pub inline fn init(default_filter: [*c]const u8) ImGuiTextFilter {
-    var self: ImGuiTextFilter = undefined;
-    _ZN15ImGuiTextFilterC1EPKc(&self, default_filter);    return self;
-}
+    extern fn _ZN15ImGuiTextFilterC1EPKc(self: *ImGuiTextFilter, default_filter: [*c]const u8) void;
+    pub inline fn init(default_filter: [*c]const u8) ImGuiTextFilter {
+        var self: ImGuiTextFilter = undefined;
+        _ZN15ImGuiTextFilterC1EPKc(&self, default_filter);
+        return self;
+    }
 
-extern fn _ZN15ImGuiTextFilter4DrawEPKcf(self: *ImGuiTextFilter, label: [*c]const u8, width: f32) bool;
-pub const Draw = _ZN15ImGuiTextFilter4DrawEPKcf;
+    extern fn _ZN15ImGuiTextFilter4DrawEPKcf(self: *ImGuiTextFilter, label: [*c]const u8, width: f32) bool;
+    pub const Draw = _ZN15ImGuiTextFilter4DrawEPKcf;
 
-extern fn _ZNK15ImGuiTextFilter10PassFilterEPKcS1_(self: *const ImGuiTextFilter, text: [*c]const u8, text_end: [*c]const u8) bool;
-pub const PassFilter = _ZNK15ImGuiTextFilter10PassFilterEPKcS1_;
+    extern fn _ZNK15ImGuiTextFilter10PassFilterEPKcS1_(self: *const ImGuiTextFilter, text: [*c]const u8, text_end: [*c]const u8) bool;
+    pub const PassFilter = _ZNK15ImGuiTextFilter10PassFilterEPKcS1_;
 
-extern fn _ZN15ImGuiTextFilter5BuildEv(self: *ImGuiTextFilter) void;
-pub const Build = _ZN15ImGuiTextFilter5BuildEv;
+    extern fn _ZN15ImGuiTextFilter5BuildEv(self: *ImGuiTextFilter) void;
+    pub const Build = _ZN15ImGuiTextFilter5BuildEv;
 
-pub fn Clear(self: *ImGuiTextFilter) void {
-@as([*c]u8, self.InputBuf)[0] = @intCast(u8, 0);
-self.Build();
-}
-
-pub fn IsActive(self: *const ImGuiTextFilter) bool {
-return !self.empty();
-}
-
+    pub fn Clear(self: *ImGuiTextFilter) void {
+        @as([*c]u8, self.InputBuf)[0] = @intCast(u8, 0);
+        self.Build();
+    }
+    pub fn IsActive(self: *const ImGuiTextFilter) bool {
+        return !self.empty();
+    }
 };
 
 pub const ImGuiTextBuffer = extern struct {
     Buf: ImVector(u8),
 
-extern var _ZN15ImGuiTextBuffer11EmptyStringE: [1]u8;
-pub inline fn EmptyString() *[1]u8 {
-    return &_ZN15ImGuiTextBuffer11EmptyStringE;
-}
+    extern var _ZN15ImGuiTextBuffer11EmptyStringE: [1]u8;
+    pub inline fn EmptyString() *[1]u8 {
+        return &_ZN15ImGuiTextBuffer11EmptyStringE;
+    }
 
-extern fn _ZN15ImGuiTextBufferC1Ev(self: *ImGuiTextBuffer) void;
-pub inline fn init() ImGuiTextBuffer {
-    var self: ImGuiTextBuffer = undefined;
-    _ZN15ImGuiTextBufferC1Ev(&self);    return self;
-}
+    extern fn _ZN15ImGuiTextBufferC1Ev(self: *ImGuiTextBuffer) void;
+    pub inline fn init() ImGuiTextBuffer {
+        var self: ImGuiTextBuffer = undefined;
+        _ZN15ImGuiTextBufferC1Ev(&self);
+        return self;
+    }
 
-pub inline fn get(self: *const ImGuiTextBuffer, i: c_int) u8 {
-ImAssert(self.Buf.Data != null);
-return self.Buf.Data[i];
-}
+    pub inline fn get(self: *const ImGuiTextBuffer, i: c_int) u8 {
+        ImAssert(self.Buf.Data != null);
+        return self.Buf.Data[i];
+    }
+    pub fn begin(self: *const ImGuiTextBuffer) [*c]const u8 {
+        return if (@as(bool, self.Buf.Data)) &self.front() else @as([*c]u8, EmptyString);
+    }
+    pub fn end(self: *const ImGuiTextBuffer) [*c]const u8 {
+        return if (@as(bool, self.Buf.Data)) &self.back() else @as([*c]u8, EmptyString);
+    }
+    pub fn size(self: *const ImGuiTextBuffer) c_int {
+        return if (((self.Buf.Size) != 0)) self.Buf.Size - 1 else 0;
+    }
+    pub fn empty(self: *const ImGuiTextBuffer) bool {
+        return self.Buf.Size <= 1;
+    }
+    pub fn clear(self: *ImGuiTextBuffer) void {
+        self.clear();
+    }
+    pub fn reserve(self: *ImGuiTextBuffer, capacity: c_int) void {
+        self.reserve(capacity);
+    }
+    pub fn c_str(self: *const ImGuiTextBuffer) [*c]const u8 {
+        return if (@as(bool, self.Buf.Data)) self.Buf.Data else @as([*c]u8, EmptyString);
+    }
+    extern fn _ZN15ImGuiTextBuffer6appendEPKcS1_(self: *ImGuiTextBuffer, str: [*c]const u8, str_end: [*c]const u8) void;
+    pub const append = _ZN15ImGuiTextBuffer6appendEPKcS1_;
 
-pub fn begin(self: *const ImGuiTextBuffer) [*c]const u8 {
-return  if (@as(bool, self.Buf.Data)) &self.front() else @as([*c]u8, EmptyString) ;
-}
+    extern fn _ZN15ImGuiTextBuffer7appendfEPKcz(self: *ImGuiTextBuffer, fmt: [*c]const u8) void;
+    pub const appendf = _ZN15ImGuiTextBuffer7appendfEPKcz;
 
-pub fn end(self: *const ImGuiTextBuffer) [*c]const u8 {
-return  if (@as(bool, self.Buf.Data)) &self.back() else @as([*c]u8, EmptyString) ;
-}
-
-pub fn size(self: *const ImGuiTextBuffer) c_int {
-return  if (((self.Buf.Size) != 0)) self.Buf.Size - 1 else 0 ;
-}
-
-pub fn empty(self: *const ImGuiTextBuffer) bool {
-return self.Buf.Size <= 1;
-}
-
-pub fn clear(self: *ImGuiTextBuffer) void {
-self.clear();
-}
-
-pub fn reserve(self: *ImGuiTextBuffer, capacity: c_int) void {
-self.reserve(capacity);
-}
-
-pub fn c_str(self: *const ImGuiTextBuffer) [*c]const u8 {
-return  if (@as(bool, self.Buf.Data)) self.Buf.Data else @as([*c]u8, EmptyString) ;
-}
-
-extern fn _ZN15ImGuiTextBuffer6appendEPKcS1_(self: *ImGuiTextBuffer, str: [*c]const u8, str_end: [*c]const u8) void;
-pub const append = _ZN15ImGuiTextBuffer6appendEPKcS1_;
-
-extern fn _ZN15ImGuiTextBuffer7appendfEPKcz(self: *ImGuiTextBuffer, fmt: [*c]const u8) void;
-pub const appendf = _ZN15ImGuiTextBuffer7appendfEPKcz;
-
-extern fn _ZN15ImGuiTextBuffer8appendfvEPKcPc(self: *ImGuiTextBuffer, fmt: [*c]const u8, args: [*c]u8) void;
-pub const appendfv = _ZN15ImGuiTextBuffer8appendfvEPKcPc;
-
+    extern fn _ZN15ImGuiTextBuffer8appendfvEPKcPc(self: *ImGuiTextBuffer, fmt: [*c]const u8, args: [*c]u8) void;
+    pub const appendfv = _ZN15ImGuiTextBuffer8appendfvEPKcPc;
 };
 
 pub const ImGuiStorage = extern struct {
-pub const ImGuiStoragePair = extern struct {
-    key: ImGuiID,
-field0: extern union {
-    val_i: c_int,
-    val_f: f32,
-    val_p: ?*anyopaque,
-},
+    pub const ImGuiStoragePair = extern struct {
+        key: ImGuiID,
+        field0: extern union {
+            val_i: c_int,
+            val_f: f32,
+            val_p: ?*anyopaque,
+        },
 
+        extern fn _ZN12ImGuiStorage16ImGuiStoragePairC1Eji(self: *ImGuiStoragePair, _key: ImGuiID, _val_i: c_int) void;
+        pub inline fn init(_key: ImGuiID, _val_i: c_int) ImGuiStoragePair {
+            var self: ImGuiStoragePair = undefined;
+            _ZN12ImGuiStorage16ImGuiStoragePairC1Eji(&self, _key, _val_i);
+            return self;
+        }
 
-extern fn _ZN12ImGuiStorage16ImGuiStoragePairC1Eji(self: *ImGuiStoragePair, _key: ImGuiID, _val_i: c_int) void;
-pub inline fn init(_key: ImGuiID, _val_i: c_int) ImGuiStoragePair {
-    var self: ImGuiStoragePair = undefined;
-    _ZN12ImGuiStorage16ImGuiStoragePairC1Eji(&self, _key, _val_i);    return self;
-}
+        extern fn _ZN12ImGuiStorage16ImGuiStoragePairC1Ejf(self: *ImGuiStoragePair, _key: ImGuiID, _val_f: f32) void;
+        pub inline fn init1(_key: ImGuiID, _val_f: f32) ImGuiStoragePair {
+            var self: ImGuiStoragePair = undefined;
+            _ZN12ImGuiStorage16ImGuiStoragePairC1Ejf(&self, _key, _val_f);
+            return self;
+        }
 
-extern fn _ZN12ImGuiStorage16ImGuiStoragePairC1Ejf(self: *ImGuiStoragePair, _key: ImGuiID, _val_f: f32) void;
-pub inline fn init1(_key: ImGuiID, _val_f: f32) ImGuiStoragePair {
-    var self: ImGuiStoragePair = undefined;
-    _ZN12ImGuiStorage16ImGuiStoragePairC1Ejf(&self, _key, _val_f);    return self;
-}
-
-extern fn _ZN12ImGuiStorage16ImGuiStoragePairC1EjPv(self: *ImGuiStoragePair, _key: ImGuiID, _val_p: ?*anyopaque) void;
-pub inline fn init2(_key: ImGuiID, _val_p: ?*anyopaque) ImGuiStoragePair {
-    var self: ImGuiStoragePair = undefined;
-    _ZN12ImGuiStorage16ImGuiStoragePairC1EjPv(&self, _key, _val_p);    return self;
-}
-
-};
+        extern fn _ZN12ImGuiStorage16ImGuiStoragePairC1EjPv(self: *ImGuiStoragePair, _key: ImGuiID, _val_p: ?*anyopaque) void;
+        pub inline fn init2(_key: ImGuiID, _val_p: ?*anyopaque) ImGuiStoragePair {
+            var self: ImGuiStoragePair = undefined;
+            _ZN12ImGuiStorage16ImGuiStoragePairC1EjPv(&self, _key, _val_p);
+            return self;
+        }
+    };
 
     Data: ImVector(ImGuiStoragePair),
 
-pub fn Clear(self: *ImGuiStorage) void {
-self.clear();
-}
+    pub fn Clear(self: *ImGuiStorage) void {
+        self.clear();
+    }
+    extern fn _ZNK12ImGuiStorage6GetIntEji(self: *const ImGuiStorage, key: ImGuiID, default_val: c_int) c_int;
+    pub const GetInt = _ZNK12ImGuiStorage6GetIntEji;
 
-extern fn _ZNK12ImGuiStorage6GetIntEji(self: *const ImGuiStorage, key: ImGuiID, default_val: c_int) c_int;
-pub const GetInt = _ZNK12ImGuiStorage6GetIntEji;
+    extern fn _ZN12ImGuiStorage6SetIntEji(self: *ImGuiStorage, key: ImGuiID, val: c_int) void;
+    pub const SetInt = _ZN12ImGuiStorage6SetIntEji;
 
-extern fn _ZN12ImGuiStorage6SetIntEji(self: *ImGuiStorage, key: ImGuiID, val: c_int) void;
-pub const SetInt = _ZN12ImGuiStorage6SetIntEji;
+    extern fn _ZNK12ImGuiStorage7GetBoolEjb(self: *const ImGuiStorage, key: ImGuiID, default_val: bool) bool;
+    pub const GetBool = _ZNK12ImGuiStorage7GetBoolEjb;
 
-extern fn _ZNK12ImGuiStorage7GetBoolEjb(self: *const ImGuiStorage, key: ImGuiID, default_val: bool) bool;
-pub const GetBool = _ZNK12ImGuiStorage7GetBoolEjb;
+    extern fn _ZN12ImGuiStorage7SetBoolEjb(self: *ImGuiStorage, key: ImGuiID, val: bool) void;
+    pub const SetBool = _ZN12ImGuiStorage7SetBoolEjb;
 
-extern fn _ZN12ImGuiStorage7SetBoolEjb(self: *ImGuiStorage, key: ImGuiID, val: bool) void;
-pub const SetBool = _ZN12ImGuiStorage7SetBoolEjb;
+    extern fn _ZNK12ImGuiStorage8GetFloatEjf(self: *const ImGuiStorage, key: ImGuiID, default_val: f32) f32;
+    pub const GetFloat = _ZNK12ImGuiStorage8GetFloatEjf;
 
-extern fn _ZNK12ImGuiStorage8GetFloatEjf(self: *const ImGuiStorage, key: ImGuiID, default_val: f32) f32;
-pub const GetFloat = _ZNK12ImGuiStorage8GetFloatEjf;
+    extern fn _ZN12ImGuiStorage8SetFloatEjf(self: *ImGuiStorage, key: ImGuiID, val: f32) void;
+    pub const SetFloat = _ZN12ImGuiStorage8SetFloatEjf;
 
-extern fn _ZN12ImGuiStorage8SetFloatEjf(self: *ImGuiStorage, key: ImGuiID, val: f32) void;
-pub const SetFloat = _ZN12ImGuiStorage8SetFloatEjf;
+    extern fn _ZNK12ImGuiStorage10GetVoidPtrEj(self: *const ImGuiStorage, key: ImGuiID) ?*anyopaque;
+    pub const GetVoidPtr = _ZNK12ImGuiStorage10GetVoidPtrEj;
 
-extern fn _ZNK12ImGuiStorage10GetVoidPtrEj(self: *const ImGuiStorage, key: ImGuiID) ?*anyopaque;
-pub const GetVoidPtr = _ZNK12ImGuiStorage10GetVoidPtrEj;
+    extern fn _ZN12ImGuiStorage10SetVoidPtrEjPv(self: *ImGuiStorage, key: ImGuiID, val: ?*anyopaque) void;
+    pub const SetVoidPtr = _ZN12ImGuiStorage10SetVoidPtrEjPv;
 
-extern fn _ZN12ImGuiStorage10SetVoidPtrEjPv(self: *ImGuiStorage, key: ImGuiID, val: ?*anyopaque) void;
-pub const SetVoidPtr = _ZN12ImGuiStorage10SetVoidPtrEjPv;
+    extern fn _ZN12ImGuiStorage9GetIntRefEji(self: *ImGuiStorage, key: ImGuiID, default_val: c_int) [*c]c_int;
+    pub const GetIntRef = _ZN12ImGuiStorage9GetIntRefEji;
 
-extern fn _ZN12ImGuiStorage9GetIntRefEji(self: *ImGuiStorage, key: ImGuiID, default_val: c_int) [*c]c_int;
-pub const GetIntRef = _ZN12ImGuiStorage9GetIntRefEji;
+    extern fn _ZN12ImGuiStorage10GetBoolRefEjb(self: *ImGuiStorage, key: ImGuiID, default_val: bool) [*c]bool;
+    pub const GetBoolRef = _ZN12ImGuiStorage10GetBoolRefEjb;
 
-extern fn _ZN12ImGuiStorage10GetBoolRefEjb(self: *ImGuiStorage, key: ImGuiID, default_val: bool) [*c]bool;
-pub const GetBoolRef = _ZN12ImGuiStorage10GetBoolRefEjb;
+    extern fn _ZN12ImGuiStorage11GetFloatRefEjf(self: *ImGuiStorage, key: ImGuiID, default_val: f32) [*c]f32;
+    pub const GetFloatRef = _ZN12ImGuiStorage11GetFloatRefEjf;
 
-extern fn _ZN12ImGuiStorage11GetFloatRefEjf(self: *ImGuiStorage, key: ImGuiID, default_val: f32) [*c]f32;
-pub const GetFloatRef = _ZN12ImGuiStorage11GetFloatRefEjf;
+    extern fn _ZN12ImGuiStorage13GetVoidPtrRefEjPv(self: *ImGuiStorage, key: ImGuiID, default_val: ?*anyopaque) [*c]?*anyopaque;
+    pub const GetVoidPtrRef = _ZN12ImGuiStorage13GetVoidPtrRefEjPv;
 
-extern fn _ZN12ImGuiStorage13GetVoidPtrRefEjPv(self: *ImGuiStorage, key: ImGuiID, default_val: ?*anyopaque) [*c]?*anyopaque;
-pub const GetVoidPtrRef = _ZN12ImGuiStorage13GetVoidPtrRefEjPv;
+    extern fn _ZN12ImGuiStorage9SetAllIntEi(self: *ImGuiStorage, val: c_int) void;
+    pub const SetAllInt = _ZN12ImGuiStorage9SetAllIntEi;
 
-extern fn _ZN12ImGuiStorage9SetAllIntEi(self: *ImGuiStorage, val: c_int) void;
-pub const SetAllInt = _ZN12ImGuiStorage9SetAllIntEi;
-
-extern fn _ZN12ImGuiStorage14BuildSortByKeyEv(self: *ImGuiStorage) void;
-pub const BuildSortByKey = _ZN12ImGuiStorage14BuildSortByKeyEv;
-
+    extern fn _ZN12ImGuiStorage14BuildSortByKeyEv(self: *ImGuiStorage) void;
+    pub const BuildSortByKey = _ZN12ImGuiStorage14BuildSortByKeyEv;
 };
 
 pub const ImGuiListClipper = extern struct {
-    Ctx: [*c]ImGuiContext,
+    Ctx: ?*ImGuiContext,
     DisplayStart: c_int,
     DisplayEnd: c_int,
     ItemsCount: c_int,
@@ -2954,66 +2890,62 @@ pub const ImGuiListClipper = extern struct {
     StartPosY: f32,
     TempData: ?*anyopaque,
 
-extern fn _ZN16ImGuiListClipperC1Ev(self: *ImGuiListClipper) void;
-pub inline fn init() ImGuiListClipper {
-    var self: ImGuiListClipper = undefined;
-    _ZN16ImGuiListClipperC1Ev(&self);    return self;
-}
+    extern fn _ZN16ImGuiListClipperC1Ev(self: *ImGuiListClipper) void;
+    pub inline fn init() ImGuiListClipper {
+        var self: ImGuiListClipper = undefined;
+        _ZN16ImGuiListClipperC1Ev(&self);
+        return self;
+    }
 
     extern fn _ZN16ImGuiListClipperD1Ev(self: *ImGuiListClipper) void;
-    pub inline fn deinit(self: *ImGuiListClipper) void { self._ZN16ImGuiListClipperD1Ev(); }
+    pub inline fn deinit(self: *ImGuiListClipper) void {
+        self._ZN16ImGuiListClipperD1Ev();
+    }
 
-extern fn _ZN16ImGuiListClipper5BeginEif(self: *ImGuiListClipper, items_count: c_int, items_height: f32) void;
-pub const Begin = _ZN16ImGuiListClipper5BeginEif;
+    extern fn _ZN16ImGuiListClipper5BeginEif(self: *ImGuiListClipper, items_count: c_int, items_height: f32) void;
+    pub const Begin = _ZN16ImGuiListClipper5BeginEif;
 
-extern fn _ZN16ImGuiListClipper3EndEv(self: *ImGuiListClipper) void;
-pub const End = _ZN16ImGuiListClipper3EndEv;
+    extern fn _ZN16ImGuiListClipper3EndEv(self: *ImGuiListClipper) void;
+    pub const End = _ZN16ImGuiListClipper3EndEv;
 
-extern fn _ZN16ImGuiListClipper4StepEv(self: *ImGuiListClipper) bool;
-pub const Step = _ZN16ImGuiListClipper4StepEv;
+    extern fn _ZN16ImGuiListClipper4StepEv(self: *ImGuiListClipper) bool;
+    pub const Step = _ZN16ImGuiListClipper4StepEv;
 
-extern fn _ZN16ImGuiListClipper26ForceDisplayRangeByIndicesEii(self: *ImGuiListClipper, item_min: c_int, item_max: c_int) void;
-pub const ForceDisplayRangeByIndices = _ZN16ImGuiListClipper26ForceDisplayRangeByIndicesEii;
-
-extern fn _ZN16ImGuiListClipperC1Eif(self: *ImGuiListClipper, items_count: c_int, items_height: f32) void;
-pub inline fn init1(items_count: c_int, items_height: f32) ImGuiListClipper {
-    var self: ImGuiListClipper = undefined;
-    _ZN16ImGuiListClipperC1Eif(&self, items_count, items_height);    return self;
-}
-
+    extern fn _ZN16ImGuiListClipper26ForceDisplayRangeByIndicesEii(self: *ImGuiListClipper, item_min: c_int, item_max: c_int) void;
+    pub const ForceDisplayRangeByIndices = _ZN16ImGuiListClipper26ForceDisplayRangeByIndicesEii;
 };
 
 pub const ImColor = extern struct {
     Value: ImVec4,
 
-extern fn _ZN7ImColorC1Eiiii(self: *ImColor, r: c_int, g: c_int, b: c_int, a: c_int) void;
-pub inline fn init(r: c_int, g: c_int, b: c_int, a: c_int) ImColor {
-    var self: ImColor = undefined;
-    _ZN7ImColorC1Eiiii(&self, r, g, b, a);    return self;
-}
+    extern fn _ZN7ImColorC1Eiiii(self: *ImColor, r: c_int, g: c_int, b: c_int, a: c_int) void;
+    pub inline fn init(r: c_int, g: c_int, b: c_int, a: c_int) ImColor {
+        var self: ImColor = undefined;
+        _ZN7ImColorC1Eiiii(&self, r, g, b, a);
+        return self;
+    }
 
-extern fn _ZN7ImColorC1Ej(self: *ImColor, rgba: ImU32) void;
-pub inline fn init1(rgba: ImU32) ImColor {
-    var self: ImColor = undefined;
-    _ZN7ImColorC1Ej(&self, rgba);    return self;
-}
+    extern fn _ZN7ImColorC1Ej(self: *ImColor, rgba: ImU32) void;
+    pub inline fn init1(rgba: ImU32) ImColor {
+        var self: ImColor = undefined;
+        _ZN7ImColorC1Ej(&self, rgba);
+        return self;
+    }
 
-pub inline fn SetHSV(self: *ImColor, h: f32, s: f32, v: f32, a: f32) void {
-ColorConvertHSVtoRGB(h, s, v, self.Value.x, self.Value.y, self.Value.z);
-self.Value.w = a;
-}
-
-pub fn HSV(self: *ImColor, h: f32, s: f32, v: f32, a: f32) ImColor {
-var r: f32;
-var g: f32;
-var b: f32;
-ColorConvertHSVtoRGB(h, s, v, r, g, b);
-return ;
-}
-
+    pub inline fn SetHSV(self: *ImColor, h: f32, s: f32, v: f32, a: f32) void {
+        ColorConvertHSVtoRGB(h, s, v, self.Value.x, self.Value.y, self.Value.z);
+        self.Value.w = a;
+    }
+    pub fn HSV(self: *ImColor, h: f32, s: f32, v: f32, a: f32) ImColor {
+        var r: f32;
+        var g: f32;
+        var b: f32;
+        ColorConvertHSVtoRGB(h, s, v, r, g, b);
+        return;
+    }
 };
 
-pub const ImDrawCallback = ?*const fn([*c]const ImDrawList,[*c]const ImDrawCmd) callconv(.C) void ;
+pub const ImDrawCallback = ?*const fn ([*c]const ImDrawList, [*c]const ImDrawCmd) callconv(.C) void;
 
 pub const ImDrawCmd = extern struct {
     ClipRect: ImVec4,
@@ -3024,16 +2956,16 @@ pub const ImDrawCmd = extern struct {
     UserCallback: ImDrawCallback,
     UserCallbackData: ?*anyopaque,
 
-extern fn _ZN9ImDrawCmdC1Ev(self: *ImDrawCmd) void;
-pub inline fn init() ImDrawCmd {
-    var self: ImDrawCmd = undefined;
-    _ZN9ImDrawCmdC1Ev(&self);    return self;
-}
+    extern fn _ZN9ImDrawCmdC1Ev(self: *ImDrawCmd) void;
+    pub inline fn init() ImDrawCmd {
+        var self: ImDrawCmd = undefined;
+        _ZN9ImDrawCmdC1Ev(&self);
+        return self;
+    }
 
-pub inline fn GetTexID(self: *const ImDrawCmd) ImTextureID {
-return self.TextureId;
-}
-
+    pub inline fn GetTexID(self: *const ImDrawCmd) ImTextureID {
+        return self.TextureId;
+    }
 };
 
 pub const ImDrawVert = extern struct {
@@ -3058,32 +2990,33 @@ pub const ImDrawListSplitter = extern struct {
     _Count: c_int,
     _Channels: ImVector(ImDrawChannel),
 
-extern fn _ZN18ImDrawListSplitterC1Ev(self: *ImDrawListSplitter) void;
-pub inline fn init() ImDrawListSplitter {
-    var self: ImDrawListSplitter = undefined;
-    _ZN18ImDrawListSplitterC1Ev(&self);    return self;
-}
+    extern fn _ZN18ImDrawListSplitterC1Ev(self: *ImDrawListSplitter) void;
+    pub inline fn init() ImDrawListSplitter {
+        var self: ImDrawListSplitter = undefined;
+        _ZN18ImDrawListSplitterC1Ev(&self);
+        return self;
+    }
 
     extern fn _ZN18ImDrawListSplitterD1Ev(self: *ImDrawListSplitter) void;
-    pub inline fn deinit(self: *ImDrawListSplitter) void { self._ZN18ImDrawListSplitterD1Ev(); }
+    pub inline fn deinit(self: *ImDrawListSplitter) void {
+        self._ZN18ImDrawListSplitterD1Ev();
+    }
 
-pub inline fn Clear(self: *ImDrawListSplitter) void {
-self._Current = 0;
-self._Count = 1;
-}
+    pub inline fn Clear(self: *ImDrawListSplitter) void {
+        self._Current = 0;
+        self._Count = 1;
+    }
+    extern fn _ZN18ImDrawListSplitter15ClearFreeMemoryEv(self: *ImDrawListSplitter) void;
+    pub const ClearFreeMemory = _ZN18ImDrawListSplitter15ClearFreeMemoryEv;
 
-extern fn _ZN18ImDrawListSplitter15ClearFreeMemoryEv(self: *ImDrawListSplitter) void;
-pub const ClearFreeMemory = _ZN18ImDrawListSplitter15ClearFreeMemoryEv;
+    extern fn _ZN18ImDrawListSplitter5SplitEP10ImDrawListi(self: *ImDrawListSplitter, draw_list: [*c]ImDrawList, count: c_int) void;
+    pub const Split = _ZN18ImDrawListSplitter5SplitEP10ImDrawListi;
 
-extern fn _ZN18ImDrawListSplitter5SplitEP10ImDrawListi(self: *ImDrawListSplitter, draw_list: [*c]ImDrawList, count: c_int) void;
-pub const Split = _ZN18ImDrawListSplitter5SplitEP10ImDrawListi;
+    extern fn _ZN18ImDrawListSplitter5MergeEP10ImDrawList(self: *ImDrawListSplitter, draw_list: [*c]ImDrawList) void;
+    pub const Merge = _ZN18ImDrawListSplitter5MergeEP10ImDrawList;
 
-extern fn _ZN18ImDrawListSplitter5MergeEP10ImDrawList(self: *ImDrawListSplitter, draw_list: [*c]ImDrawList) void;
-pub const Merge = _ZN18ImDrawListSplitter5MergeEP10ImDrawList;
-
-extern fn _ZN18ImDrawListSplitter17SetCurrentChannelEP10ImDrawListi(self: *ImDrawListSplitter, draw_list: [*c]ImDrawList, channel_idx: c_int) void;
-pub const SetCurrentChannel = _ZN18ImDrawListSplitter17SetCurrentChannelEP10ImDrawListi;
-
+    extern fn _ZN18ImDrawListSplitter17SetCurrentChannelEP10ImDrawListi(self: *ImDrawListSplitter, draw_list: [*c]ImDrawList, channel_idx: c_int) void;
+    pub const SetCurrentChannel = _ZN18ImDrawListSplitter17SetCurrentChannelEP10ImDrawListi;
 };
 
 pub const ImDrawFlags_ = extern struct {
@@ -3125,7 +3058,7 @@ pub const ImDrawList = extern struct {
     VtxBuffer: ImVector(ImDrawVert),
     Flags: ImDrawListFlags,
     _VtxCurrentIdx: c_uint,
-    _Data: [*c]ImDrawListSharedData,
+    _Data: ?*ImDrawListSharedData,
     _OwnerName: [*c]const u8,
     _VtxWritePtr: [*c]ImDrawVert,
     _IdxWritePtr: [*c]ImDrawIdx,
@@ -3136,224 +3069,213 @@ pub const ImDrawList = extern struct {
     _Splitter: ImDrawListSplitter,
     _FringeScale: f32,
 
-extern fn _ZN10ImDrawListC1EP20ImDrawListSharedData(self: *ImDrawList, shared_data: [*c]ImDrawListSharedData) void;
-pub inline fn init(shared_data: [*c]ImDrawListSharedData) ImDrawList {
-    var self: ImDrawList = undefined;
-    _ZN10ImDrawListC1EP20ImDrawListSharedData(&self, shared_data);    return self;
-}
+    extern fn _ZN10ImDrawListC1EP20ImDrawListSharedData(self: *ImDrawList, shared_data: ?*ImDrawListSharedData) void;
+    pub inline fn init(shared_data: ?*ImDrawListSharedData) ImDrawList {
+        var self: ImDrawList = undefined;
+        _ZN10ImDrawListC1EP20ImDrawListSharedData(&self, shared_data);
+        return self;
+    }
 
     extern fn _ZN10ImDrawListD1Ev(self: *ImDrawList) void;
-    pub inline fn deinit(self: *ImDrawList) void { self._ZN10ImDrawListD1Ev(); }
+    pub inline fn deinit(self: *ImDrawList) void {
+        self._ZN10ImDrawListD1Ev();
+    }
 
-extern fn _ZN10ImDrawList12PushClipRectERK6ImVec2S2_b(self: *ImDrawList, clip_rect_min: *const ImVec2, clip_rect_max: *const ImVec2, intersect_with_current_clip_rect: bool) void;
-pub const PushClipRect = _ZN10ImDrawList12PushClipRectERK6ImVec2S2_b;
+    extern fn _ZN10ImDrawList12PushClipRectERK6ImVec2S2_b(self: *ImDrawList, clip_rect_min: *const ImVec2, clip_rect_max: *const ImVec2, intersect_with_current_clip_rect: bool) void;
+    pub const PushClipRect = _ZN10ImDrawList12PushClipRectERK6ImVec2S2_b;
 
-extern fn _ZN10ImDrawList22PushClipRectFullScreenEv(self: *ImDrawList) void;
-pub const PushClipRectFullScreen = _ZN10ImDrawList22PushClipRectFullScreenEv;
+    extern fn _ZN10ImDrawList22PushClipRectFullScreenEv(self: *ImDrawList) void;
+    pub const PushClipRectFullScreen = _ZN10ImDrawList22PushClipRectFullScreenEv;
 
-extern fn _ZN10ImDrawList11PopClipRectEv(self: *ImDrawList) void;
-pub const PopClipRect = _ZN10ImDrawList11PopClipRectEv;
+    extern fn _ZN10ImDrawList11PopClipRectEv(self: *ImDrawList) void;
+    pub const PopClipRect = _ZN10ImDrawList11PopClipRectEv;
 
-extern fn _ZN10ImDrawList13PushTextureIDEPv(self: *ImDrawList, texture_id: ImTextureID) void;
-pub const PushTextureID = _ZN10ImDrawList13PushTextureIDEPv;
+    extern fn _ZN10ImDrawList13PushTextureIDEPv(self: *ImDrawList, texture_id: ImTextureID) void;
+    pub const PushTextureID = _ZN10ImDrawList13PushTextureIDEPv;
 
-extern fn _ZN10ImDrawList12PopTextureIDEv(self: *ImDrawList) void;
-pub const PopTextureID = _ZN10ImDrawList12PopTextureIDEv;
+    extern fn _ZN10ImDrawList12PopTextureIDEv(self: *ImDrawList) void;
+    pub const PopTextureID = _ZN10ImDrawList12PopTextureIDEv;
 
-pub inline fn GetClipRectMin(self: *const ImDrawList) ImVec2 {
-const cr: *ImVec4 = self.back();
-return ;
-}
+    pub inline fn GetClipRectMin(self: *const ImDrawList) ImVec2 {
+        const cr: *ImVec4 = self.back();
+        return;
+    }
+    pub inline fn GetClipRectMax(self: *const ImDrawList) ImVec2 {
+        const cr: *ImVec4 = self.back();
+        return;
+    }
+    extern fn _ZN10ImDrawList7AddLineERK6ImVec2S2_jf(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, col: ImU32, thickness: f32) void;
+    pub const AddLine = _ZN10ImDrawList7AddLineERK6ImVec2S2_jf;
 
-pub inline fn GetClipRectMax(self: *const ImDrawList) ImVec2 {
-const cr: *ImVec4 = self.back();
-return ;
-}
+    extern fn _ZN10ImDrawList7AddRectERK6ImVec2S2_jfif(self: *ImDrawList, p_min: *const ImVec2, p_max: *const ImVec2, col: ImU32, rounding: f32, flags: ImDrawFlags, thickness: f32) void;
+    pub const AddRect = _ZN10ImDrawList7AddRectERK6ImVec2S2_jfif;
 
-extern fn _ZN10ImDrawList7AddLineERK6ImVec2S2_jf(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, col: ImU32, thickness: f32) void;
-pub const AddLine = _ZN10ImDrawList7AddLineERK6ImVec2S2_jf;
+    extern fn _ZN10ImDrawList13AddRectFilledERK6ImVec2S2_jfi(self: *ImDrawList, p_min: *const ImVec2, p_max: *const ImVec2, col: ImU32, rounding: f32, flags: ImDrawFlags) void;
+    pub const AddRectFilled = _ZN10ImDrawList13AddRectFilledERK6ImVec2S2_jfi;
 
-extern fn _ZN10ImDrawList7AddRectERK6ImVec2S2_jfif(self: *ImDrawList, p_min: *const ImVec2, p_max: *const ImVec2, col: ImU32, rounding: f32, flags: ImDrawFlags, thickness: f32) void;
-pub const AddRect = _ZN10ImDrawList7AddRectERK6ImVec2S2_jfif;
+    extern fn _ZN10ImDrawList23AddRectFilledMultiColorERK6ImVec2S2_jjjj(self: *ImDrawList, p_min: *const ImVec2, p_max: *const ImVec2, col_upr_left: ImU32, col_upr_right: ImU32, col_bot_right: ImU32, col_bot_left: ImU32) void;
+    pub const AddRectFilledMultiColor = _ZN10ImDrawList23AddRectFilledMultiColorERK6ImVec2S2_jjjj;
 
-extern fn _ZN10ImDrawList13AddRectFilledERK6ImVec2S2_jfi(self: *ImDrawList, p_min: *const ImVec2, p_max: *const ImVec2, col: ImU32, rounding: f32, flags: ImDrawFlags) void;
-pub const AddRectFilled = _ZN10ImDrawList13AddRectFilledERK6ImVec2S2_jfi;
+    extern fn _ZN10ImDrawList7AddQuadERK6ImVec2S2_S2_S2_jf(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, p4: *const ImVec2, col: ImU32, thickness: f32) void;
+    pub const AddQuad = _ZN10ImDrawList7AddQuadERK6ImVec2S2_S2_S2_jf;
 
-extern fn _ZN10ImDrawList23AddRectFilledMultiColorERK6ImVec2S2_jjjj(self: *ImDrawList, p_min: *const ImVec2, p_max: *const ImVec2, col_upr_left: ImU32, col_upr_right: ImU32, col_bot_right: ImU32, col_bot_left: ImU32) void;
-pub const AddRectFilledMultiColor = _ZN10ImDrawList23AddRectFilledMultiColorERK6ImVec2S2_jjjj;
+    extern fn _ZN10ImDrawList13AddQuadFilledERK6ImVec2S2_S2_S2_j(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, p4: *const ImVec2, col: ImU32) void;
+    pub const AddQuadFilled = _ZN10ImDrawList13AddQuadFilledERK6ImVec2S2_S2_S2_j;
 
-extern fn _ZN10ImDrawList7AddQuadERK6ImVec2S2_S2_S2_jf(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, p4: *const ImVec2, col: ImU32, thickness: f32) void;
-pub const AddQuad = _ZN10ImDrawList7AddQuadERK6ImVec2S2_S2_S2_jf;
+    extern fn _ZN10ImDrawList11AddTriangleERK6ImVec2S2_S2_jf(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, col: ImU32, thickness: f32) void;
+    pub const AddTriangle = _ZN10ImDrawList11AddTriangleERK6ImVec2S2_S2_jf;
 
-extern fn _ZN10ImDrawList13AddQuadFilledERK6ImVec2S2_S2_S2_j(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, p4: *const ImVec2, col: ImU32) void;
-pub const AddQuadFilled = _ZN10ImDrawList13AddQuadFilledERK6ImVec2S2_S2_S2_j;
+    extern fn _ZN10ImDrawList17AddTriangleFilledERK6ImVec2S2_S2_j(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, col: ImU32) void;
+    pub const AddTriangleFilled = _ZN10ImDrawList17AddTriangleFilledERK6ImVec2S2_S2_j;
 
-extern fn _ZN10ImDrawList11AddTriangleERK6ImVec2S2_S2_jf(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, col: ImU32, thickness: f32) void;
-pub const AddTriangle = _ZN10ImDrawList11AddTriangleERK6ImVec2S2_S2_jf;
+    extern fn _ZN10ImDrawList9AddCircleERK6ImVec2fjif(self: *ImDrawList, center: *const ImVec2, radius: f32, col: ImU32, num_segments: c_int, thickness: f32) void;
+    pub const AddCircle = _ZN10ImDrawList9AddCircleERK6ImVec2fjif;
 
-extern fn _ZN10ImDrawList17AddTriangleFilledERK6ImVec2S2_S2_j(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, col: ImU32) void;
-pub const AddTriangleFilled = _ZN10ImDrawList17AddTriangleFilledERK6ImVec2S2_S2_j;
+    extern fn _ZN10ImDrawList15AddCircleFilledERK6ImVec2fji(self: *ImDrawList, center: *const ImVec2, radius: f32, col: ImU32, num_segments: c_int) void;
+    pub const AddCircleFilled = _ZN10ImDrawList15AddCircleFilledERK6ImVec2fji;
 
-extern fn _ZN10ImDrawList9AddCircleERK6ImVec2fjif(self: *ImDrawList, center: *const ImVec2, radius: f32, col: ImU32, num_segments: c_int, thickness: f32) void;
-pub const AddCircle = _ZN10ImDrawList9AddCircleERK6ImVec2fjif;
+    extern fn _ZN10ImDrawList7AddNgonERK6ImVec2fjif(self: *ImDrawList, center: *const ImVec2, radius: f32, col: ImU32, num_segments: c_int, thickness: f32) void;
+    pub const AddNgon = _ZN10ImDrawList7AddNgonERK6ImVec2fjif;
 
-extern fn _ZN10ImDrawList15AddCircleFilledERK6ImVec2fji(self: *ImDrawList, center: *const ImVec2, radius: f32, col: ImU32, num_segments: c_int) void;
-pub const AddCircleFilled = _ZN10ImDrawList15AddCircleFilledERK6ImVec2fji;
+    extern fn _ZN10ImDrawList13AddNgonFilledERK6ImVec2fji(self: *ImDrawList, center: *const ImVec2, radius: f32, col: ImU32, num_segments: c_int) void;
+    pub const AddNgonFilled = _ZN10ImDrawList13AddNgonFilledERK6ImVec2fji;
 
-extern fn _ZN10ImDrawList7AddNgonERK6ImVec2fjif(self: *ImDrawList, center: *const ImVec2, radius: f32, col: ImU32, num_segments: c_int, thickness: f32) void;
-pub const AddNgon = _ZN10ImDrawList7AddNgonERK6ImVec2fjif;
+    extern fn _ZN10ImDrawList7AddTextERK6ImVec2jPKcS4_(self: *ImDrawList, pos: *const ImVec2, col: ImU32, text_begin: [*c]const u8, text_end: [*c]const u8) void;
+    pub const AddText = _ZN10ImDrawList7AddTextERK6ImVec2jPKcS4_;
 
-extern fn _ZN10ImDrawList13AddNgonFilledERK6ImVec2fji(self: *ImDrawList, center: *const ImVec2, radius: f32, col: ImU32, num_segments: c_int) void;
-pub const AddNgonFilled = _ZN10ImDrawList13AddNgonFilledERK6ImVec2fji;
+    extern fn _ZN10ImDrawList7AddTextEPK6ImFontfRK6ImVec2jPKcS7_fPK6ImVec4(self: *ImDrawList, font: [*c]const ImFont, font_size: f32, pos: *const ImVec2, col: ImU32, text_begin: [*c]const u8, text_end: [*c]const u8, wrap_width: f32, cpu_fine_clip_rect: [*c]const ImVec4) void;
+    pub const AddText__Overload2 = _ZN10ImDrawList7AddTextEPK6ImFontfRK6ImVec2jPKcS7_fPK6ImVec4;
 
-extern fn _ZN10ImDrawList7AddTextERK6ImVec2jPKcS4_(self: *ImDrawList, pos: *const ImVec2, col: ImU32, text_begin: [*c]const u8, text_end: [*c]const u8) void;
-pub const AddText = _ZN10ImDrawList7AddTextERK6ImVec2jPKcS4_;
+    extern fn _ZN10ImDrawList11AddPolylineEPK6ImVec2ijif(self: *ImDrawList, points: [*c]const ImVec2, num_points: c_int, col: ImU32, flags: ImDrawFlags, thickness: f32) void;
+    pub const AddPolyline = _ZN10ImDrawList11AddPolylineEPK6ImVec2ijif;
 
-extern fn _ZN10ImDrawList7AddTextEPK6ImFontfRK6ImVec2jPKcS7_fPK6ImVec4(self: *ImDrawList, font: [*c]const ImFont, font_size: f32, pos: *const ImVec2, col: ImU32, text_begin: [*c]const u8, text_end: [*c]const u8, wrap_width: f32, cpu_fine_clip_rect: [*c]const ImVec4) void;
-pub const AddText = _ZN10ImDrawList7AddTextEPK6ImFontfRK6ImVec2jPKcS7_fPK6ImVec4;
+    extern fn _ZN10ImDrawList19AddConvexPolyFilledEPK6ImVec2ij(self: *ImDrawList, points: [*c]const ImVec2, num_points: c_int, col: ImU32) void;
+    pub const AddConvexPolyFilled = _ZN10ImDrawList19AddConvexPolyFilledEPK6ImVec2ij;
 
-extern fn _ZN10ImDrawList11AddPolylineEPK6ImVec2ijif(self: *ImDrawList, points: [*c]const ImVec2, num_points: c_int, col: ImU32, flags: ImDrawFlags, thickness: f32) void;
-pub const AddPolyline = _ZN10ImDrawList11AddPolylineEPK6ImVec2ijif;
+    extern fn _ZN10ImDrawList14AddBezierCubicERK6ImVec2S2_S2_S2_jfi(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, p4: *const ImVec2, col: ImU32, thickness: f32, num_segments: c_int) void;
+    pub const AddBezierCubic = _ZN10ImDrawList14AddBezierCubicERK6ImVec2S2_S2_S2_jfi;
 
-extern fn _ZN10ImDrawList19AddConvexPolyFilledEPK6ImVec2ij(self: *ImDrawList, points: [*c]const ImVec2, num_points: c_int, col: ImU32) void;
-pub const AddConvexPolyFilled = _ZN10ImDrawList19AddConvexPolyFilledEPK6ImVec2ij;
+    extern fn _ZN10ImDrawList18AddBezierQuadraticERK6ImVec2S2_S2_jfi(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, col: ImU32, thickness: f32, num_segments: c_int) void;
+    pub const AddBezierQuadratic = _ZN10ImDrawList18AddBezierQuadraticERK6ImVec2S2_S2_jfi;
 
-extern fn _ZN10ImDrawList14AddBezierCubicERK6ImVec2S2_S2_S2_jfi(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, p4: *const ImVec2, col: ImU32, thickness: f32, num_segments: c_int) void;
-pub const AddBezierCubic = _ZN10ImDrawList14AddBezierCubicERK6ImVec2S2_S2_S2_jfi;
+    extern fn _ZN10ImDrawList8AddImageEPvRK6ImVec2S3_S3_S3_j(self: *ImDrawList, user_texture_id: ImTextureID, p_min: *const ImVec2, p_max: *const ImVec2, uv_min: *const ImVec2, uv_max: *const ImVec2, col: ImU32) void;
+    pub const AddImage = _ZN10ImDrawList8AddImageEPvRK6ImVec2S3_S3_S3_j;
 
-extern fn _ZN10ImDrawList18AddBezierQuadraticERK6ImVec2S2_S2_jfi(self: *ImDrawList, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, col: ImU32, thickness: f32, num_segments: c_int) void;
-pub const AddBezierQuadratic = _ZN10ImDrawList18AddBezierQuadraticERK6ImVec2S2_S2_jfi;
+    extern fn _ZN10ImDrawList12AddImageQuadEPvRK6ImVec2S3_S3_S3_S3_S3_S3_S3_j(self: *ImDrawList, user_texture_id: ImTextureID, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, p4: *const ImVec2, uv1: *const ImVec2, uv2: *const ImVec2, uv3: *const ImVec2, uv4: *const ImVec2, col: ImU32) void;
+    pub const AddImageQuad = _ZN10ImDrawList12AddImageQuadEPvRK6ImVec2S3_S3_S3_S3_S3_S3_S3_j;
 
-extern fn _ZN10ImDrawList8AddImageEPvRK6ImVec2S3_S3_S3_j(self: *ImDrawList, user_texture_id: ImTextureID, p_min: *const ImVec2, p_max: *const ImVec2, uv_min: *const ImVec2, uv_max: *const ImVec2, col: ImU32) void;
-pub const AddImage = _ZN10ImDrawList8AddImageEPvRK6ImVec2S3_S3_S3_j;
+    extern fn _ZN10ImDrawList15AddImageRoundedEPvRK6ImVec2S3_S3_S3_jfi(self: *ImDrawList, user_texture_id: ImTextureID, p_min: *const ImVec2, p_max: *const ImVec2, uv_min: *const ImVec2, uv_max: *const ImVec2, col: ImU32, rounding: f32, flags: ImDrawFlags) void;
+    pub const AddImageRounded = _ZN10ImDrawList15AddImageRoundedEPvRK6ImVec2S3_S3_S3_jfi;
 
-extern fn _ZN10ImDrawList12AddImageQuadEPvRK6ImVec2S3_S3_S3_S3_S3_S3_S3_j(self: *ImDrawList, user_texture_id: ImTextureID, p1: *const ImVec2, p2: *const ImVec2, p3: *const ImVec2, p4: *const ImVec2, uv1: *const ImVec2, uv2: *const ImVec2, uv3: *const ImVec2, uv4: *const ImVec2, col: ImU32) void;
-pub const AddImageQuad = _ZN10ImDrawList12AddImageQuadEPvRK6ImVec2S3_S3_S3_S3_S3_S3_S3_j;
+    pub inline fn PathClear(self: *ImDrawList) void {
+        self._Path.Size = 0;
+    }
+    pub inline fn PathLineTo(self: *ImDrawList, pos: *const ImVec2) void {
+        self.push_back(pos);
+    }
+    pub inline fn PathLineToMergeDuplicate(self: *ImDrawList, pos: *const ImVec2) void {
+        if (self._Path.Size == 0 or memcmp(@bitCast(?*const anyopaque, &self._Path.Data[self._Path.Size - 1]), @bitCast(?*const anyopaque, &pos), @intCast(usize, 8)) != 0) self.push_back(pos);
+    }
+    pub inline fn PathFillConvex(self: *ImDrawList, col: ImU32) void {
+        self.AddConvexPolyFilled(self._Path.Data, self._Path.Size, col);
+        self._Path.Size = 0;
+    }
+    pub inline fn PathStroke(self: *ImDrawList, col: ImU32, flags: ImDrawFlags, thickness: f32) void {
+        self.AddPolyline(self._Path.Data, self._Path.Size, col, flags, thickness);
+        self._Path.Size = 0;
+    }
+    extern fn _ZN10ImDrawList9PathArcToERK6ImVec2fffi(self: *ImDrawList, center: *const ImVec2, radius: f32, a_min: f32, a_max: f32, num_segments: c_int) void;
+    pub const PathArcTo = _ZN10ImDrawList9PathArcToERK6ImVec2fffi;
 
-extern fn _ZN10ImDrawList15AddImageRoundedEPvRK6ImVec2S3_S3_S3_jfi(self: *ImDrawList, user_texture_id: ImTextureID, p_min: *const ImVec2, p_max: *const ImVec2, uv_min: *const ImVec2, uv_max: *const ImVec2, col: ImU32, rounding: f32, flags: ImDrawFlags) void;
-pub const AddImageRounded = _ZN10ImDrawList15AddImageRoundedEPvRK6ImVec2S3_S3_S3_jfi;
+    extern fn _ZN10ImDrawList13PathArcToFastERK6ImVec2fii(self: *ImDrawList, center: *const ImVec2, radius: f32, a_min_of_12: c_int, a_max_of_12: c_int) void;
+    pub const PathArcToFast = _ZN10ImDrawList13PathArcToFastERK6ImVec2fii;
 
-pub inline fn PathClear(self: *ImDrawList) void {
-self._Path.Size = 0;
-}
+    extern fn _ZN10ImDrawList22PathBezierCubicCurveToERK6ImVec2S2_S2_i(self: *ImDrawList, p2: *const ImVec2, p3: *const ImVec2, p4: *const ImVec2, num_segments: c_int) void;
+    pub const PathBezierCubicCurveTo = _ZN10ImDrawList22PathBezierCubicCurveToERK6ImVec2S2_S2_i;
 
-pub inline fn PathLineTo(self: *ImDrawList, pos: *const ImVec2) void {
-self.push_back(pos);
-}
+    extern fn _ZN10ImDrawList26PathBezierQuadraticCurveToERK6ImVec2S2_i(self: *ImDrawList, p2: *const ImVec2, p3: *const ImVec2, num_segments: c_int) void;
+    pub const PathBezierQuadraticCurveTo = _ZN10ImDrawList26PathBezierQuadraticCurveToERK6ImVec2S2_i;
 
-pub inline fn PathLineToMergeDuplicate(self: *ImDrawList, pos: *const ImVec2) void {
- if (self._Path.Size == 0 or memcmp(@bitCast(?*const anyopaque, &self._Path.Data[self._Path.Size - 1]), @bitCast(?*const anyopaque, &pos), @intCast(usize, 8)) != 0) self.push_back(pos);
-}
+    extern fn _ZN10ImDrawList8PathRectERK6ImVec2S2_fi(self: *ImDrawList, rect_min: *const ImVec2, rect_max: *const ImVec2, rounding: f32, flags: ImDrawFlags) void;
+    pub const PathRect = _ZN10ImDrawList8PathRectERK6ImVec2S2_fi;
 
-pub inline fn PathFillConvex(self: *ImDrawList, col: ImU32) void {
-self.AddConvexPolyFilled(self._Path.Data, self._Path.Size, col);
-self._Path.Size = 0;
-}
+    extern fn _ZN10ImDrawList11AddCallbackEPFvPKS_PK9ImDrawCmdEPv(self: *ImDrawList, callback: ImDrawCallback, callback_data: ?*anyopaque) void;
+    pub const AddCallback = _ZN10ImDrawList11AddCallbackEPFvPKS_PK9ImDrawCmdEPv;
 
-pub inline fn PathStroke(self: *ImDrawList, col: ImU32, flags: ImDrawFlags, thickness: f32) void {
-self.AddPolyline(self._Path.Data, self._Path.Size, col, flags, thickness);
-self._Path.Size = 0;
-}
+    extern fn _ZN10ImDrawList10AddDrawCmdEv(self: *ImDrawList) void;
+    pub const AddDrawCmd = _ZN10ImDrawList10AddDrawCmdEv;
 
-extern fn _ZN10ImDrawList9PathArcToERK6ImVec2fffi(self: *ImDrawList, center: *const ImVec2, radius: f32, a_min: f32, a_max: f32, num_segments: c_int) void;
-pub const PathArcTo = _ZN10ImDrawList9PathArcToERK6ImVec2fffi;
+    extern fn _ZNK10ImDrawList11CloneOutputEv(self: *const ImDrawList) [*c]ImDrawList;
+    pub const CloneOutput = _ZNK10ImDrawList11CloneOutputEv;
 
-extern fn _ZN10ImDrawList13PathArcToFastERK6ImVec2fii(self: *ImDrawList, center: *const ImVec2, radius: f32, a_min_of_12: c_int, a_max_of_12: c_int) void;
-pub const PathArcToFast = _ZN10ImDrawList13PathArcToFastERK6ImVec2fii;
+    pub inline fn ChannelsSplit(self: *ImDrawList, count: c_int) void {
+        self.Split(self, count);
+    }
+    pub inline fn ChannelsMerge(self: *ImDrawList) void {
+        self.Merge(self);
+    }
+    pub inline fn ChannelsSetCurrent(self: *ImDrawList, n: c_int) void {
+        self.SetCurrentChannel(self, n);
+    }
+    extern fn _ZN10ImDrawList11PrimReserveEii(self: *ImDrawList, idx_count: c_int, vtx_count: c_int) void;
+    pub const PrimReserve = _ZN10ImDrawList11PrimReserveEii;
 
-extern fn _ZN10ImDrawList22PathBezierCubicCurveToERK6ImVec2S2_S2_i(self: *ImDrawList, p2: *const ImVec2, p3: *const ImVec2, p4: *const ImVec2, num_segments: c_int) void;
-pub const PathBezierCubicCurveTo = _ZN10ImDrawList22PathBezierCubicCurveToERK6ImVec2S2_S2_i;
+    extern fn _ZN10ImDrawList13PrimUnreserveEii(self: *ImDrawList, idx_count: c_int, vtx_count: c_int) void;
+    pub const PrimUnreserve = _ZN10ImDrawList13PrimUnreserveEii;
 
-extern fn _ZN10ImDrawList26PathBezierQuadraticCurveToERK6ImVec2S2_i(self: *ImDrawList, p2: *const ImVec2, p3: *const ImVec2, num_segments: c_int) void;
-pub const PathBezierQuadraticCurveTo = _ZN10ImDrawList26PathBezierQuadraticCurveToERK6ImVec2S2_i;
+    extern fn _ZN10ImDrawList8PrimRectERK6ImVec2S2_j(self: *ImDrawList, a: *const ImVec2, b: *const ImVec2, col: ImU32) void;
+    pub const PrimRect = _ZN10ImDrawList8PrimRectERK6ImVec2S2_j;
 
-extern fn _ZN10ImDrawList8PathRectERK6ImVec2S2_fi(self: *ImDrawList, rect_min: *const ImVec2, rect_max: *const ImVec2, rounding: f32, flags: ImDrawFlags) void;
-pub const PathRect = _ZN10ImDrawList8PathRectERK6ImVec2S2_fi;
+    extern fn _ZN10ImDrawList10PrimRectUVERK6ImVec2S2_S2_S2_j(self: *ImDrawList, a: *const ImVec2, b: *const ImVec2, uv_a: *const ImVec2, uv_b: *const ImVec2, col: ImU32) void;
+    pub const PrimRectUV = _ZN10ImDrawList10PrimRectUVERK6ImVec2S2_S2_S2_j;
 
-extern fn _ZN10ImDrawList11AddCallbackEPFvPKS_PK9ImDrawCmdEPv(self: *ImDrawList, callback: ImDrawCallback, callback_data: ?*anyopaque) void;
-pub const AddCallback = _ZN10ImDrawList11AddCallbackEPFvPKS_PK9ImDrawCmdEPv;
+    extern fn _ZN10ImDrawList10PrimQuadUVERK6ImVec2S2_S2_S2_S2_S2_S2_S2_j(self: *ImDrawList, a: *const ImVec2, b: *const ImVec2, c: *const ImVec2, d: *const ImVec2, uv_a: *const ImVec2, uv_b: *const ImVec2, uv_c: *const ImVec2, uv_d: *const ImVec2, col: ImU32) void;
+    pub const PrimQuadUV = _ZN10ImDrawList10PrimQuadUVERK6ImVec2S2_S2_S2_S2_S2_S2_S2_j;
 
-extern fn _ZN10ImDrawList10AddDrawCmdEv(self: *ImDrawList) void;
-pub const AddDrawCmd = _ZN10ImDrawList10AddDrawCmdEv;
+    pub inline fn PrimWriteVtx(self: *ImDrawList, pos: *const ImVec2, uv: *const ImVec2, col: ImU32) void {
+        self._VtxWritePtr.pos.copyFrom(pos);
+        self._VtxWritePtr.uv.copyFrom(uv);
+        self._VtxWritePtr.col = col;
+        self._VtxWritePtr += 1;
+        self._VtxCurrentIdx += 1;
+    }
+    pub inline fn PrimWriteIdx(self: *ImDrawList, idx: ImDrawIdx) void {
+        self._IdxWritePtr.* = idx;
+        self._IdxWritePtr += 1;
+    }
+    pub inline fn PrimVtx(self: *ImDrawList, pos: *const ImVec2, uv: *const ImVec2, col: ImU32) void {
+        self.PrimWriteIdx(@intCast(ImDrawIdx, self._VtxCurrentIdx));
+        self.PrimWriteVtx(pos, uv, col);
+    }
+    extern fn _ZN10ImDrawList17_ResetForNewFrameEv(self: *ImDrawList) void;
+    pub const _ResetForNewFrame = _ZN10ImDrawList17_ResetForNewFrameEv;
 
-extern fn _ZNK10ImDrawList11CloneOutputEv(self: *const ImDrawList) [*c]ImDrawList;
-pub const CloneOutput = _ZNK10ImDrawList11CloneOutputEv;
+    extern fn _ZN10ImDrawList16_ClearFreeMemoryEv(self: *ImDrawList) void;
+    pub const _ClearFreeMemory = _ZN10ImDrawList16_ClearFreeMemoryEv;
 
-pub inline fn ChannelsSplit(self: *ImDrawList, count: c_int) void {
-self.Split(self, count);
-}
+    extern fn _ZN10ImDrawList17_PopUnusedDrawCmdEv(self: *ImDrawList) void;
+    pub const _PopUnusedDrawCmd = _ZN10ImDrawList17_PopUnusedDrawCmdEv;
 
-pub inline fn ChannelsMerge(self: *ImDrawList) void {
-self.Merge(self);
-}
+    extern fn _ZN10ImDrawList17_TryMergeDrawCmdsEv(self: *ImDrawList) void;
+    pub const _TryMergeDrawCmds = _ZN10ImDrawList17_TryMergeDrawCmdsEv;
 
-pub inline fn ChannelsSetCurrent(self: *ImDrawList, n: c_int) void {
-self.SetCurrentChannel(self, n);
-}
+    extern fn _ZN10ImDrawList18_OnChangedClipRectEv(self: *ImDrawList) void;
+    pub const _OnChangedClipRect = _ZN10ImDrawList18_OnChangedClipRectEv;
 
-extern fn _ZN10ImDrawList11PrimReserveEii(self: *ImDrawList, idx_count: c_int, vtx_count: c_int) void;
-pub const PrimReserve = _ZN10ImDrawList11PrimReserveEii;
+    extern fn _ZN10ImDrawList19_OnChangedTextureIDEv(self: *ImDrawList) void;
+    pub const _OnChangedTextureID = _ZN10ImDrawList19_OnChangedTextureIDEv;
 
-extern fn _ZN10ImDrawList13PrimUnreserveEii(self: *ImDrawList, idx_count: c_int, vtx_count: c_int) void;
-pub const PrimUnreserve = _ZN10ImDrawList13PrimUnreserveEii;
+    extern fn _ZN10ImDrawList19_OnChangedVtxOffsetEv(self: *ImDrawList) void;
+    pub const _OnChangedVtxOffset = _ZN10ImDrawList19_OnChangedVtxOffsetEv;
 
-extern fn _ZN10ImDrawList8PrimRectERK6ImVec2S2_j(self: *ImDrawList, a: *const ImVec2, b: *const ImVec2, col: ImU32) void;
-pub const PrimRect = _ZN10ImDrawList8PrimRectERK6ImVec2S2_j;
+    extern fn _ZNK10ImDrawList27_CalcCircleAutoSegmentCountEf(self: *const ImDrawList, radius: f32) c_int;
+    pub const _CalcCircleAutoSegmentCount = _ZNK10ImDrawList27_CalcCircleAutoSegmentCountEf;
 
-extern fn _ZN10ImDrawList10PrimRectUVERK6ImVec2S2_S2_S2_j(self: *ImDrawList, a: *const ImVec2, b: *const ImVec2, uv_a: *const ImVec2, uv_b: *const ImVec2, col: ImU32) void;
-pub const PrimRectUV = _ZN10ImDrawList10PrimRectUVERK6ImVec2S2_S2_S2_j;
+    extern fn _ZN10ImDrawList16_PathArcToFastExERK6ImVec2fiii(self: *ImDrawList, center: *const ImVec2, radius: f32, a_min_sample: c_int, a_max_sample: c_int, a_step: c_int) void;
+    pub const _PathArcToFastEx = _ZN10ImDrawList16_PathArcToFastExERK6ImVec2fiii;
 
-extern fn _ZN10ImDrawList10PrimQuadUVERK6ImVec2S2_S2_S2_S2_S2_S2_S2_j(self: *ImDrawList, a: *const ImVec2, b: *const ImVec2, c: *const ImVec2, d: *const ImVec2, uv_a: *const ImVec2, uv_b: *const ImVec2, uv_c: *const ImVec2, uv_d: *const ImVec2, col: ImU32) void;
-pub const PrimQuadUV = _ZN10ImDrawList10PrimQuadUVERK6ImVec2S2_S2_S2_S2_S2_S2_S2_j;
-
-pub inline fn PrimWriteVtx(self: *ImDrawList, pos: *const ImVec2, uv: *const ImVec2, col: ImU32) void {
-self._VtxWritePtr.pos.copyFrom(pos);
-self._VtxWritePtr.uv.copyFrom(uv);
-self._VtxWritePtr.col = col;
-self._VtxWritePtr += 1;
-self._VtxCurrentIdx += 1;
-}
-
-pub inline fn PrimWriteIdx(self: *ImDrawList, idx: ImDrawIdx) void {
-self._IdxWritePtr.* = idx;
-self._IdxWritePtr += 1;
-}
-
-pub inline fn PrimVtx(self: *ImDrawList, pos: *const ImVec2, uv: *const ImVec2, col: ImU32) void {
-self.PrimWriteIdx(@intCast(ImDrawIdx, self._VtxCurrentIdx));
-self.PrimWriteVtx(pos, uv, col);
-}
-
-extern fn _ZN10ImDrawList17_ResetForNewFrameEv(self: *ImDrawList) void;
-pub const _ResetForNewFrame = _ZN10ImDrawList17_ResetForNewFrameEv;
-
-extern fn _ZN10ImDrawList16_ClearFreeMemoryEv(self: *ImDrawList) void;
-pub const _ClearFreeMemory = _ZN10ImDrawList16_ClearFreeMemoryEv;
-
-extern fn _ZN10ImDrawList17_PopUnusedDrawCmdEv(self: *ImDrawList) void;
-pub const _PopUnusedDrawCmd = _ZN10ImDrawList17_PopUnusedDrawCmdEv;
-
-extern fn _ZN10ImDrawList17_TryMergeDrawCmdsEv(self: *ImDrawList) void;
-pub const _TryMergeDrawCmds = _ZN10ImDrawList17_TryMergeDrawCmdsEv;
-
-extern fn _ZN10ImDrawList18_OnChangedClipRectEv(self: *ImDrawList) void;
-pub const _OnChangedClipRect = _ZN10ImDrawList18_OnChangedClipRectEv;
-
-extern fn _ZN10ImDrawList19_OnChangedTextureIDEv(self: *ImDrawList) void;
-pub const _OnChangedTextureID = _ZN10ImDrawList19_OnChangedTextureIDEv;
-
-extern fn _ZN10ImDrawList19_OnChangedVtxOffsetEv(self: *ImDrawList) void;
-pub const _OnChangedVtxOffset = _ZN10ImDrawList19_OnChangedVtxOffsetEv;
-
-extern fn _ZNK10ImDrawList27_CalcCircleAutoSegmentCountEf(self: *const ImDrawList, radius: f32) c_int;
-pub const _CalcCircleAutoSegmentCount = _ZNK10ImDrawList27_CalcCircleAutoSegmentCountEf;
-
-extern fn _ZN10ImDrawList16_PathArcToFastExERK6ImVec2fiii(self: *ImDrawList, center: *const ImVec2, radius: f32, a_min_sample: c_int, a_max_sample: c_int, a_step: c_int) void;
-pub const _PathArcToFastEx = _ZN10ImDrawList16_PathArcToFastExERK6ImVec2fiii;
-
-extern fn _ZN10ImDrawList11_PathArcToNERK6ImVec2fffi(self: *ImDrawList, center: *const ImVec2, radius: f32, a_min: f32, a_max: f32, num_segments: c_int) void;
-pub const _PathArcToN = _ZN10ImDrawList11_PathArcToNERK6ImVec2fffi;
-
+    extern fn _ZN10ImDrawList11_PathArcToNERK6ImVec2fffi(self: *ImDrawList, center: *const ImVec2, radius: f32, a_min: f32, a_max: f32, num_segments: c_int) void;
+    pub const _PathArcToN = _ZN10ImDrawList11_PathArcToNERK6ImVec2fffi;
 };
 
 pub const ImDrawData = extern struct {
@@ -3367,22 +3289,21 @@ pub const ImDrawData = extern struct {
     FramebufferScale: ImVec2,
     OwnerViewport: [*c]ImGuiViewport,
 
-extern fn _ZN10ImDrawDataC1Ev(self: *ImDrawData) void;
-pub inline fn init() ImDrawData {
-    var self: ImDrawData = undefined;
-    _ZN10ImDrawDataC1Ev(&self);    return self;
-}
+    extern fn _ZN10ImDrawDataC1Ev(self: *ImDrawData) void;
+    pub inline fn init() ImDrawData {
+        var self: ImDrawData = undefined;
+        _ZN10ImDrawDataC1Ev(&self);
+        return self;
+    }
 
-pub fn Clear(self: *ImDrawData) void {
-memset(@bitCast(?*anyopaque, self), 0, @sizeOf(self.*));
-}
+    pub fn Clear(self: *ImDrawData) void {
+        memset(@bitCast(?*anyopaque, self), 0, @sizeOf(self.*));
+    }
+    extern fn _ZN10ImDrawData17DeIndexAllBuffersEv(self: *ImDrawData) void;
+    pub const DeIndexAllBuffers = _ZN10ImDrawData17DeIndexAllBuffersEv;
 
-extern fn _ZN10ImDrawData17DeIndexAllBuffersEv(self: *ImDrawData) void;
-pub const DeIndexAllBuffers = _ZN10ImDrawData17DeIndexAllBuffersEv;
-
-extern fn _ZN10ImDrawData14ScaleClipRectsERK6ImVec2(self: *ImDrawData, fb_scale: *const ImVec2) void;
-pub const ScaleClipRects = _ZN10ImDrawData14ScaleClipRectsERK6ImVec2;
-
+    extern fn _ZN10ImDrawData14ScaleClipRectsERK6ImVec2(self: *ImDrawData, fb_scale: *const ImVec2) void;
+    pub const ScaleClipRects = _ZN10ImDrawData14ScaleClipRectsERK6ImVec2;
 };
 
 pub const ImFontConfig = extern struct {
@@ -3406,12 +3327,12 @@ pub const ImFontConfig = extern struct {
     Name: [40]u8,
     DstFont: [*c]ImFont,
 
-extern fn _ZN12ImFontConfigC1Ev(self: *ImFontConfig) void;
-pub inline fn init() ImFontConfig {
-    var self: ImFontConfig = undefined;
-    _ZN12ImFontConfigC1Ev(&self);    return self;
-}
-
+    extern fn _ZN12ImFontConfigC1Ev(self: *ImFontConfig) void;
+    pub inline fn init() ImFontConfig {
+        var self: ImFontConfig = undefined;
+        _ZN12ImFontConfigC1Ev(&self);
+        return self;
+    }
 };
 
 pub const ImFontGlyph = extern struct {
@@ -3432,43 +3353,39 @@ pub const ImFontGlyph = extern struct {
 pub const ImFontGlyphRangesBuilder = extern struct {
     UsedChars: ImVector(ImU32),
 
-extern fn _ZN24ImFontGlyphRangesBuilderC1Ev(self: *ImFontGlyphRangesBuilder) void;
-pub inline fn init() ImFontGlyphRangesBuilder {
-    var self: ImFontGlyphRangesBuilder = undefined;
-    _ZN24ImFontGlyphRangesBuilderC1Ev(&self);    return self;
-}
+    extern fn _ZN24ImFontGlyphRangesBuilderC1Ev(self: *ImFontGlyphRangesBuilder) void;
+    pub inline fn init() ImFontGlyphRangesBuilder {
+        var self: ImFontGlyphRangesBuilder = undefined;
+        _ZN24ImFontGlyphRangesBuilderC1Ev(&self);
+        return self;
+    }
 
-pub inline fn Clear(self: *ImFontGlyphRangesBuilder) void {
-var size_in_bytes: c_int = (65535 + 1) / 8;
-self.resize(size_in_bytes / @intCast(c_int, @sizeOf(ImU32)));
-memset(@bitCast(?*anyopaque, self.UsedChars.Data), 0, @intCast(usize, size_in_bytes));
-}
+    pub inline fn Clear(self: *ImFontGlyphRangesBuilder) void {
+        var size_in_bytes: c_int = (65535 + 1) / 8;
+        self.resize(size_in_bytes / @intCast(c_int, @sizeOf(ImU32)));
+        memset(@bitCast(?*anyopaque, self.UsedChars.Data), 0, @intCast(usize, size_in_bytes));
+    }
+    pub inline fn GetBit(self: *const ImFontGlyphRangesBuilder, n: usize) bool {
+        var off: c_int = @intCast(c_int, (n >> 5));
+        var mask: ImU32 = 1 << (n & @intCast(usize, 31));
+        return (self.UsedChars.get(off) & mask) != @intCast(c_uint, 0);
+    }
+    pub inline fn SetBit(self: *ImFontGlyphRangesBuilder, n: usize) void {
+        var off: c_int = @intCast(c_int, (n >> 5));
+        var mask: ImU32 = 1 << (n & @intCast(usize, 31));
+        self.UsedChars.getPtr(off).* |= mask;
+    }
+    pub inline fn AddChar(self: *ImFontGlyphRangesBuilder, c: ImWchar) void {
+        self.SetBit(@intCast(usize, c));
+    }
+    extern fn _ZN24ImFontGlyphRangesBuilder7AddTextEPKcS1_(self: *ImFontGlyphRangesBuilder, text: [*c]const u8, text_end: [*c]const u8) void;
+    pub const AddText = _ZN24ImFontGlyphRangesBuilder7AddTextEPKcS1_;
 
-pub inline fn GetBit(self: *const ImFontGlyphRangesBuilder, n: usize) bool {
-var off: c_int = @intCast(c_int, (n >> 5));
-var mask: ImU32 = 1 << (n & @intCast(usize, 31));
-return (self.UsedChars.get(off) & mask) != @intCast(c_uint, 0);
-}
+    extern fn _ZN24ImFontGlyphRangesBuilder9AddRangesEPKt(self: *ImFontGlyphRangesBuilder, ranges: [*c]const ImWchar) void;
+    pub const AddRanges = _ZN24ImFontGlyphRangesBuilder9AddRangesEPKt;
 
-pub inline fn SetBit(self: *ImFontGlyphRangesBuilder, n: usize) void {
-var off: c_int = @intCast(c_int, (n >> 5));
-var mask: ImU32 = 1 << (n & @intCast(usize, 31));
-self.UsedChars.getPtr(off).* |= mask;
-}
-
-pub inline fn AddChar(self: *ImFontGlyphRangesBuilder, c: ImWchar) void {
-self.SetBit(@intCast(usize, c));
-}
-
-extern fn _ZN24ImFontGlyphRangesBuilder7AddTextEPKcS1_(self: *ImFontGlyphRangesBuilder, text: [*c]const u8, text_end: [*c]const u8) void;
-pub const AddText = _ZN24ImFontGlyphRangesBuilder7AddTextEPKcS1_;
-
-extern fn _ZN24ImFontGlyphRangesBuilder9AddRangesEPKt(self: *ImFontGlyphRangesBuilder, ranges: [*c]const ImWchar) void;
-pub const AddRanges = _ZN24ImFontGlyphRangesBuilder9AddRangesEPKt;
-
-extern fn _ZN24ImFontGlyphRangesBuilder11BuildRangesEP8ImVectorItE(self: *ImFontGlyphRangesBuilder, out_ranges: [*c]ImVector(ImWchar)) void;
-pub const BuildRanges = _ZN24ImFontGlyphRangesBuilder11BuildRangesEP8ImVectorItE;
-
+    extern fn _ZN24ImFontGlyphRangesBuilder11BuildRangesEP8ImVectorItE(self: *ImFontGlyphRangesBuilder, out_ranges: [*c]ImVector(ImWchar)) void;
+    pub const BuildRanges = _ZN24ImFontGlyphRangesBuilder11BuildRangesEP8ImVectorItE;
 };
 
 pub const ImFontAtlasCustomRect = extern struct {
@@ -3481,16 +3398,16 @@ pub const ImFontAtlasCustomRect = extern struct {
     GlyphOffset: ImVec2,
     Font: [*c]ImFont,
 
-extern fn _ZN21ImFontAtlasCustomRectC1Ev(self: *ImFontAtlasCustomRect) void;
-pub inline fn init() ImFontAtlasCustomRect {
-    var self: ImFontAtlasCustomRect = undefined;
-    _ZN21ImFontAtlasCustomRectC1Ev(&self);    return self;
-}
+    extern fn _ZN21ImFontAtlasCustomRectC1Ev(self: *ImFontAtlasCustomRect) void;
+    pub inline fn init() ImFontAtlasCustomRect {
+        var self: ImFontAtlasCustomRect = undefined;
+        _ZN21ImFontAtlasCustomRectC1Ev(&self);
+        return self;
+    }
 
-pub fn IsPacked(self: *const ImFontAtlasCustomRect) bool {
-return @intCast(c_int, self.X) != 65535;
-}
-
+    pub fn IsPacked(self: *const ImFontAtlasCustomRect) bool {
+        return @intCast(c_int, self.X) != 65535;
+    }
 };
 
 pub const ImFontAtlasFlags_ = extern struct {
@@ -3523,111 +3440,110 @@ pub const ImFontAtlas = extern struct {
     CustomRects: ImVector(ImFontAtlasCustomRect),
     ConfigData: ImVector(ImFontConfig),
     TexUvLines: [64]ImVec4,
-    FontBuilderIO: [*c]const ImFontBuilderIO,
+    FontBuilderIO: ?*const ImFontBuilderIO,
     FontBuilderFlags: c_uint,
     PackIdMouseCursors: c_int,
     PackIdLines: c_int,
 
-extern fn _ZN11ImFontAtlasC1Ev(self: *ImFontAtlas) void;
-pub inline fn init() ImFontAtlas {
-    var self: ImFontAtlas = undefined;
-    _ZN11ImFontAtlasC1Ev(&self);    return self;
-}
+    extern fn _ZN11ImFontAtlasC1Ev(self: *ImFontAtlas) void;
+    pub inline fn init() ImFontAtlas {
+        var self: ImFontAtlas = undefined;
+        _ZN11ImFontAtlasC1Ev(&self);
+        return self;
+    }
 
     extern fn _ZN11ImFontAtlasD1Ev(self: *ImFontAtlas) void;
-    pub inline fn deinit(self: *ImFontAtlas) void { self._ZN11ImFontAtlasD1Ev(); }
+    pub inline fn deinit(self: *ImFontAtlas) void {
+        self._ZN11ImFontAtlasD1Ev();
+    }
 
-extern fn _ZN11ImFontAtlas7AddFontEPK12ImFontConfig(self: *ImFontAtlas, font_cfg: [*c]const ImFontConfig) [*c]ImFont;
-pub const AddFont = _ZN11ImFontAtlas7AddFontEPK12ImFontConfig;
+    extern fn _ZN11ImFontAtlas7AddFontEPK12ImFontConfig(self: *ImFontAtlas, font_cfg: [*c]const ImFontConfig) [*c]ImFont;
+    pub const AddFont = _ZN11ImFontAtlas7AddFontEPK12ImFontConfig;
 
-extern fn _ZN11ImFontAtlas14AddFontDefaultEPK12ImFontConfig(self: *ImFontAtlas, font_cfg: [*c]const ImFontConfig) [*c]ImFont;
-pub const AddFontDefault = _ZN11ImFontAtlas14AddFontDefaultEPK12ImFontConfig;
+    extern fn _ZN11ImFontAtlas14AddFontDefaultEPK12ImFontConfig(self: *ImFontAtlas, font_cfg: [*c]const ImFontConfig) [*c]ImFont;
+    pub const AddFontDefault = _ZN11ImFontAtlas14AddFontDefaultEPK12ImFontConfig;
 
-extern fn _ZN11ImFontAtlas18AddFontFromFileTTFEPKcfPK12ImFontConfigPKt(self: *ImFontAtlas, filename: [*c]const u8, size_pixels: f32, font_cfg: [*c]const ImFontConfig, glyph_ranges: [*c]const ImWchar) [*c]ImFont;
-pub const AddFontFromFileTTF = _ZN11ImFontAtlas18AddFontFromFileTTFEPKcfPK12ImFontConfigPKt;
+    extern fn _ZN11ImFontAtlas18AddFontFromFileTTFEPKcfPK12ImFontConfigPKt(self: *ImFontAtlas, filename: [*c]const u8, size_pixels: f32, font_cfg: [*c]const ImFontConfig, glyph_ranges: [*c]const ImWchar) [*c]ImFont;
+    pub const AddFontFromFileTTF = _ZN11ImFontAtlas18AddFontFromFileTTFEPKcfPK12ImFontConfigPKt;
 
-extern fn _ZN11ImFontAtlas20AddFontFromMemoryTTFEPvifPK12ImFontConfigPKt(self: *ImFontAtlas, font_data: ?*anyopaque, font_size: c_int, size_pixels: f32, font_cfg: [*c]const ImFontConfig, glyph_ranges: [*c]const ImWchar) [*c]ImFont;
-pub const AddFontFromMemoryTTF = _ZN11ImFontAtlas20AddFontFromMemoryTTFEPvifPK12ImFontConfigPKt;
+    extern fn _ZN11ImFontAtlas20AddFontFromMemoryTTFEPvifPK12ImFontConfigPKt(self: *ImFontAtlas, font_data: ?*anyopaque, font_size: c_int, size_pixels: f32, font_cfg: [*c]const ImFontConfig, glyph_ranges: [*c]const ImWchar) [*c]ImFont;
+    pub const AddFontFromMemoryTTF = _ZN11ImFontAtlas20AddFontFromMemoryTTFEPvifPK12ImFontConfigPKt;
 
-extern fn _ZN11ImFontAtlas30AddFontFromMemoryCompressedTTFEPKvifPK12ImFontConfigPKt(self: *ImFontAtlas, compressed_font_data: ?*const anyopaque, compressed_font_size: c_int, size_pixels: f32, font_cfg: [*c]const ImFontConfig, glyph_ranges: [*c]const ImWchar) [*c]ImFont;
-pub const AddFontFromMemoryCompressedTTF = _ZN11ImFontAtlas30AddFontFromMemoryCompressedTTFEPKvifPK12ImFontConfigPKt;
+    extern fn _ZN11ImFontAtlas30AddFontFromMemoryCompressedTTFEPKvifPK12ImFontConfigPKt(self: *ImFontAtlas, compressed_font_data: ?*const anyopaque, compressed_font_size: c_int, size_pixels: f32, font_cfg: [*c]const ImFontConfig, glyph_ranges: [*c]const ImWchar) [*c]ImFont;
+    pub const AddFontFromMemoryCompressedTTF = _ZN11ImFontAtlas30AddFontFromMemoryCompressedTTFEPKvifPK12ImFontConfigPKt;
 
-extern fn _ZN11ImFontAtlas36AddFontFromMemoryCompressedBase85TTFEPKcfPK12ImFontConfigPKt(self: *ImFontAtlas, compressed_font_data_base85: [*c]const u8, size_pixels: f32, font_cfg: [*c]const ImFontConfig, glyph_ranges: [*c]const ImWchar) [*c]ImFont;
-pub const AddFontFromMemoryCompressedBase85TTF = _ZN11ImFontAtlas36AddFontFromMemoryCompressedBase85TTFEPKcfPK12ImFontConfigPKt;
+    extern fn _ZN11ImFontAtlas36AddFontFromMemoryCompressedBase85TTFEPKcfPK12ImFontConfigPKt(self: *ImFontAtlas, compressed_font_data_base85: [*c]const u8, size_pixels: f32, font_cfg: [*c]const ImFontConfig, glyph_ranges: [*c]const ImWchar) [*c]ImFont;
+    pub const AddFontFromMemoryCompressedBase85TTF = _ZN11ImFontAtlas36AddFontFromMemoryCompressedBase85TTFEPKcfPK12ImFontConfigPKt;
 
-extern fn _ZN11ImFontAtlas14ClearInputDataEv(self: *ImFontAtlas) void;
-pub const ClearInputData = _ZN11ImFontAtlas14ClearInputDataEv;
+    extern fn _ZN11ImFontAtlas14ClearInputDataEv(self: *ImFontAtlas) void;
+    pub const ClearInputData = _ZN11ImFontAtlas14ClearInputDataEv;
 
-extern fn _ZN11ImFontAtlas12ClearTexDataEv(self: *ImFontAtlas) void;
-pub const ClearTexData = _ZN11ImFontAtlas12ClearTexDataEv;
+    extern fn _ZN11ImFontAtlas12ClearTexDataEv(self: *ImFontAtlas) void;
+    pub const ClearTexData = _ZN11ImFontAtlas12ClearTexDataEv;
 
-extern fn _ZN11ImFontAtlas10ClearFontsEv(self: *ImFontAtlas) void;
-pub const ClearFonts = _ZN11ImFontAtlas10ClearFontsEv;
+    extern fn _ZN11ImFontAtlas10ClearFontsEv(self: *ImFontAtlas) void;
+    pub const ClearFonts = _ZN11ImFontAtlas10ClearFontsEv;
 
-extern fn _ZN11ImFontAtlas5ClearEv(self: *ImFontAtlas) void;
-pub const Clear = _ZN11ImFontAtlas5ClearEv;
+    extern fn _ZN11ImFontAtlas5ClearEv(self: *ImFontAtlas) void;
+    pub const Clear = _ZN11ImFontAtlas5ClearEv;
 
-extern fn _ZN11ImFontAtlas5BuildEv(self: *ImFontAtlas) bool;
-pub const Build = _ZN11ImFontAtlas5BuildEv;
+    extern fn _ZN11ImFontAtlas5BuildEv(self: *ImFontAtlas) bool;
+    pub const Build = _ZN11ImFontAtlas5BuildEv;
 
-extern fn _ZN11ImFontAtlas18GetTexDataAsAlpha8EPPhPiS2_S2_(self: *ImFontAtlas, out_pixels: [*c][*c]u8, out_width: [*c]c_int, out_height: [*c]c_int, out_bytes_per_pixel: [*c]c_int) void;
-pub const GetTexDataAsAlpha8 = _ZN11ImFontAtlas18GetTexDataAsAlpha8EPPhPiS2_S2_;
+    extern fn _ZN11ImFontAtlas18GetTexDataAsAlpha8EPPhPiS2_S2_(self: *ImFontAtlas, out_pixels: [*c][*c]u8, out_width: [*c]c_int, out_height: [*c]c_int, out_bytes_per_pixel: [*c]c_int) void;
+    pub const GetTexDataAsAlpha8 = _ZN11ImFontAtlas18GetTexDataAsAlpha8EPPhPiS2_S2_;
 
-extern fn _ZN11ImFontAtlas18GetTexDataAsRGBA32EPPhPiS2_S2_(self: *ImFontAtlas, out_pixels: [*c][*c]u8, out_width: [*c]c_int, out_height: [*c]c_int, out_bytes_per_pixel: [*c]c_int) void;
-pub const GetTexDataAsRGBA32 = _ZN11ImFontAtlas18GetTexDataAsRGBA32EPPhPiS2_S2_;
+    extern fn _ZN11ImFontAtlas18GetTexDataAsRGBA32EPPhPiS2_S2_(self: *ImFontAtlas, out_pixels: [*c][*c]u8, out_width: [*c]c_int, out_height: [*c]c_int, out_bytes_per_pixel: [*c]c_int) void;
+    pub const GetTexDataAsRGBA32 = _ZN11ImFontAtlas18GetTexDataAsRGBA32EPPhPiS2_S2_;
 
-pub fn IsBuilt(self: *const ImFontAtlas) bool {
-return self.Fonts.Size > 0 and self.TexReady;
-}
+    pub fn IsBuilt(self: *const ImFontAtlas) bool {
+        return self.Fonts.Size > 0 and self.TexReady;
+    }
+    pub fn SetTexID(self: *ImFontAtlas, id: ImTextureID) void {
+        self.TexID = id;
+    }
+    extern fn _ZN11ImFontAtlas21GetGlyphRangesDefaultEv(self: *ImFontAtlas) [*c]const ImWchar;
+    pub const GetGlyphRangesDefault = _ZN11ImFontAtlas21GetGlyphRangesDefaultEv;
 
-pub fn SetTexID(self: *ImFontAtlas, id: ImTextureID) void {
-self.TexID = id;
-}
+    extern fn _ZN11ImFontAtlas19GetGlyphRangesGreekEv(self: *ImFontAtlas) [*c]const ImWchar;
+    pub const GetGlyphRangesGreek = _ZN11ImFontAtlas19GetGlyphRangesGreekEv;
 
-extern fn _ZN11ImFontAtlas21GetGlyphRangesDefaultEv(self: *ImFontAtlas) [*c]const ImWchar;
-pub const GetGlyphRangesDefault = _ZN11ImFontAtlas21GetGlyphRangesDefaultEv;
+    extern fn _ZN11ImFontAtlas20GetGlyphRangesKoreanEv(self: *ImFontAtlas) [*c]const ImWchar;
+    pub const GetGlyphRangesKorean = _ZN11ImFontAtlas20GetGlyphRangesKoreanEv;
 
-extern fn _ZN11ImFontAtlas19GetGlyphRangesGreekEv(self: *ImFontAtlas) [*c]const ImWchar;
-pub const GetGlyphRangesGreek = _ZN11ImFontAtlas19GetGlyphRangesGreekEv;
+    extern fn _ZN11ImFontAtlas22GetGlyphRangesJapaneseEv(self: *ImFontAtlas) [*c]const ImWchar;
+    pub const GetGlyphRangesJapanese = _ZN11ImFontAtlas22GetGlyphRangesJapaneseEv;
 
-extern fn _ZN11ImFontAtlas20GetGlyphRangesKoreanEv(self: *ImFontAtlas) [*c]const ImWchar;
-pub const GetGlyphRangesKorean = _ZN11ImFontAtlas20GetGlyphRangesKoreanEv;
+    extern fn _ZN11ImFontAtlas25GetGlyphRangesChineseFullEv(self: *ImFontAtlas) [*c]const ImWchar;
+    pub const GetGlyphRangesChineseFull = _ZN11ImFontAtlas25GetGlyphRangesChineseFullEv;
 
-extern fn _ZN11ImFontAtlas22GetGlyphRangesJapaneseEv(self: *ImFontAtlas) [*c]const ImWchar;
-pub const GetGlyphRangesJapanese = _ZN11ImFontAtlas22GetGlyphRangesJapaneseEv;
+    extern fn _ZN11ImFontAtlas37GetGlyphRangesChineseSimplifiedCommonEv(self: *ImFontAtlas) [*c]const ImWchar;
+    pub const GetGlyphRangesChineseSimplifiedCommon = _ZN11ImFontAtlas37GetGlyphRangesChineseSimplifiedCommonEv;
 
-extern fn _ZN11ImFontAtlas25GetGlyphRangesChineseFullEv(self: *ImFontAtlas) [*c]const ImWchar;
-pub const GetGlyphRangesChineseFull = _ZN11ImFontAtlas25GetGlyphRangesChineseFullEv;
+    extern fn _ZN11ImFontAtlas22GetGlyphRangesCyrillicEv(self: *ImFontAtlas) [*c]const ImWchar;
+    pub const GetGlyphRangesCyrillic = _ZN11ImFontAtlas22GetGlyphRangesCyrillicEv;
 
-extern fn _ZN11ImFontAtlas37GetGlyphRangesChineseSimplifiedCommonEv(self: *ImFontAtlas) [*c]const ImWchar;
-pub const GetGlyphRangesChineseSimplifiedCommon = _ZN11ImFontAtlas37GetGlyphRangesChineseSimplifiedCommonEv;
+    extern fn _ZN11ImFontAtlas18GetGlyphRangesThaiEv(self: *ImFontAtlas) [*c]const ImWchar;
+    pub const GetGlyphRangesThai = _ZN11ImFontAtlas18GetGlyphRangesThaiEv;
 
-extern fn _ZN11ImFontAtlas22GetGlyphRangesCyrillicEv(self: *ImFontAtlas) [*c]const ImWchar;
-pub const GetGlyphRangesCyrillic = _ZN11ImFontAtlas22GetGlyphRangesCyrillicEv;
+    extern fn _ZN11ImFontAtlas24GetGlyphRangesVietnameseEv(self: *ImFontAtlas) [*c]const ImWchar;
+    pub const GetGlyphRangesVietnamese = _ZN11ImFontAtlas24GetGlyphRangesVietnameseEv;
 
-extern fn _ZN11ImFontAtlas18GetGlyphRangesThaiEv(self: *ImFontAtlas) [*c]const ImWchar;
-pub const GetGlyphRangesThai = _ZN11ImFontAtlas18GetGlyphRangesThaiEv;
+    extern fn _ZN11ImFontAtlas20AddCustomRectRegularEii(self: *ImFontAtlas, width: c_int, height: c_int) c_int;
+    pub const AddCustomRectRegular = _ZN11ImFontAtlas20AddCustomRectRegularEii;
 
-extern fn _ZN11ImFontAtlas24GetGlyphRangesVietnameseEv(self: *ImFontAtlas) [*c]const ImWchar;
-pub const GetGlyphRangesVietnamese = _ZN11ImFontAtlas24GetGlyphRangesVietnameseEv;
+    extern fn _ZN11ImFontAtlas22AddCustomRectFontGlyphEP6ImFonttiifRK6ImVec2(self: *ImFontAtlas, font: [*c]ImFont, id: ImWchar, width: c_int, height: c_int, advance_x: f32, offset: *const ImVec2) c_int;
+    pub const AddCustomRectFontGlyph = _ZN11ImFontAtlas22AddCustomRectFontGlyphEP6ImFonttiifRK6ImVec2;
 
-extern fn _ZN11ImFontAtlas20AddCustomRectRegularEii(self: *ImFontAtlas, width: c_int, height: c_int) c_int;
-pub const AddCustomRectRegular = _ZN11ImFontAtlas20AddCustomRectRegularEii;
+    pub fn GetCustomRectByIndex(self: *ImFontAtlas, index: c_int) [*c]ImFontAtlasCustomRect {
+        ImAssert(index >= 0);
+        return &self.CustomRects.getPtr(index).*;
+    }
+    extern fn _ZNK11ImFontAtlas16CalcCustomRectUVEPK21ImFontAtlasCustomRectP6ImVec2S4_(self: *const ImFontAtlas, rect: [*c]const ImFontAtlasCustomRect, out_uv_min: [*c]ImVec2, out_uv_max: [*c]ImVec2) void;
+    pub const CalcCustomRectUV = _ZNK11ImFontAtlas16CalcCustomRectUVEPK21ImFontAtlasCustomRectP6ImVec2S4_;
 
-extern fn _ZN11ImFontAtlas22AddCustomRectFontGlyphEP6ImFonttiifRK6ImVec2(self: *ImFontAtlas, font: [*c]ImFont, id: ImWchar, width: c_int, height: c_int, advance_x: f32, offset: *const ImVec2) c_int;
-pub const AddCustomRectFontGlyph = _ZN11ImFontAtlas22AddCustomRectFontGlyphEP6ImFonttiifRK6ImVec2;
-
-pub fn GetCustomRectByIndex(self: *ImFontAtlas, index: c_int) [*c]ImFontAtlasCustomRect {
-ImAssert(index >= 0);
-return &self.CustomRects.getPtr(index).*;
-}
-
-extern fn _ZNK11ImFontAtlas16CalcCustomRectUVEPK21ImFontAtlasCustomRectP6ImVec2S4_(self: *const ImFontAtlas, rect: [*c]const ImFontAtlasCustomRect, out_uv_min: [*c]ImVec2, out_uv_max: [*c]ImVec2) void;
-pub const CalcCustomRectUV = _ZNK11ImFontAtlas16CalcCustomRectUVEPK21ImFontAtlasCustomRectP6ImVec2S4_;
-
-extern fn _ZN11ImFontAtlas21GetMouseCursorTexDataEiP6ImVec2S1_S1_S1_(self: *ImFontAtlas, cursor: ImGuiMouseCursor, out_offset: [*c]ImVec2, out_size: [*c]ImVec2, out_uv_border: [*c]ImVec2, out_uv_fill: [*c]ImVec2) bool;
-pub const GetMouseCursorTexData = _ZN11ImFontAtlas21GetMouseCursorTexDataEiP6ImVec2S1_S1_S1_;
-
+    extern fn _ZN11ImFontAtlas21GetMouseCursorTexDataEiP6ImVec2S1_S1_S1_(self: *ImFontAtlas, cursor: ImGuiMouseCursor, out_offset: [*c]ImVec2, out_size: [*c]ImVec2, out_uv_border: [*c]ImVec2, out_uv_fill: [*c]ImVec2) bool;
+    pub const GetMouseCursorTexData = _ZN11ImFontAtlas21GetMouseCursorTexDataEiP6ImVec2S1_S1_S1_;
 };
 
 pub const ImFont = extern struct {
@@ -3652,66 +3568,65 @@ pub const ImFont = extern struct {
     MetricsTotalSurface: c_int,
     Used4kPagesMap: [2]ImU8,
 
-extern fn _ZN6ImFontC1Ev(self: *ImFont) void;
-pub inline fn init() ImFont {
-    var self: ImFont = undefined;
-    _ZN6ImFontC1Ev(&self);    return self;
-}
+    extern fn _ZN6ImFontC1Ev(self: *ImFont) void;
+    pub inline fn init() ImFont {
+        var self: ImFont = undefined;
+        _ZN6ImFontC1Ev(&self);
+        return self;
+    }
 
     extern fn _ZN6ImFontD1Ev(self: *ImFont) void;
-    pub inline fn deinit(self: *ImFont) void { self._ZN6ImFontD1Ev(); }
+    pub inline fn deinit(self: *ImFont) void {
+        self._ZN6ImFontD1Ev();
+    }
 
-extern fn _ZNK6ImFont9FindGlyphEt(self: *const ImFont, c: ImWchar) [*c]const ImFontGlyph;
-pub const FindGlyph = _ZNK6ImFont9FindGlyphEt;
+    extern fn _ZNK6ImFont9FindGlyphEt(self: *const ImFont, c: ImWchar) [*c]const ImFontGlyph;
+    pub const FindGlyph = _ZNK6ImFont9FindGlyphEt;
 
-extern fn _ZNK6ImFont19FindGlyphNoFallbackEt(self: *const ImFont, c: ImWchar) [*c]const ImFontGlyph;
-pub const FindGlyphNoFallback = _ZNK6ImFont19FindGlyphNoFallbackEt;
+    extern fn _ZNK6ImFont19FindGlyphNoFallbackEt(self: *const ImFont, c: ImWchar) [*c]const ImFontGlyph;
+    pub const FindGlyphNoFallback = _ZNK6ImFont19FindGlyphNoFallbackEt;
 
-pub fn GetCharAdvance(self: *const ImFont, c: ImWchar) f32 {
-return  if ((@intCast(c_int, c) < self.IndexAdvanceX.Size)) self.IndexAdvanceX.get(@intCast(c_int, c)) else self.FallbackAdvanceX ;
-}
+    pub fn GetCharAdvance(self: *const ImFont, c: ImWchar) f32 {
+        return if ((@intCast(c_int, c) < self.IndexAdvanceX.Size)) self.IndexAdvanceX.get(@intCast(c_int, c)) else self.FallbackAdvanceX;
+    }
+    pub fn IsLoaded(self: *const ImFont) bool {
+        return self.ContainerAtlas != null;
+    }
+    pub fn GetDebugName(self: *const ImFont) [*c]const u8 {
+        return if (@as(bool, self.ConfigData)) @as([*c]const u8, self.ConfigData.Name) else @as([*c]const u8, "\"<unknown>\"");
+    }
+    extern fn _ZNK6ImFont13CalcTextSizeAEfffPKcS1_PS1_(self: *const ImFont, size: f32, max_width: f32, wrap_width: f32, text_begin: [*c]const u8, text_end: [*c]const u8, remaining: [*c]const [*c]u8) ImVec2;
+    pub const CalcTextSizeA = _ZNK6ImFont13CalcTextSizeAEfffPKcS1_PS1_;
 
-pub fn IsLoaded(self: *const ImFont) bool {
-return self.ContainerAtlas != null;
-}
+    extern fn _ZNK6ImFont21CalcWordWrapPositionAEfPKcS1_f(self: *const ImFont, scale: f32, text: [*c]const u8, text_end: [*c]const u8, wrap_width: f32) [*c]const u8;
+    pub const CalcWordWrapPositionA = _ZNK6ImFont21CalcWordWrapPositionAEfPKcS1_f;
 
-pub fn GetDebugName(self: *const ImFont) [*c]const u8 {
-return  if (@as(bool, self.ConfigData)) @as([*c]const u8, self.ConfigData.Name) else @as([*c]const u8, "\"<unknown>\"") ;
-}
+    extern fn _ZNK6ImFont10RenderCharEP10ImDrawListfRK6ImVec2jt(self: *const ImFont, draw_list: [*c]ImDrawList, size: f32, pos: *const ImVec2, col: ImU32, c: ImWchar) void;
+    pub const RenderChar = _ZNK6ImFont10RenderCharEP10ImDrawListfRK6ImVec2jt;
 
-extern fn _ZNK6ImFont13CalcTextSizeAEfffPKcS1_PS1_(self: *const ImFont, size: f32, max_width: f32, wrap_width: f32, text_begin: [*c]const u8, text_end: [*c]const u8, remaining: [*c]const [*c]u8) ImVec2;
-pub const CalcTextSizeA = _ZNK6ImFont13CalcTextSizeAEfffPKcS1_PS1_;
+    extern fn _ZNK6ImFont10RenderTextEP10ImDrawListfRK6ImVec2jRK6ImVec4PKcS9_fb(self: *const ImFont, draw_list: [*c]ImDrawList, size: f32, pos: *const ImVec2, col: ImU32, clip_rect: *const ImVec4, text_begin: [*c]const u8, text_end: [*c]const u8, wrap_width: f32, cpu_fine_clip: bool) void;
+    pub const RenderText = _ZNK6ImFont10RenderTextEP10ImDrawListfRK6ImVec2jRK6ImVec4PKcS9_fb;
 
-extern fn _ZNK6ImFont21CalcWordWrapPositionAEfPKcS1_f(self: *const ImFont, scale: f32, text: [*c]const u8, text_end: [*c]const u8, wrap_width: f32) [*c]const u8;
-pub const CalcWordWrapPositionA = _ZNK6ImFont21CalcWordWrapPositionAEfPKcS1_f;
+    extern fn _ZN6ImFont16BuildLookupTableEv(self: *ImFont) void;
+    pub const BuildLookupTable = _ZN6ImFont16BuildLookupTableEv;
 
-extern fn _ZNK6ImFont10RenderCharEP10ImDrawListfRK6ImVec2jt(self: *const ImFont, draw_list: [*c]ImDrawList, size: f32, pos: *const ImVec2, col: ImU32, c: ImWchar) void;
-pub const RenderChar = _ZNK6ImFont10RenderCharEP10ImDrawListfRK6ImVec2jt;
+    extern fn _ZN6ImFont15ClearOutputDataEv(self: *ImFont) void;
+    pub const ClearOutputData = _ZN6ImFont15ClearOutputDataEv;
 
-extern fn _ZNK6ImFont10RenderTextEP10ImDrawListfRK6ImVec2jRK6ImVec4PKcS9_fb(self: *const ImFont, draw_list: [*c]ImDrawList, size: f32, pos: *const ImVec2, col: ImU32, clip_rect: *const ImVec4, text_begin: [*c]const u8, text_end: [*c]const u8, wrap_width: f32, cpu_fine_clip: bool) void;
-pub const RenderText = _ZNK6ImFont10RenderTextEP10ImDrawListfRK6ImVec2jRK6ImVec4PKcS9_fb;
+    extern fn _ZN6ImFont9GrowIndexEi(self: *ImFont, new_size: c_int) void;
+    pub const GrowIndex = _ZN6ImFont9GrowIndexEi;
 
-extern fn _ZN6ImFont16BuildLookupTableEv(self: *ImFont) void;
-pub const BuildLookupTable = _ZN6ImFont16BuildLookupTableEv;
+    extern fn _ZN6ImFont8AddGlyphEPK12ImFontConfigtfffffffff(self: *ImFont, src_cfg: [*c]const ImFontConfig, c: ImWchar, x0: f32, y0: f32, x1: f32, y1: f32, u0: f32, v0: f32, u1: f32, v1: f32, advance_x: f32) void;
+    pub const AddGlyph = _ZN6ImFont8AddGlyphEPK12ImFontConfigtfffffffff;
 
-extern fn _ZN6ImFont15ClearOutputDataEv(self: *ImFont) void;
-pub const ClearOutputData = _ZN6ImFont15ClearOutputDataEv;
+    extern fn _ZN6ImFont12AddRemapCharEttb(self: *ImFont, dst: ImWchar, src: ImWchar, overwrite_dst: bool) void;
+    pub const AddRemapChar = _ZN6ImFont12AddRemapCharEttb;
 
-extern fn _ZN6ImFont9GrowIndexEi(self: *ImFont, new_size: c_int) void;
-pub const GrowIndex = _ZN6ImFont9GrowIndexEi;
+    extern fn _ZN6ImFont15SetGlyphVisibleEtb(self: *ImFont, c: ImWchar, visible: bool) void;
+    pub const SetGlyphVisible = _ZN6ImFont15SetGlyphVisibleEtb;
 
-extern fn _ZN6ImFont8AddGlyphEPK12ImFontConfigtfffffffff(self: *ImFont, src_cfg: [*c]const ImFontConfig, c: ImWchar, x0: f32, y0: f32, x1: f32, y1: f32, u0: f32, v0: f32, u1: f32, v1: f32, advance_x: f32) void;
-pub const AddGlyph = _ZN6ImFont8AddGlyphEPK12ImFontConfigtfffffffff;
-
-extern fn _ZN6ImFont12AddRemapCharEttb(self: *ImFont, dst: ImWchar, src: ImWchar, overwrite_dst: bool) void;
-pub const AddRemapChar = _ZN6ImFont12AddRemapCharEttb;
-
-extern fn _ZN6ImFont15SetGlyphVisibleEtb(self: *ImFont, c: ImWchar, visible: bool) void;
-pub const SetGlyphVisible = _ZN6ImFont15SetGlyphVisibleEtb;
-
-extern fn _ZN6ImFont18IsGlyphRangeUnusedEjj(self: *ImFont, c_begin: c_uint, c_last: c_uint) bool;
-pub const IsGlyphRangeUnused = _ZN6ImFont18IsGlyphRangeUnusedEjj;
-
+    extern fn _ZN6ImFont18IsGlyphRangeUnusedEjj(self: *ImFont, c_begin: c_uint, c_last: c_uint) bool;
+    pub const IsGlyphRangeUnused = _ZN6ImFont18IsGlyphRangeUnusedEjj;
 };
 
 pub const ImGuiViewportFlags_ = extern struct {
@@ -3755,58 +3670,59 @@ pub const ImGuiViewport = extern struct {
     PlatformRequestResize: bool,
     PlatformRequestClose: bool,
 
-extern fn _ZN13ImGuiViewportC1Ev(self: *ImGuiViewport) void;
-pub inline fn init() ImGuiViewport {
-    var self: ImGuiViewport = undefined;
-    _ZN13ImGuiViewportC1Ev(&self);    return self;
-}
+    extern fn _ZN13ImGuiViewportC1Ev(self: *ImGuiViewport) void;
+    pub inline fn init() ImGuiViewport {
+        var self: ImGuiViewport = undefined;
+        _ZN13ImGuiViewportC1Ev(&self);
+        return self;
+    }
 
     extern fn _ZN13ImGuiViewportD1Ev(self: *ImGuiViewport) void;
-    pub inline fn deinit(self: *ImGuiViewport) void { self._ZN13ImGuiViewportD1Ev(); }
+    pub inline fn deinit(self: *ImGuiViewport) void {
+        self._ZN13ImGuiViewportD1Ev();
+    }
 
-pub fn GetCenter(self: *const ImGuiViewport) ImVec2 {
-return ;
-}
-
-pub fn GetWorkCenter(self: *const ImGuiViewport) ImVec2 {
-return ;
-}
-
+    // pub fn GetCenter(self: *const ImGuiViewport) ImVec2 {
+    //     return;
+    // }
+    // pub fn GetWorkCenter(self: *const ImGuiViewport) ImVec2 {
+    //     return;
+    // }
 };
 
 pub const ImGuiPlatformIO = extern struct {
-    Platform_CreateWindow: ?*const fn([*c]ImGuiViewport) callconv(.C) void ,
-    Platform_DestroyWindow: ?*const fn([*c]ImGuiViewport) callconv(.C) void ,
-    Platform_ShowWindow: ?*const fn([*c]ImGuiViewport) callconv(.C) void ,
-    Platform_SetWindowPos: ?*const fn([*c]ImGuiViewport,ImVec2) callconv(.C) void ,
-    Platform_GetWindowPos: ?*const fn([*c]ImGuiViewport) callconv(.C) ImVec2 ,
-    Platform_SetWindowSize: ?*const fn([*c]ImGuiViewport,ImVec2) callconv(.C) void ,
-    Platform_GetWindowSize: ?*const fn([*c]ImGuiViewport) callconv(.C) ImVec2 ,
-    Platform_SetWindowFocus: ?*const fn([*c]ImGuiViewport) callconv(.C) void ,
-    Platform_GetWindowFocus: ?*const fn([*c]ImGuiViewport) callconv(.C) bool ,
-    Platform_GetWindowMinimized: ?*const fn([*c]ImGuiViewport) callconv(.C) bool ,
-    Platform_SetWindowTitle: ?*const fn([*c]ImGuiViewport,[*c]const u8) callconv(.C) void ,
-    Platform_SetWindowAlpha: ?*const fn([*c]ImGuiViewport,f32) callconv(.C) void ,
-    Platform_UpdateWindow: ?*const fn([*c]ImGuiViewport) callconv(.C) void ,
-    Platform_RenderWindow: ?*const fn([*c]ImGuiViewport,?*anyopaque) callconv(.C) void ,
-    Platform_SwapBuffers: ?*const fn([*c]ImGuiViewport,?*anyopaque) callconv(.C) void ,
-    Platform_GetWindowDpiScale: ?*const fn([*c]ImGuiViewport) callconv(.C) f32 ,
-    Platform_OnChangedViewport: ?*const fn([*c]ImGuiViewport) callconv(.C) void ,
-    Platform_CreateVkSurface: ?*const fn([*c]ImGuiViewport,ImU64,?*const anyopaque,[*c]ImU64) callconv(.C) c_int ,
-    Renderer_CreateWindow: ?*const fn([*c]ImGuiViewport) callconv(.C) void ,
-    Renderer_DestroyWindow: ?*const fn([*c]ImGuiViewport) callconv(.C) void ,
-    Renderer_SetWindowSize: ?*const fn([*c]ImGuiViewport,ImVec2) callconv(.C) void ,
-    Renderer_RenderWindow: ?*const fn([*c]ImGuiViewport,?*anyopaque) callconv(.C) void ,
-    Renderer_SwapBuffers: ?*const fn([*c]ImGuiViewport,?*anyopaque) callconv(.C) void ,
+    Platform_CreateWindow: ?*const fn ([*c]ImGuiViewport) callconv(.C) void,
+    Platform_DestroyWindow: ?*const fn ([*c]ImGuiViewport) callconv(.C) void,
+    Platform_ShowWindow: ?*const fn ([*c]ImGuiViewport) callconv(.C) void,
+    Platform_SetWindowPos: ?*const fn ([*c]ImGuiViewport, ImVec2) callconv(.C) void,
+    Platform_GetWindowPos: ?*const fn ([*c]ImGuiViewport) callconv(.C) ImVec2,
+    Platform_SetWindowSize: ?*const fn ([*c]ImGuiViewport, ImVec2) callconv(.C) void,
+    Platform_GetWindowSize: ?*const fn ([*c]ImGuiViewport) callconv(.C) ImVec2,
+    Platform_SetWindowFocus: ?*const fn ([*c]ImGuiViewport) callconv(.C) void,
+    Platform_GetWindowFocus: ?*const fn ([*c]ImGuiViewport) callconv(.C) bool,
+    Platform_GetWindowMinimized: ?*const fn ([*c]ImGuiViewport) callconv(.C) bool,
+    Platform_SetWindowTitle: ?*const fn ([*c]ImGuiViewport, [*c]const u8) callconv(.C) void,
+    Platform_SetWindowAlpha: ?*const fn ([*c]ImGuiViewport, f32) callconv(.C) void,
+    Platform_UpdateWindow: ?*const fn ([*c]ImGuiViewport) callconv(.C) void,
+    Platform_RenderWindow: ?*const fn ([*c]ImGuiViewport, ?*anyopaque) callconv(.C) void,
+    Platform_SwapBuffers: ?*const fn ([*c]ImGuiViewport, ?*anyopaque) callconv(.C) void,
+    Platform_GetWindowDpiScale: ?*const fn ([*c]ImGuiViewport) callconv(.C) f32,
+    Platform_OnChangedViewport: ?*const fn ([*c]ImGuiViewport) callconv(.C) void,
+    Platform_CreateVkSurface: ?*const fn ([*c]ImGuiViewport, ImU64, ?*const anyopaque, [*c]ImU64) callconv(.C) c_int,
+    Renderer_CreateWindow: ?*const fn ([*c]ImGuiViewport) callconv(.C) void,
+    Renderer_DestroyWindow: ?*const fn ([*c]ImGuiViewport) callconv(.C) void,
+    Renderer_SetWindowSize: ?*const fn ([*c]ImGuiViewport, ImVec2) callconv(.C) void,
+    Renderer_RenderWindow: ?*const fn ([*c]ImGuiViewport, ?*anyopaque) callconv(.C) void,
+    Renderer_SwapBuffers: ?*const fn ([*c]ImGuiViewport, ?*anyopaque) callconv(.C) void,
     Monitors: ImVector(ImGuiPlatformMonitor),
     Viewports: ImVector([*c]ImGuiViewport),
 
-extern fn _ZN15ImGuiPlatformIOC1Ev(self: *ImGuiPlatformIO) void;
-pub inline fn init() ImGuiPlatformIO {
-    var self: ImGuiPlatformIO = undefined;
-    _ZN15ImGuiPlatformIOC1Ev(&self);    return self;
-}
-
+    extern fn _ZN15ImGuiPlatformIOC1Ev(self: *ImGuiPlatformIO) void;
+    pub inline fn init() ImGuiPlatformIO {
+        var self: ImGuiPlatformIO = undefined;
+        _ZN15ImGuiPlatformIOC1Ev(&self);
+        return self;
+    }
 };
 
 pub const ImGuiPlatformMonitor = extern struct {
@@ -3816,12 +3732,12 @@ pub const ImGuiPlatformMonitor = extern struct {
     WorkSize: ImVec2,
     DpiScale: f32,
 
-extern fn _ZN20ImGuiPlatformMonitorC1Ev(self: *ImGuiPlatformMonitor) void;
-pub inline fn init() ImGuiPlatformMonitor {
-    var self: ImGuiPlatformMonitor = undefined;
-    _ZN20ImGuiPlatformMonitorC1Ev(&self);    return self;
-}
-
+    extern fn _ZN20ImGuiPlatformMonitorC1Ev(self: *ImGuiPlatformMonitor) void;
+    pub inline fn init() ImGuiPlatformMonitor {
+        var self: ImGuiPlatformMonitor = undefined;
+        _ZN20ImGuiPlatformMonitorC1Ev(&self);
+        return self;
+    }
 };
 
 pub const ImGuiPlatformImeData = extern struct {
@@ -3829,90 +3745,15 @@ pub const ImGuiPlatformImeData = extern struct {
     InputPos: ImVec2,
     InputLineHeight: f32,
 
-extern fn _ZN20ImGuiPlatformImeDataC1Ev(self: *ImGuiPlatformImeData) void;
-pub inline fn init() ImGuiPlatformImeData {
-    var self: ImGuiPlatformImeData = undefined;
-    _ZN20ImGuiPlatformImeDataC1Ev(&self);    return self;
-}
-
+    extern fn _ZN20ImGuiPlatformImeDataC1Ev(self: *ImGuiPlatformImeData) void;
+    pub inline fn init() ImGuiPlatformImeData {
+        var self: ImGuiPlatformImeData = undefined;
+        _ZN20ImGuiPlatformImeDataC1Ev(&self);
+        return self;
+    }
 };
 
-pub const ImGui = struct {
-extern fn _ZN5ImGui11GetKeyIndexE8ImGuiKey(key: ImGuiKey) ImGuiKey;
-pub const GetKeyIndex = _ZN5ImGui11GetKeyIndexE8ImGuiKey;
-
-};
-
-pub const ImGui = struct {
-pub inline fn PushAllowKeyboardFocus(tab_stop: bool) void {
-PushTabStop(tab_stop);
+pub inline fn GetKeyIndex(key: ImGuiKey) ImGuiKey {
+    ImAssert(@intCast(c_int, key) >= @intCast(c_int, ImGuiKey._NamedKey_BEGIN.bits) and @intCast(c_int, key) < @intCast(c_int, ImGuiKey._NamedKey_END.bits) and @as(bool, @as([*c]const u8, "\"ImGuiKey and native_index was merged together and native_index is disabled by IMGUI_DISABLE_OBSOLETE_KEYIO. Please switch to ImGuiKey.\"")));
+    return key;
 }
-
-pub inline fn PopAllowKeyboardFocus() void {
-PopTabStop();
-}
-
-extern fn _ZN5ImGui11ImageButtonEPvRK6ImVec2S3_S3_iRK6ImVec4S6_(user_texture_id: ImTextureID, size: *const ImVec2, uv0: *const ImVec2, uv1: *const ImVec2, frame_padding: c_int, bg_col: *const ImVec4, tint_col: *const ImVec4) bool;
-pub const ImageButton = _ZN5ImGui11ImageButtonEPvRK6ImVec2S3_S3_iRK6ImVec4S6_;
-
-pub inline fn CaptureKeyboardFromApp(want_capture_keyboard: bool) void {
-SetNextFrameWantCaptureKeyboard(want_capture_keyboard);
-}
-
-pub inline fn CaptureMouseFromApp(want_capture_mouse: bool) void {
-SetNextFrameWantCaptureMouse(want_capture_mouse);
-}
-
-extern fn _ZN5ImGui16CalcListClippingEifPiS0_(items_count: c_int, items_height: f32, out_items_display_start: [*c]c_int, out_items_display_end: [*c]c_int) void;
-pub const CalcListClipping = _ZN5ImGui16CalcListClippingEifPiS0_;
-
-pub inline fn GetWindowContentRegionWidth() f32 {
-return ;
-}
-
-extern fn _ZN5ImGui13ListBoxHeaderEPKcii(label: [*c]const u8, items_count: c_int, height_in_items: c_int) bool;
-pub const ListBoxHeader = _ZN5ImGui13ListBoxHeaderEPKcii;
-
-pub inline fn ListBoxHeader(label: [*c]const u8, size: *const ImVec2) bool {
-return BeginListBox(label, size);
-}
-
-pub inline fn ListBoxFooter() void {
-EndListBox();
-}
-
-};
-
-pub const ImDrawCornerFlags = ImDrawFlags;
-
-pub const ImDrawCornerFlags_ = extern struct {
-    bits: c_int = 0,
-
-    pub const None: ImDrawCornerFlags_ = .{ .bits = @intCast(c_uint, ImDrawFlags_.RoundCornersNone.bits) };
-    pub const TopLeft: ImDrawCornerFlags_ = .{ .bits = @intCast(c_uint, ImDrawFlags_.RoundCornersTopLeft.bits) };
-    pub const TopRight: ImDrawCornerFlags_ = .{ .bits = @intCast(c_uint, ImDrawFlags_.RoundCornersTopRight.bits) };
-    pub const BotLeft: ImDrawCornerFlags_ = .{ .bits = @intCast(c_uint, ImDrawFlags_.RoundCornersBottomLeft.bits) };
-    pub const BotRight: ImDrawCornerFlags_ = .{ .bits = @intCast(c_uint, ImDrawFlags_.RoundCornersBottomRight.bits) };
-    pub const All: ImDrawCornerFlags_ = .{ .bits = @intCast(c_uint, ImDrawFlags_.RoundCornersAll.bits) };
-    pub const Top: ImDrawCornerFlags_ = .{ .bits = @intCast(c_uint, @intCast(c_int, ImDrawCornerFlags_.TopLeft.bits) | @intCast(c_int, ImDrawCornerFlags_.TopRight.bits)) };
-    pub const Bot: ImDrawCornerFlags_ = .{ .bits = @intCast(c_uint, @intCast(c_int, ImDrawCornerFlags_.BotLeft.bits) | @intCast(c_int, ImDrawCornerFlags_.BotRight.bits)) };
-    pub const Left: ImDrawCornerFlags_ = .{ .bits = @intCast(c_uint, @intCast(c_int, ImDrawCornerFlags_.TopLeft.bits) | @intCast(c_int, ImDrawCornerFlags_.BotLeft.bits)) };
-    pub const Right: ImDrawCornerFlags_ = .{ .bits = @intCast(c_uint, @intCast(c_int, ImDrawCornerFlags_.TopRight.bits) | @intCast(c_int, ImDrawCornerFlags_.BotRight.bits)) };
-
-    // pub usingnamespace cpp.FlagsMixin(ImDrawCornerFlags_);
-};
-
-pub const ImGuiModFlags = ImGuiKeyChord;
-
-pub const ImGuiModFlags_ = extern struct {
-    bits: c_int = 0,
-
-    pub const None: ImGuiModFlags_ = .{ .bits = @intCast(c_uint, 0) };
-    pub const Ctrl: ImGuiModFlags_ = .{ .bits = @intCast(c_uint, ImGuiKey.ImGuiMod_Ctrl.bits) };
-    pub const Shift: ImGuiModFlags_ = .{ .bits = @intCast(c_uint, ImGuiKey.ImGuiMod_Shift.bits) };
-    pub const Alt: ImGuiModFlags_ = .{ .bits = @intCast(c_uint, ImGuiKey.ImGuiMod_Alt.bits) };
-    pub const Super: ImGuiModFlags_ = .{ .bits = @intCast(c_uint, ImGuiKey.ImGuiMod_Super.bits) };
-
-    // pub usingnamespace cpp.FlagsMixin(ImGuiModFlags_);
-};
-

@@ -15,9 +15,7 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 - (easy) verbose option
 - (easy) better input file not found error
-- (easy) format code blocks with `zig fmt --stdin`
-- (easy) comment out transpiled functions as they might be worng and need manual check
-- (easy) auto resolve naming conflics by apending a number in the funcion name
+- (easy) resolve return of function with a aliased return type
 - (easy) fail when clang ast-bump has failed, because missing headers or worng code
 - (easy) handle primitive type `ptrdiff_t`
 - (hard) `if (*data++ == v) { ... }` should generate `{ data += 1; if (data.* == v) { ... } }`
