@@ -14,10 +14,12 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 ## Todo
 
 - (easy) verbose option
+- (easy) `#include` -> `@import`
 - (easy) better input file not found error
 - (easy) resolve return of function with a aliased return type
 - (easy) fail when clang ast-bump has failed, because missing headers or worng code
 - (easy) handle primitive type `ptrdiff_t`
+- default optional function args
 - (hard) `if (*data++ == v) { ... }` should generate `{ data += 1; if (data.* == v) { ... } }`
 - (hard) solve `UnresolvedMemberExpr`, maybe when integrating clang ast directly
 - (hard) solve implicit destructors call

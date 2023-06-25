@@ -731,13 +731,34 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                     // value = class[i];
                     name = "get";
                 }
+            } else if (mem.eql(u8, op, "()")) {
+                name = "call";
+            } else if (mem.eql(u8, op, "==")) {
+                name = "eql";
+            } else if (mem.eql(u8, op, "!=")) {
+                name = "notEql";
+            } else if (mem.eql(u8, op, "!")) {
+                name = "not";
+            } else if (mem.eql(u8, op, "+")) {
+                name = "add";
+            } else if (mem.eql(u8, op, "-")) {
+                name = "sub";
+            } else if (mem.eql(u8, op, "*")) {
+                name = "mul";
+            } else if (mem.eql(u8, op, "/")) {
+                name = "div";
+            } else if (mem.eql(u8, op, "+=")) {
+                name = "addInto";
+            } else if (mem.eql(u8, op, "-=")) {
+                name = "subInto";
+            } else if (mem.eql(u8, op, "*=")) {
+                name = "mulInto";
+            } else if (mem.eql(u8, op, "/=")) {
+                name = "divInto";
             } else if (mem.eql(u8, op, "=")) {
                 // assign
                 name = "copyFrom";
-            }
-            // } else if (mem.eql(u8, op, " new")) {
-            // } else if (mem.eql(u8, op, " delete")) {
-            else {
+            } else {
                 log.err("unhandled operator `{s}` in `{?s}`", .{ op, this_opt });
                 return;
             }
@@ -1217,27 +1238,43 @@ inline fn visitFunctionDecl(self: *Self, value: *const json.Value) !void {
     return self.visitCXXMethodDecl(value, null);
 }
 
-fn visitTemplateTypeParmDecl(self: *Self, node: *const json.Value, parent: []const u8) !void {
+fn visitTemplateTypeParmDecl(self: *Self, node: *const json.Value, this: []const u8) !void {
     self.nodes_visited += 1;
 
     var name = node.object.get("name");
     if (name == null) {
-        log.err("unnamed template param in `{s}`", .{parent});
+        log.err("unnamed `TemplateTypeParmDecl` in `{s}`", .{this});
         return;
     }
 
-    var tag = node.object.get("tagUsed");
-    if (tag == null) {
-        self.nodes_visited -= 1;
-        log.err("untaged template param in `{s}`", .{parent});
+    if (node.object.get("tagUsed")) |tag| {
+        if (mem.eql(u8, tag.string, "typename")) {
+            try self.out.print("comptime {s}: type", .{name.?.string});
+            return;
+        }
+    }
+
+    try self.out.print("comptime {s}: anytype", .{name.?.string});
+}
+
+fn visitNonTypeTemplateParmDecl(self: *Self, node: *const json.Value, this: []const u8) !void {
+    self.nodes_visited += 1;
+
+    var name = node.object.get("name");
+    if (name == null) {
+        log.err("unnamed `NonTypeTemplateParmDecl` in `{s}`", .{this});
         return;
     }
 
-    if (mem.eql(u8, tag.?.string, "typename")) {
-        try self.out.print("comptime {s}: type", .{name.?.string});
-    } else {
-        try self.out.print("comptime {s}: anytype", .{name.?.string});
+    if (typeQualifier(node)) |c_type| {
+        const ty = try self.transpileType(c_type);
+        defer self.allocator.free(ty);
+
+        try self.out.print("comptime {s}: {s}", .{ name.?.string, ty });
+        return;
     }
+
+    try self.out.print("comptime {s}: anytype", .{name.?.string});
 }
 
 fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
@@ -1277,16 +1314,19 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
     defer self.scope = parent_state;
 
     // template param
-    var tp_comma = false;
+    var comma = false;
     for (inner.?.array.items) |*item| {
         const item_kind = item.object.get("kind").?.string;
         if (mem.eql(u8, item_kind, "TemplateTypeParmDecl")) {
-            if (tp_comma) {
-                try self.out.print(", ", .{});
-            }
-            tp_comma = true;
+            if (comma) try self.out.print(", ", .{});
+            comma = true;
 
             try self.visitTemplateTypeParmDecl(item, name);
+        } else if (mem.eql(u8, item_kind, "NonTypeTemplateParmDecl")) {
+            if (comma) try self.out.print(", ", .{});
+            comma = true;
+
+            try self.visitNonTypeTemplateParmDecl(item, name);
         } else if (mem.eql(u8, item_kind, "CXXRecordDecl")) {
             self.nodes_visited += 1;
 
@@ -1637,7 +1677,7 @@ fn visitUnaryExprOrTypeTraitExpr(self: *Self, value: *const json.Value) !void {
 fn visitDeclRefExpr(self: *Self, value: *const json.Value) !void {
     const j_ref = value.object.getPtr("referencedDecl").?;
     const kind = j_ref.object.getPtr("kind").?.string;
-    if (mem.eql(u8, kind, "ParmVarDecl") or mem.eql(u8, kind, "FunctionDecl") or mem.eql(u8, kind, "VarDecl")) {
+    if (mem.eql(u8, kind, "ParmVarDecl") or mem.eql(u8, kind, "FunctionDecl") or mem.eql(u8, kind, "VarDecl") or mem.eql(u8, kind, "NonTypeTemplateParmDecl")) {
         const name = j_ref.object.get("name").?.string;
         _ = try self.out.write(name);
     } else if (mem.eql(u8, kind, "EnumConstantDecl")) {
@@ -1856,8 +1896,32 @@ fn visitCXXOperatorCallExpr(self: *Self, node: *const json.Value) !void {
                     // value = class[i];
                     op_name = "get";
                 }
+            } else if (mem.eql(u8, name, "operator()")) {
+                op_name = "call";
             } else if (mem.eql(u8, name, "operator=")) {
                 op_name = "copyFrom";
+            } else if (mem.eql(u8, name, "operator==")) {
+                op_name = "eql";
+            } else if (mem.eql(u8, name, "operator!=")) {
+                op_name = "notEql";
+            } else if (mem.eql(u8, name, "operator!")) {
+                op_name = "not";
+            } else if (mem.eql(u8, name, "operator+")) {
+                op_name = "add";
+            } else if (mem.eql(u8, name, "operator-")) {
+                op_name = "sub";
+            } else if (mem.eql(u8, name, "operator*")) {
+                op_name = "mul";
+            } else if (mem.eql(u8, name, "operator/")) {
+                op_name = "div";
+            } else if (mem.eql(u8, name, "operator+=")) {
+                op_name = "addInto";
+            } else if (mem.eql(u8, name, "operator-=")) {
+                op_name = "subInto";
+            } else if (mem.eql(u8, name, "operator*=")) {
+                op_name = "mulInto";
+            } else if (mem.eql(u8, name, "operator/=")) {
+                op_name = "divInto";
             } else {
                 log.err("unhandled operator `{s}` in `CXXOperatorCallExpr`", .{name});
                 return;
