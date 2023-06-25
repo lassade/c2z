@@ -29,9 +29,9 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ### C++ libs
 
-- [x] fpng
-- [ ] xatlas
-- [ ] imgui
+- [ ] fpng (99.99 %)
+- [ ] xatlas (86.40 %)
+- [ ] imgui (67.21 %)
 - [ ] box2d
 - [ ] basis_universal
 - [ ] JoltPhysics
