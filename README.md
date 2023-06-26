@@ -15,7 +15,7 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ### Setup
 
-1. make sure `zig` in your PATH, you will need the version `0.11.0-dev.3220+447a30299` (sorry about that)
+1. make sure `zig` in your PATH, you will need the version `0.11.0-dev.3803+7ad104227` (sorry about that)
 2. build the project and copy the `c2z` executable from `zig-out` to your desired location
 3. or just run the project using `zig build run -- ARGS`
 
