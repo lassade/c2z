@@ -11,6 +11,21 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 - Meant to work with libraries that follow the *C with classes* coding style
 - No Zig side inheritance, instead create bindings of a C++ implementation
 
+## Usage
+
+### Setup
+
+1. make sure `zig` in your PATH, you will need the version `0.11.0-dev.3220+447a30299` (sorry about that)
+2. build the project and copy the `c2z` executable from `zig-out` to your desired location
+3. or just run the project using `zig build run -- ARGS`
+
+### Running it
+
+1. `zig build run -- my_include_file.h` or `c2z my_include_file.h`
+2. use `--cargs` to pass arguments to clang this is useful to includes e.g. `zig build run -- --cargs "-I.\use_cases\msdfgen\include\" .\use_cases\msdfgen\include\core\generator-config.h`
+3. modify the generated bindings until it works ;) you might need to import `cpp.zig` it is located in the src folder
+
+
 ## Todo
 
 - (easy) verbose option
