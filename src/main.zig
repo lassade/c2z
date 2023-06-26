@@ -76,22 +76,19 @@ pub fn main() !void {
             allocator.free(astdump.stderr);
         }
 
-        var parser = json.Parser.init(allocator, .alloc_if_needed);
-        defer parser.deinit();
-
-        var tree = try parser.parse(astdump.stdout);
+        var tree = try json.parseFromSlice(json.Value, allocator, astdump.stdout, .{});
         defer tree.deinit();
 
         var transpiler = Transpiler.init(allocator);
         transpiler.transpile_includes = res.args.@"transpile-includes" != 0;
         //transpiler.zigify = res.args.zigify != 0;
         defer transpiler.deinit();
-        try transpiler.run(&tree.root);
+        try transpiler.run(&tree.value);
 
         log.info("transpiled {d}/{d} ({d:.2} %)", .{
             transpiler.nodes_visited,
             transpiler.nodes_count,
-            (100.0 * @intToFloat(f64, transpiler.nodes_visited) / @intToFloat(f64, transpiler.nodes_count)),
+            (100.0 * @floatFromInt(f64, transpiler.nodes_visited) / @floatFromInt(f64, transpiler.nodes_count)),
         });
 
         var path = std.ArrayList(u8).init(allocator);

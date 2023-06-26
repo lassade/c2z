@@ -74,11 +74,11 @@ pub fn VectorAlloc(
         }
 
         pub inline fn size(self: *const Self) usize {
-            return (@ptrToInt(self.tail) - @ptrToInt(self.head));
+            return @as(usize, self.tail.?.* - self.head.?.*);
         }
 
         pub inline fn capacity(self: *const Self) usize {
-            return (@ptrToInt(self.end) - @ptrToInt(self.head));
+            return @as(usize, self.end.?.* - self.head.?.*);
         }
 
         pub inline fn values(self: *Self) []T {

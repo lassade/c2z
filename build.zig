@@ -24,7 +24,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const clap_mod = b.addModule("clap", .{ .source_file = .{ .path = "libs/zig-clap/clap.zig" } });
+    const clap_mod = clapLibrary(b, target, optimize).module("clap");
     exe.addModule("clap", clap_mod);
 
     // This declares intent for the executable to be installed into the
@@ -87,4 +87,12 @@ pub fn build(b: *std.Build) void {
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+}
+
+fn clapLibrary(b: *std.Build, target: std.zig.CrossTarget, optimize: std.builtin.OptimizeMode) *std.Build.Dependency {
+    const libclap_dep = b.dependency("clap", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    return libclap_dep;
 }
