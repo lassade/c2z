@@ -42,7 +42,7 @@ pub fn main() !void {
         c_ver = s;
     }
 
-    const cwd = try std.fs.cwd().realpathAlloc(allocator, "");
+    const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd);
 
     for (res.positionals) |input_file| {
