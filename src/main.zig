@@ -10,13 +10,6 @@ const Allocator = mem.Allocator;
 
 const Transpiler = @import("transpiler.zig");
 
-const Arg = enum { help, positionals };
-const Args = std.ComptimeStringMap(Arg, .{
-    .{ "-h", .help },
-    .{ "--help", .help },
-    .{ "--", .positionals },
-});
-
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.testing.expect(gpa.deinit() != .leak) catch @panic("memory leak");
@@ -38,25 +31,37 @@ pub fn main() !void {
     var argv = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, argv);
 
+    var recursive = false;
+    var target_tuple: ?[]const u8 = null;
+
     var i: usize = 1;
     while (i < argv.len - 1) : (i += 1) {
         const arg = argv[i];
-        if (Args.get(arg)) |tag| {
-            switch (tag) {
-                .help => {
-                    _ = try io.getStdErr().writer().write(
-                        \\-h, --help                   Display this help and exit.
-                        \\[clang arguments]            Pass any clang arguments, e.g. -DNDEBUG -I.\include -target x86-linux
-                        \\[--] [FILES]                      Input files
-                        \\
-                    );
-                    return;
-                },
-                .positionals => {
-                    i += 1;
-                    break;
-                },
-            }
+        if (mem.eql(u8, arg, "-h") or mem.eql(u8, arg, "-help")) {
+            _ = try io.getStdErr().writer().write(
+                \\-h, --help                   Display this help and exit
+                \\-target                      Target tuple
+                \\-R                           Recursive transpiling, use to also parse includes
+                \\[clang arguments]            Pass any clang arguments, e.g. -DNDEBUG -I.\include -target x86-linux
+                \\[--] [FILES]                 Input files
+                \\
+            );
+            return;
+        } else if (mem.eql(u8, arg, "-R")) {
+            recursive = true;
+            continue;
+        } else if (mem.eql(u8, arg, "--")) {
+            // positionals arguments
+            i += 1;
+            break;
+        } else if (mem.eql(u8, arg, "-target")) {
+            // track the target tuple if specified
+            try clang.append(arg);
+            i += 1;
+
+            target_tuple = argv[i];
+            try clang.append(argv[i]);
+            continue;
         }
 
         try clang.append(arg);
@@ -69,6 +74,10 @@ pub fn main() !void {
         try dclang.appendSlice(" ");
     }
     log.info("{s}", .{dclang.items});
+
+    const target_path = if (target_tuple != null) try mem.replaceOwned(u8, allocator, target_tuple.?, "-", "/") else ".";
+    defer if (target_tuple != null) allocator.free(target_path);
+    try std.fs.cwd().makePath(target_path);
 
     const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd);
@@ -98,6 +107,7 @@ pub fn main() !void {
 
         var transpiler = Transpiler.init(allocator);
         defer transpiler.deinit();
+        transpiler.recursive = recursive;
         try transpiler.run(&tree.root);
 
         log.info("transpiled {d}/{d} ({d:.2} %)", .{
@@ -107,7 +117,7 @@ pub fn main() !void {
         });
 
         var path = std.ArrayList(u8).init(allocator);
-        try path.writer().print("{s}.zig", .{std.fs.path.stem(input_file)});
+        try path.writer().print("{s}/{s}.zig", .{ target_path, std.fs.path.stem(input_file) });
         defer path.deinit();
 
         var file = try std.fs.cwd().createFile(path.items, .{});
