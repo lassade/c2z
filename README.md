@@ -28,8 +28,8 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Todo
 
+- (easy) fix va_args `...`
 - (easy) walk a directory tree
-- might be better to desugar `size_t`
 - (easy) verbose option
 - (easy) `#include` -> `@import`
 - (easy) better input file not found error

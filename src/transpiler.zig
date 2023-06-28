@@ -40,6 +40,15 @@ const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
     .{ "uint32_t", "u32" },
     .{ "int64_t", "i64" },
     .{ "uint64_t", "u64" },
+    // note: zig docs do say they are equivalents so it should be ok todo this
+    .{ "__int128", "i128" },
+    .{ "unsigned __int128", "u128" },
+    .{ "intptr_t", "isize" },
+    .{ "uintptr_t", "usize" },
+    .{ "size_t", "usize" },
+    // assumed types
+    .{ "ptrdiff_t", "isize" },
+    .{ "ssize_t", "isize" },
     // custom types
     .{ "std::vector", "cpp.Vector" },
     .{ "std::array", "cpp.Array" }, // todo: std::array<T, N> -> [N]T
@@ -2136,7 +2145,7 @@ fn parseFnSignature(value: *const json.Value) ?FnSig {
 
         var lp = mem.lastIndexOf(u8, raw, ")").?;
         sig.const_self = mem.endsWith(u8, raw[lp..], ") const");
-        sig.varidatic = mem.endsWith(u8, raw[0 .. lp + 1], "... )");
+        sig.varidatic = mem.endsWith(u8, raw[0 .. lp + 1], "...)");
 
         var s = mem.split(u8, raw, "(");
         sig.ret = s.first();
