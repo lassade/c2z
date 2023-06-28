@@ -558,8 +558,8 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         } else if (mem.eql(u8, kind, "CXXDestructorDecl")) {
             const dtor = item.object.get("mangledName").?.string;
             var w = functions.writer();
-            try w.print("    extern fn {s}(self: *{s}) void;\n", .{ dtor, name });
-            try w.print("    pub inline fn deinit(self: *{s}) void {{ self.{s}(); }}\n\n", .{ name, dtor });
+            try w.print("    extern fn @\"{s}\"(self: *{s}) void;\n", .{ dtor, name });
+            try w.print("    pub inline fn deinit(self: *{s}) void {{ self.@\"{s}\"(); }}\n\n", .{ name, dtor });
         } else if (mem.eql(u8, kind, "AccessSpecDecl")) {
             const access = item.object.get("access").?.string;
             self.public = mem.eql(u8, access, "public");
@@ -619,11 +619,11 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
 
     const mangled_name = value.object.getPtr("mangledName").?.string;
     if (constant) {
-        try self.out.print("extern const {s}: {s};\n", .{ mangled_name, ty });
-        try self.out.print("pub inline fn {s}() {s} {{\n    return {s};\n}}\n\n", .{ name, ty, mangled_name });
+        try self.out.print("extern const @\"{s}\": {s};\n", .{ mangled_name, ty });
+        try self.out.print("pub inline fn {s}() {s} {{\n    return @\"{s}\";\n}}\n\n", .{ name, ty, mangled_name });
     } else {
         try self.out.print("extern var {s}: {s};\n", .{ mangled_name, ty });
-        try self.out.print("pub inline fn {s}() *{s} {{\n    return &{s};\n}}\n\n", .{ name, ty, mangled_name });
+        try self.out.print("pub inline fn {s}() *{s} {{\n    return &@\"{s}\";\n}}\n\n", .{ name, ty, mangled_name });
     }
 }
 
@@ -663,7 +663,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
 
     const method_mangled_name = value.object.get("mangledName").?.string;
 
-    try self.out.print("extern fn {s}(", .{method_mangled_name});
+    try self.out.print("extern fn @\"{s}\"(", .{method_mangled_name});
 
     if (sig.const_self) {
         try self.out.print("self: *const {s}", .{parent});
@@ -734,7 +734,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
     try self.out.print("({s}) {s} {{\n", .{ init_args.items, parent });
     // body
     try self.out.print("    var self: {s} = undefined;\n", .{parent});
-    try self.out.print("    {s}(&self{s});", .{ method_mangled_name, forward_init_args.items });
+    try self.out.print("    @\"{s}\"(&self{s});", .{ method_mangled_name, forward_init_args.items });
     try self.out.print("    return self;\n", .{});
     try self.out.print("}}\n\n", .{});
 
@@ -873,7 +873,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
             try self.writeDocs(inner);
             try self.out.print("pub ", .{});
         }
-        try self.out.print("extern fn {s}(", .{mangled_name});
+        try self.out.print("extern fn @\"{s}\"(", .{mangled_name});
     }
 
     var comma = false;
@@ -970,9 +970,9 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
         if (is_mangled) {
             try self.writeDocs(inner);
             if (overload_opt) |i| {
-                try self.out.print("pub const {s}__Overload{d} = {s};\n\n", .{ name, i, mangled_name });
+                try self.out.print("pub const {s}__Overload{d} = @\"{s}\";\n\n", .{ name, i, mangled_name });
             } else {
-                try self.out.print("pub const {s} = {s};\n\n", .{ name, mangled_name });
+                try self.out.print("pub const {s} = @\"{s}\";\n\n", .{ name, mangled_name });
             }
         }
     }
