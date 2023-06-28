@@ -26,7 +26,6 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 3. it is a good idea expecify a target with `-target x86-linux` always, bindings not always are crossplatform
 4. modify the generated bindings until it works ;) you might need to import `cpp.zig` it is located in the src folder
 
-
 ## Todo
 
 - (easy) walk a directory tree

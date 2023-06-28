@@ -35,12 +35,12 @@ pub fn main() !void {
     var target_tuple: ?[]const u8 = null;
 
     var i: usize = 1;
-    while (i < argv.len - 1) : (i += 1) {
+    while (i < argv.len) : (i += 1) {
         const arg = argv[i];
         if (mem.eql(u8, arg, "-h") or mem.eql(u8, arg, "-help")) {
             _ = try io.getStdErr().writer().write(
                 \\-h, --help                   Display this help and exit
-                \\-target                      Target tuple
+                \\-target TARGET_TUPLE         Clang target tuple
                 \\-R                           Recursive transpiling, use to also parse includes
                 \\[clang arguments]            Pass any clang arguments, e.g. -DNDEBUG -I.\include -target x86-linux
                 \\[--] [FILES]                 Input files
@@ -62,6 +62,9 @@ pub fn main() !void {
             target_tuple = argv[i];
             try clang.append(argv[i]);
             continue;
+        } else if (i == argv.len - 1 and arg[0] != '-') {
+            // last arg is not a command, so it must be a input arg
+            break;
         }
 
         try clang.append(arg);
