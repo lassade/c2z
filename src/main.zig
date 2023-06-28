@@ -1,5 +1,5 @@
 const std = @import("std");
-const clap = @import("clap");
+const builtin = @import("builtin");
 const debug = std.debug;
 const io = std.io;
 const log = std.log;
@@ -10,65 +10,79 @@ const Allocator = mem.Allocator;
 
 const Transpiler = @import("transpiler.zig");
 
+const Arg = enum { help, positionals };
+const Args = std.ComptimeStringMap(Arg, .{
+    .{ "-h", .help },
+    .{ "--help", .help },
+    .{ "--", .positionals },
+});
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.testing.expect(gpa.deinit() != .leak) catch @panic("memory leak");
     const allocator = gpa.allocator();
 
-    const params = comptime clap.parseParamsComptime(
-        \\-h, --help                   Display this help and exit.
-        \\--std <str>                  C++ version, default c++11.
-        \\--cargs <str>                Clang args.
-        \\--transpile-includes         By default includes are excluded from final output, use this options to include them.
-        //\\--zigify                     Aliases in the zig code style.
-        \\<str>...
-        \\
-    );
+    // zig cc -x c++ -std=c++11 -Xclang -ast-dump=json {input_file}
+    var clang = std.ArrayList([]const u8).init(allocator);
+    defer clang.deinit();
 
-    var diag = clap.Diagnostic{};
-    var res = clap.parse(clap.Help, &params, clap.parsers.default, .{ .diagnostic = &diag }) catch |err| {
-        // Report useful error and exit
-        diag.report(io.getStdErr().writer(), err) catch {};
-        return err;
-    };
-    defer res.deinit();
+    try clang.append("zig");
+    try clang.append("cc");
+    try clang.append("-x");
+    try clang.append("c++");
+    try clang.append("-lc++");
+    try clang.append("-Xclang");
+    try clang.append("-ast-dump=json");
+    try clang.append("-fsyntax-only");
 
-    if (res.args.help != 0) {
-        return clap.help(io.getStdErr().writer(), clap.Help, &params, .{});
+    var argv = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, argv);
+
+    var i: usize = 1;
+    while (i < argv.len - 1) : (i += 1) {
+        const arg = argv[i];
+        if (Args.get(arg)) |tag| {
+            switch (tag) {
+                .help => {
+                    _ = try io.getStdErr().writer().write(
+                        \\-h, --help                   Display this help and exit.
+                        \\[clang arguments]            Pass any clang arguments, e.g. -DNDEBUG -I.\include -target x86-linux
+                        \\[--] [FILES]                      Input files
+                        \\
+                    );
+                    return;
+                },
+                .positionals => {
+                    i += 1;
+                    break;
+                },
+            }
+        }
+
+        try clang.append(arg);
     }
 
-    var c_ver: []const u8 = "-std=c++11";
-    if (res.args.std) |s| {
-        c_ver = s;
+    var dclang = std.ArrayList(u8).init(allocator);
+    defer dclang.deinit();
+    for (clang.items) |arg| {
+        try dclang.appendSlice(arg);
+        try dclang.appendSlice(" ");
     }
+    log.info("{s}", .{dclang.items});
 
     const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd);
 
-    for (res.positionals) |input_file| {
+    while (i < argv.len) : (i += 1) {
+        const input_file = argv[i];
         log.info("binding `{s}`", .{input_file});
 
-        // zig cc -x c++ -std=c++11 -Xclang -ast-dump=json {input_file}
-        var args = std.ArrayList([]const u8).init(allocator);
-        defer args.deinit();
-
-        try args.append("zig");
-        try args.append("cc");
-        try args.append("-x");
-        try args.append("c++");
-        try args.append(c_ver);
-        try args.append("-lc++");
-        try args.append("-Xclang");
-        try args.append("-ast-dump=json");
-        try args.append("-fsyntax-only");
-        if (res.args.cargs) |cargs| {
-            try args.append(cargs);
-        }
-        try args.append(input_file);
+        try clang.append(input_file);
+        defer _ = clang.pop();
 
         var astdump = try std.ChildProcess.exec(.{
             .allocator = allocator,
-            .argv = args.items,
+            .argv = clang.items,
             .max_output_bytes = 512 * 1024 * 1024,
         });
         defer {
@@ -83,8 +97,6 @@ pub fn main() !void {
         defer tree.deinit();
 
         var transpiler = Transpiler.init(allocator);
-        transpiler.transpile_includes = res.args.@"transpile-includes" != 0;
-        //transpiler.zigify = res.args.zigify != 0;
         defer transpiler.deinit();
         try transpiler.run(&tree.root);
 
@@ -103,11 +115,14 @@ pub fn main() !void {
         file.close();
 
         log.info("formating `{s}`", .{path.items});
-        args.clearRetainingCapacity();
-        try args.append("zig");
-        try args.append("fmt");
-        try args.append(path.items);
-        var zfmt = std.ChildProcess.init(args.items, args.allocator);
+        var zfmt_args = std.ArrayList([]const u8).init(allocator);
+        defer zfmt_args.deinit();
+        zfmt_args.clearRetainingCapacity();
+        try zfmt_args.append("zig");
+        try zfmt_args.append("fmt");
+        try zfmt_args.append(path.items);
+
+        var zfmt = std.ChildProcess.init(zfmt_args.items, allocator);
         zfmt.stderr_behavior = .Ignore;
         zfmt.stdout_behavior = .Ignore;
         _ = try zfmt.spawnAndWait();

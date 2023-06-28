@@ -21,8 +21,8 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ### Running it
 
-1. `zig build run -- my_include_file.h` or `c2z my_include_file.h`
-2. use `--cargs` to pass arguments to clang this is useful to includes e.g. `zig build run -- --cargs "-I.\use_cases\msdfgen\include\" .\use_cases\msdfgen\include\core\generator-config.h`
+1. `zig build run -- lib.h` or `c2z lib.h`
+2. you can pass any clang argument that e.g. `zig build run -- -DNDEBUG -I.\include -target x86-linux -- .\include\lib.h`
 3. modify the generated bindings until it works ;) you might need to import `cpp.zig` it is located in the src folder
 
 

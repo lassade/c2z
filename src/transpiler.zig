@@ -123,10 +123,6 @@ public: bool = true,
 
 class_info: std.StringArrayHashMap(ClassInfo),
 
-// options
-transpile_includes: bool,
-zigify: bool,
-
 pub fn init(allocator: Allocator) Self {
     return Self{
         .allocator = allocator,
@@ -138,8 +134,6 @@ pub fn init(allocator: Allocator) Self {
         .namespace = NamespaceScope.init(allocator),
         .scope = .{ .tag = .root, .name = null },
         .class_info = std.StringArrayHashMap(ClassInfo).init(allocator),
-        .transpile_includes = false,
-        .zigify = false,
     };
 }
 
@@ -2157,14 +2151,13 @@ inline fn shouldSkip(self: *Self, value: *const json.Value) bool {
     //         return true;
     //     }
     // }
-    if (!self.transpile_includes) {
-        if (value.object.getPtr("loc")) |loc| {
-            // c include
-            if (loc.object.getPtr("includedFrom") != null) return true;
-            // c++ ...
-            if (loc.object.getPtr("expansionLoc")) |expansionLoc| {
-                if (expansionLoc.object.getPtr("includedFrom") != null) return true;
-            }
+    _ = self;
+    if (value.object.getPtr("loc")) |loc| {
+        // c include
+        if (loc.object.getPtr("includedFrom") != null) return true;
+        // c++ ...
+        if (loc.object.getPtr("expansionLoc")) |expansionLoc| {
+            if (expansionLoc.object.getPtr("includedFrom") != null) return true;
         }
     }
     return false;

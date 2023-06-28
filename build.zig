@@ -24,9 +24,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const clap_mod = b.addModule("clap", .{ .source_file = .{ .path = "libs/zig-clap/clap.zig" } });
-    exe.addModule("clap", clap_mod);
-
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
