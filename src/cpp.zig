@@ -1,6 +1,30 @@
 //! zig c++ interop types
 
 const std = @import("std");
+const builtin = @import("builtin");
+
+/// Switch by linux target triple, usage:
+/// ```zig
+/// const size_t = targetSwitch(type, .{
+///     .{ "x86_64-windows-gnu", c_ulonglong },
+///     .{ "x86_64-linux-gnu", c_ulong },
+/// });
+/// ```
+pub fn targetSwitch(
+    comptime T: anytype,
+    comptime lookup: anytype,
+) T {
+    var buffer: [1024]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    var tuple = builtin.target.linuxTriple(fba.allocator()) catch unreachable;
+    for (lookup) |entry| {
+        if (std.mem.eql(u8, entry[0], tuple)) {
+            return entry[1];
+        }
+    }
+
+    @compileError("target `" ++ tuple ++ "` not listed");
+}
 
 /// optional c enumeration extension functions
 pub fn FlagsMixin(comptime FlagsType: type) type {
