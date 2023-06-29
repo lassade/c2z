@@ -12,8 +12,9 @@ const Self = @This();
 const FnSig = struct {
     raw: []const u8,
     const_self: bool,
-    varidatic: bool,
+    is_varidatic: bool,
     ret: []const u8,
+    requires_target_switch: bool,
 };
 
 const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
@@ -131,6 +132,7 @@ class_info: std.StringArrayHashMap(ClassInfo),
 
 // options
 recursive: bool = false,
+target_tuple: ?[]const u8 = null,
 
 pub fn init(allocator: Allocator) Self {
     return Self{
@@ -727,7 +729,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
         }
     }
 
-    if (sig.varidatic) {
+    if (sig.is_varidatic) {
         try self.out.print(", ...) callconv(.C) void;\n", .{});
     } else {
         try self.out.print(") void;\n", .{});
@@ -739,7 +741,15 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
     try self.out.print("({s}) {s} {{\n", .{ init_args.items, parent });
     // body
     try self.out.print("    var self: {s} = undefined;\n", .{parent});
+    // if (sig.requires_target_switch) {
+    //     try self.out.print("cpp.targetSwitch(.{{ .{{ \"{?s}\", @\"{s}\" }} }})(&self{s});\n", .{
+    //         self.target_tuple,
+    //         method_mangled_name,
+    //         forward_init_args.items,
+    //     });
+    // } else {
     try self.out.print("    @\"{s}\"(&self{s});", .{ method_mangled_name, forward_init_args.items });
+    //}
     try self.out.print("    return self;\n", .{});
     try self.out.print("}}\n\n", .{});
 
@@ -944,7 +954,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
         }
     }
 
-    if (sig.varidatic) {
+    if (sig.is_varidatic) {
         if (comma) {
             try self.out.print(", ", .{});
         }
@@ -975,10 +985,15 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
         if (is_mangled) {
             try self.writeDocs(inner);
             if (overload_opt) |i| {
-                try self.out.print("pub const {s}__Overload{d} = @\"{s}\";\n\n", .{ name, i, mangled_name });
+                try self.out.print("pub const {s}__Overload{d} = ", .{ name, i });
             } else {
-                try self.out.print("pub const {s} = @\"{s}\";\n\n", .{ name, mangled_name });
+                try self.out.print("pub const {s} = ", .{name});
             }
+            // if (sig.requires_target_switch) {
+            //     try self.out.print("cpp.targetSwitch(.{{ .{{ \"{?s}\", @\"{s}\" }} }});\n\n", .{ self.target_tuple, mangled_name });
+            // } else {
+            try self.out.print("@\"{s}\";\n\n", .{mangled_name});
+            //}
         }
     }
 }
@@ -1074,7 +1089,7 @@ fn visitFunctionTemplateDecl(self: *Self, node: *const json.Value) !void {
                 }
             }
 
-            if (sig.varidatic) {
+            if (sig.is_varidatic) {
                 if (comma) {
                     try self.out.print(", ", .{});
                 }
@@ -2143,12 +2158,15 @@ fn parseFnSignature(value: *const json.Value) ?FnSig {
         var sig: FnSig = undefined;
         sig.raw = raw;
 
-        var lp = mem.lastIndexOf(u8, raw, ")").?;
-        sig.const_self = mem.endsWith(u8, raw[lp..], ") const");
-        sig.varidatic = mem.endsWith(u8, raw[0 .. lp + 1], "...)");
+        var rp = mem.lastIndexOf(u8, raw, ")").?;
+        sig.const_self = mem.endsWith(u8, raw[rp..], ") const");
+        sig.is_varidatic = mem.endsWith(u8, raw[0 .. rp + 1], "...)");
 
-        var s = mem.split(u8, raw, "(");
-        sig.ret = s.first();
+        var lp = mem.indexOf(u8, raw, "(").?;
+        sig.ret = raw[0..lp];
+
+        // search in parameters body
+        sig.requires_target_switch = mem.indexOf(u8, raw[lp..rp], "size_t") != null;
 
         return sig;
     }

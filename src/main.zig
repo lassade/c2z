@@ -70,6 +70,18 @@ pub fn main() !void {
         try clang.append(arg);
     }
 
+    var host_target = try builtin.target.linuxTriple(allocator);
+    defer allocator.free(host_target);
+
+    if (target_tuple == null) {
+        // assing a default target tuple
+        target_tuple = host_target;
+
+        try clang.append("-target");
+        try clang.append(host_target);
+        log.info("using host `{s}` as target", .{host_target});
+    }
+
     var dclang = std.ArrayList(u8).init(allocator);
     defer dclang.deinit();
     for (clang.items) |arg| {
@@ -111,6 +123,7 @@ pub fn main() !void {
         var transpiler = Transpiler.init(allocator);
         defer transpiler.deinit();
         transpiler.recursive = recursive;
+        transpiler.target_tuple = target_tuple;
         try transpiler.run(&tree.root);
 
         log.info("transpiled {d}/{d} ({d:.2} %)", .{

@@ -28,7 +28,7 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Todo
 
-- (easy) fix va_args `...`
+- (easy) use the `@extern` as sugested byt kassame in [here](https://github.com/lassade/c2z/issues/1#issuecomment-1608463661)
 - (easy) walk a directory tree
 - (easy) verbose option
 - (easy) `#include` -> `@import`

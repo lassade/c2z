@@ -1,4 +1,4 @@
-//! zig c++ interop types
+//! zig c++ interop types and utilities
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -11,7 +11,7 @@ const builtin = @import("builtin");
 /// });
 /// ```
 pub fn targetSwitch(
-    comptime T: anytype,
+    comptime T: type,
     comptime lookup: anytype,
 ) T {
     var buffer: [1024]u8 = undefined;
