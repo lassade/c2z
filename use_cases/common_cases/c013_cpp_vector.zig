@@ -2,12 +2,4 @@
 const std = @import("std");
 const cpp = @import("cpp");
 
-pub const enumerate = @extern(
-    *const fn (out_buf: *cpp.Vector(u8), count: usize) bool,
-    .{
-        .name = cpp.targetSwitch([]const u8, .{
-            .{ "x86_64-linux-gnu", "_Z9enumerateRNSt3__16vectorIhNS_9allocatorIhEEEEm" },
-            .{ "x86_64-windows-gnu", "_Z9enumerateRNSt3__16vectorIhNS_9allocatorIhEEEEy" },
-        }),
-    },
-);
+pub extern fn enumerate(out_buf: *cpp.Vector(u8), count: usize) bool;

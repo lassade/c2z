@@ -8,7 +8,7 @@ const mem = std.mem;
 const fmt = std.fmt;
 const Allocator = mem.Allocator;
 
-const Transpiler = @import("transpiler.zig");
+const Transpiler = @import("Transpiler.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -31,8 +31,10 @@ pub fn main() !void {
     var argv = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, argv);
 
-    var recursive = false;
     var target_tuple: ?[]const u8 = null;
+
+    var transpiler = Transpiler.init(allocator);
+    defer transpiler.deinit();
 
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
@@ -42,13 +44,17 @@ pub fn main() !void {
                 \\-h, --help                   Display this help and exit
                 \\-target TARGET_TUPLE         Clang target tuple
                 \\-R                           Recursive transpiling, use to also parse includes
+                \\-no-glue                     No c++ glue code, bindings will be target specific
                 \\[clang arguments]            Pass any clang arguments, e.g. -DNDEBUG -I.\include -target x86-linux
                 \\[--] [FILES]                 Input files
                 \\
             );
             return;
         } else if (mem.eql(u8, arg, "-R")) {
-            recursive = true;
+            transpiler.recursive = true;
+            continue;
+        } else if (mem.eql(u8, arg, "-no-glue")) {
+            transpiler.no_glue = true;
             continue;
         } else if (mem.eql(u8, arg, "--")) {
             // positionals arguments
@@ -97,11 +103,14 @@ pub fn main() !void {
     const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd);
 
-    while (i < argv.len) : (i += 1) {
-        const input_file = argv[i];
-        log.info("binding `{s}`", .{input_file});
+    var output_path = std.ArrayList(u8).init(allocator);
+    defer output_path.deinit();
 
-        try clang.append(input_file);
+    while (i < argv.len) : (i += 1) {
+        const file_path = argv[i];
+        log.info("binding `{s}`", .{file_path});
+
+        try clang.append(file_path);
         defer _ = clang.pop();
 
         var astdump = try std.ChildProcess.exec(.{
@@ -120,10 +129,7 @@ pub fn main() !void {
         var tree = try parser.parse(astdump.stdout);
         defer tree.deinit();
 
-        var transpiler = Transpiler.init(allocator);
-        defer transpiler.deinit();
-        transpiler.recursive = recursive;
-        transpiler.target_tuple = target_tuple;
+        transpiler.header = std.fs.path.basename(file_path);
         try transpiler.run(&tree.root);
 
         log.info("transpiled {d}/{d} ({d:.2} %)", .{
@@ -132,25 +138,38 @@ pub fn main() !void {
             (100.0 * @intToFloat(f64, transpiler.nodes_visited) / @intToFloat(f64, transpiler.nodes_count)),
         });
 
-        var path = std.ArrayList(u8).init(allocator);
-        try path.writer().print("{s}/{s}.zig", .{ target_path, std.fs.path.stem(input_file) });
-        defer path.deinit();
+        const file_name = std.fs.path.stem(file_path);
 
-        var file = try std.fs.cwd().createFile(path.items, .{});
-        try file.writeAll(transpiler.buffer.items);
-        file.close();
+        // zig output
+        {
+            output_path.clearRetainingCapacity();
+            try output_path.writer().print("{s}/{s}.zig", .{ target_path, file_name });
 
-        log.info("formating `{s}`", .{path.items});
-        var zfmt_args = std.ArrayList([]const u8).init(allocator);
-        defer zfmt_args.deinit();
-        zfmt_args.clearRetainingCapacity();
-        try zfmt_args.append("zig");
-        try zfmt_args.append("fmt");
-        try zfmt_args.append(path.items);
+            var file = try std.fs.cwd().createFile(output_path.items, .{});
+            try file.writeAll(transpiler.buffer.items);
+            file.close();
 
-        var zfmt = std.ChildProcess.init(zfmt_args.items, allocator);
-        zfmt.stderr_behavior = .Ignore;
-        zfmt.stdout_behavior = .Ignore;
-        _ = try zfmt.spawnAndWait();
+            log.info("formating `{s}`", .{output_path.items});
+            var zfmt_args = std.ArrayList([]const u8).init(allocator);
+            defer zfmt_args.deinit();
+            zfmt_args.clearRetainingCapacity();
+            try zfmt_args.append("zig");
+            try zfmt_args.append("fmt");
+            try zfmt_args.append(output_path.items);
+
+            var zfmt = std.ChildProcess.init(zfmt_args.items, allocator);
+            zfmt.stderr_behavior = .Ignore;
+            zfmt.stdout_behavior = .Ignore;
+            _ = try zfmt.spawnAndWait();
+        }
+
+        if (!transpiler.no_glue) {
+            output_path.clearRetainingCapacity();
+            try output_path.writer().print("{s}/{s}_glue.cpp", .{ target_path, file_name });
+
+            var file = try std.fs.cwd().createFile(output_path.items, .{});
+            try file.writeAll(transpiler.c_buffer.items);
+            file.close();
+        }
     }
 }
