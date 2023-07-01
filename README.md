@@ -5,7 +5,7 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Notes
 
-- Avoid glue C code
+- Glue is invitable ... snap ... and needed to make the bindings cross platform
 - Transpiled code can leak memory (implicit destructors aren't called)
 - Manual adjustments are required, specially to make bindings idiomatic and easer to read
 - Meant to work with libraries that follow the *C with classes* coding style
@@ -26,16 +26,20 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 3. it is a good idea to expecify a target with `-target x86-linux`, bindings are not always crossplatform due to type differences see [#3](https://github.com/lassade/c2z/issues/3)
 4. modify the generated bindings until it works ;) you might need to import `cpp.zig` it is located in the src folder
 
+### Misc
+
+- `msvc` is supported, just pass it as target tuple like as: `-no-glue -target x86_64-windows-msvc`
+
 ## Todo
 
-- (easy) use the `@extern` as sugested byt kassame in [here](https://github.com/lassade/c2z/issues/1#issuecomment-1608463661)
+- (easy) better input file not found error
 - (easy) walk a directory tree
 - (easy) verbose option
-- (easy) `#include` -> `@import`
-- (easy) better input file not found error
+- (hard) `#include` -> `@import`
 - (easy) resolve return of function with a aliased return type
 - (easy) fail when clang ast-bump has failed, because missing headers or worng code
 - default optional function args
+- (easy) maybe use `@extern` as sugested byt kassame in [here](https://github.com/lassade/c2z/issues/1#issuecomment-1608463661)
 - (hard) `if (*data++ == v) { ... }` should generate `{ data += 1; if (data.* == v) { ... } }`
 - (hard) solve `UnresolvedMemberExpr`, maybe when integrating clang ast directly
 - (hard) solve implicit destructors call

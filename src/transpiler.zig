@@ -442,7 +442,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         // unamed struct, class or union inside a class definition should be treated as a field
         is_field = true;
         is_generated_name = true;
-        name = try fmt.allocPrint(self.allocator, "field{d}", .{self.scope.fields});
+        name = try fmt.allocPrint(self.allocator, "__field{d}", .{self.scope.fields});
         self.scope.fields += 1;
     } else {
         // referenced by someone else
@@ -582,10 +582,21 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
             try self.visitCXXConstructorDecl(item, name);
             self.out = out;
         } else if (mem.eql(u8, kind, "CXXDestructorDecl")) {
-            const dtor = item.object.get("mangledName").?.string;
+            const dtor = if (self.no_glue)
+                item.object.get("mangledName").?.string
+            else
+                try self.mangle("deinit", null);
+            defer {
+                if (!self.no_glue) self.allocator.free(dtor);
+            }
+
             var w = functions.writer();
             try w.print("    extern fn @\"{s}\"(self: *{s}) void;\n", .{ dtor, name });
             try w.print("    pub inline fn deinit(self: *{s}) void {{ self.@\"{s}\"(); }}\n\n", .{ name, dtor });
+
+            if (!self.no_glue) {
+                try self.c_out.print("extern \"C\" void {s}({s} *self) {{ self->~{s}(); }}\n", .{ dtor, self.namespace.full_path.items, self.scope.name.? });
+            }
         } else if (mem.eql(u8, kind, "AccessSpecDecl")) {
             const access = item.object.get("access").?.string;
             self.public = mem.eql(u8, access, "public");
@@ -624,12 +635,15 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
         raw_ty = raw_ty["const ".len..];
     }
 
-    var ty = try self.transpileType(raw_ty);
+    const ty = try self.transpileType(raw_ty);
     defer self.allocator.free(ty);
+
+    const decl = if (constant) "const" else "var";
+    const ptr_deco = if (constant) "const" else "";
 
     if (self.scope.tag == .local) {
         // variable
-        _ = try self.out.write(if (constant) "const" else "var");
+        _ = try self.out.write(decl);
         try self.out.print(" {s}: {s}", .{ name, ty });
         if (value.object.getPtr("inner")) |j_inner| {
             // declaration statement like `int a;`
@@ -643,13 +657,23 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
 
     self.nodes_visited += nodeCount(value);
 
-    const mangled_name = value.object.getPtr("mangledName").?.string;
-    if (constant) {
-        try self.out.print("extern const @\"{s}\": {s};\n", .{ mangled_name, ty });
-        try self.out.print("pub inline fn {s}() {s} {{\n    return @\"{s}\";\n}}\n\n", .{ name, ty, mangled_name });
+    if (self.no_glue) {
+        const mangled_name = value.object.getPtr("mangledName").?.string;
+        try self.out.print("extern {s} @\"{s}\": {s};\n", .{ decl, mangled_name, ty });
+        try self.out.print("pub inline fn {s}() *{s} {s} {{ return &@\"{s}\"; }}\n\n", .{ name, ptr_deco, ty, mangled_name });
     } else {
-        try self.out.print("extern var {s}: {s};\n", .{ mangled_name, ty });
-        try self.out.print("pub inline fn {s}() *{s} {{\n    return &@\"{s}\";\n}}\n\n", .{ name, ty, mangled_name });
+        const mangled_name = try self.mangle(name, null);
+        defer self.allocator.free(mangled_name);
+        try self.out.print("extern fn {s}() *{s} {s};\n", .{ mangled_name, ptr_deco, ty });
+        try self.out.print("pub inline fn {s}() *{s} {s} {{ return {s}(); }}\n\n", .{ name, ptr_deco, ty, mangled_name });
+
+        try self.c_out.print("extern \"C\" {s} {s} *{s}() {{ return &", .{ ptr_deco, raw_ty, mangled_name });
+        _ = try self.c_out.write(self.namespace.full_path.items);
+        if (!mem.endsWith(u8, self.namespace.full_path.items, "::")) {
+            _ = try self.c_out.write("::");
+        }
+        _ = try self.c_out.write(name);
+        _ = try self.c_out.write("; }\n");
     }
 }
 
@@ -687,9 +711,9 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
     //     }
     // }
 
-    const method_mangled_name = value.object.get("mangledName").?.string;
+    const mangled_name = value.object.get("mangledName").?.string;
 
-    try self.out.print("extern fn @\"{s}\"(", .{method_mangled_name});
+    try self.out.print("extern fn @\"{s}\"(", .{mangled_name});
 
     if (sig.is_const) {
         try self.out.print("self: *const {s}", .{parent});
@@ -760,7 +784,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
     try self.out.print("({s}) {s} {{\n", .{ init_args.items, parent });
     // body
     try self.out.print("    var self: {s} = undefined;\n", .{parent});
-    try self.out.print("    @\"{s}\"(&self{s});", .{ method_mangled_name, forward_init_args.items });
+    try self.out.print("    @\"{s}\"(&self{s});", .{ mangled_name, forward_init_args.items });
     try self.out.print("    return self;\n", .{});
     try self.out.print("}}\n\n", .{});
 
@@ -888,7 +912,6 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
     if (inner != null and inner.?.array.items.len > 0) {
         const item_kind = inner.?.array.items[inner.?.array.items.len - 1].object.get("kind").?.string;
         has_body = mem.eql(u8, item_kind, "CompoundStmt");
-        has_glue = false;
     }
 
     const out = self.out;
@@ -897,6 +920,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
 
     // start fn signature
     if (has_body) {
+        has_glue = false;
         self.out = code.writer();
 
         try self.out.print("pub ", .{});
@@ -952,12 +976,15 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
 
                 if (comma) {
                     try self.out.print(", ", .{});
-                    if (has_glue) {
-                        try self.c_out.print(", ", .{});
-                        try c_call.appendSlice(", ");
-                    }
+                    if (has_glue) try self.c_out.print(", ", .{});
                 }
                 comma = true;
+
+                // `c_call` doesn't have the same ammount of commas of the input function
+                // when it recives has a reference to self
+                if (has_glue and c_call.items.len > 0) {
+                    try c_call.appendSlice(", ");
+                }
 
                 var c_arg = typeQualifier(item).?;
                 var arg = try self.transpileType(c_arg);
@@ -1040,7 +1067,11 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                 if (this_opt != null) {
                     try self.c_out.print("self->{s}({s}); }}\n", .{ name, c_call.items });
                 } else {
-                    try self.c_out.print("{s}::{s}({s}); }}\n", .{ self.namespace.full_path.items, name, c_call.items });
+                    _ = try self.c_out.write(self.namespace.full_path.items);
+                    if (!mem.endsWith(u8, self.namespace.full_path.items, "::")) {
+                        _ = try self.c_out.write("::");
+                    }
+                    try self.c_out.print("{s}({s}); }}\n", .{ name, c_call.items });
                 }
             }
         }
@@ -2349,10 +2380,10 @@ fn mangle(self: *Self, name: []const u8, overload: ?usize) ![]u8 {
     defer tmp.deinit();
     var o = tmp.writer();
 
-    _ = try o.print("_{d}", .{if (overload) |i| i else 1});
+    _ = try o.print("_{d}_", .{if (overload) |i| i else 1});
     var it = mem.split(u8, self.namespace.full_path.items, "::");
     while (it.next()) |value| {
-        _ = try o.print("{s}_", .{value});
+        if (value.len != 0) _ = try o.print("{s}_", .{value});
     }
     _ = try o.print("{s}_", .{name});
 
