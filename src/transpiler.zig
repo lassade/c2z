@@ -69,6 +69,7 @@ const Scope = struct {
 };
 
 const NamespaceScope = struct {
+    root: bool,
     full_path: std.ArrayList(u8),
     unnamed_nodes: std.AutoHashMap(u64, json.Value),
     // todo: didn't find a hashset, maybe by using the key as `void` no extra allocations will be made?
@@ -77,6 +78,7 @@ const NamespaceScope = struct {
 
     fn init(allocator: Allocator) NamespaceScope {
         return .{
+            .root = false,
             .full_path = std.ArrayList(u8).init(allocator),
             .unnamed_nodes = std.AutoHashMap(u64, json.Value).init(allocator),
             .opaques = std.StringArrayHashMap(void).init(allocator),
@@ -181,6 +183,7 @@ pub fn run(self: *Self, value: *const json.Value) anyerror!void {
 
     // root namespace
     try self.namespace.full_path.appendSlice("::");
+    self.namespace.root = true;
 
     try self.visit(value);
 
@@ -529,8 +532,12 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     defer self.scope = parent_state;
 
     const parent_namespace = self.beginNamespace();
-    try self.namespace.full_path.appendSlice("::");
+    try self.namespace.full_path.appendSlice(parent_namespace.full_path.items);
+    if (!parent_namespace.root) {
+        try self.namespace.full_path.appendSlice("::");
+    }
     try self.namespace.full_path.appendSlice(name);
+    log.info("{s}", .{self.namespace.full_path.items});
 
     for (inner.?.array.items) |*item| {
         if (item.object.getPtr("isImplicit")) |implicit| {
@@ -669,7 +676,7 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
 
         try self.c_out.print("extern \"C\" {s} {s} *{s}() {{ return &", .{ ptr_deco, raw_ty, mangled_name });
         _ = try self.c_out.write(self.namespace.full_path.items);
-        if (!mem.endsWith(u8, self.namespace.full_path.items, "::")) {
+        if (!self.namespace.root) {
             _ = try self.c_out.write("::");
         }
         _ = try self.c_out.write(name);
@@ -775,7 +782,12 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
                         try self.c_buffer.appendSlice(", ");
                     }
                     try c_call.appendSlice(arg);
-                    try self.c_out.print("{s} {s}", .{ c_type, arg });
+
+                    if (mem.indexOf(u8, c_type, "(*)")) |o| {
+                        try self.c_out.print("{s}{s}{s}", .{ c_type[0 .. o + 2], arg, c_type[o + 2 ..] });
+                    } else {
+                        try self.c_out.print("{s} {s}", .{ c_type, arg });
+                    }
                 }
 
                 if (comma) {
@@ -1029,14 +1041,22 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                 if (item.object.get("name")) |n| {
                     try self.out.print("{s}: {s}", .{ n.string, z_type });
                     if (has_glue) {
-                        try self.c_out.print("{s} {s}", .{ c_type, n.string });
+                        if (mem.indexOf(u8, c_type, "(*)")) |o| {
+                            try self.c_out.print("{s}{s}{s}", .{ c_type[0 .. o + 2], n.string, c_type[o + 2 ..] });
+                        } else {
+                            try self.c_out.print("{s} {s}", .{ c_type, n.string });
+                        }
                         try c_call.appendSlice(n.string);
                     }
                 } else {
                     // unnamed arg
                     try self.out.print("__arg{d}: {s}", .{ i, z_type });
                     if (has_glue) {
-                        try self.c_out.print("{s} __arg{d}", .{ c_type, i });
+                        if (mem.indexOf(u8, c_type, "(*)")) |o| {
+                            try self.c_out.print("{s}__arg{d}{s}", .{ c_type[0 .. o + 2], i, c_type[o + 2 ..] });
+                        } else {
+                            try self.c_out.print("{s} __arg{d}", .{ c_type, i });
+                        }
                         try c_call.writer().print("__arg{d}", .{i});
                     }
                 }
@@ -1123,7 +1143,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                         }
                     } else {
                         _ = try self.c_out.write(self.namespace.full_path.items);
-                        if (!mem.endsWith(u8, self.namespace.full_path.items, "::")) {
+                        if (!self.namespace.root) {
                             _ = try self.c_out.write("::");
                         }
                         try self.c_out.print("{s}({s}); }}\n", .{ name, c_call.items });
@@ -1448,7 +1468,10 @@ fn visitNamespaceDecl(self: *Self, value: *const json.Value) !void {
     const parent_namespace = self.beginNamespace();
 
     if (v_name) |name| {
-        try self.namespace.full_path.appendSlice("::");
+        try self.namespace.full_path.appendSlice(parent_namespace.full_path.items);
+        if (!parent_namespace.root) {
+            try self.namespace.full_path.appendSlice("::");
+        }
         try self.namespace.full_path.appendSlice(name.string);
         try self.out.print("pub const {s} = struct {{\n", .{name.string});
     }
@@ -1572,6 +1595,11 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
             }
 
             const parent_namespace = self.beginNamespace();
+            try self.namespace.full_path.appendSlice(parent_namespace.full_path.items);
+            if (!parent_namespace.root) {
+                try self.namespace.full_path.appendSlice("::");
+            }
+            try self.namespace.full_path.appendSlice(name);
 
             for (inner_inner.?.array.items) |*inner_item| {
                 self.nodes_visited += 1;
