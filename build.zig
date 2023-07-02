@@ -72,6 +72,12 @@ pub fn build(b: *std.Build) void {
     lib.linkLibCpp();
     lib.addCSourceFile("./use_cases/common_cases/include/c005_inheritance.cpp", cflags);
     lib.addCSourceFile("./use_cases/common_cases/include/c013_cpp_vector.cpp", cflags);
+    lib.addCSourceFile("./use_cases/common_cases/include/c013_cpp_vector.cpp", cflags);
+    // glue files
+    lib.addCSourceFile("./use_cases/common_cases/c005_inheritance_glue.cpp", cflags);
+    lib.addCSourceFile("./use_cases/common_cases/c009_enum_flags_glue.cpp", cflags);
+    lib.addCSourceFile("./use_cases/common_cases/c011_index_this_glue.cpp", cflags);
+    lib.addCSourceFile("./use_cases/common_cases/c013_cpp_vector_glue.cpp", cflags);
     unit_tests.linkLibrary(lib);
 
     const cpp_mod = b.addModule("cpp", .{ .source_file = .{ .path = "src/cpp.zig" } });

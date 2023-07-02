@@ -2,4 +2,5 @@
 const std = @import("std");
 const cpp = @import("cpp");
 
-pub extern fn enumerate(out_buf: *cpp.Vector(u8), count: usize) bool;
+extern fn _1_enumerate_(out_buf: *cpp.Vector(u8), count: usize) bool;
+pub const enumerate = _1_enumerate_;

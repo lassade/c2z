@@ -32,6 +32,8 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Todo
 
+- (easy) remove `-no-glue` option
+- (easy) handle `BlockCommandComment` and `ParamCommandComment` in `FullComment`
 - (easy) better input file not found error
 - (easy) walk a directory tree
 - (easy) verbose option

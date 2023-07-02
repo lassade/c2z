@@ -6,8 +6,10 @@ test "inheritance" {
     const fii = @import("c005_inheritance.zig");
 
     var circle: fii.circle_t = fii.circle_t.init();
+    //try std.testing.expectEqual(@as(usize, 0), @as(usize, @ptrToInt(circle.base.vtable)));
     try expect(circle.radius == 0);
     circle = fii.circle_t.initRadius(10);
+    try expect(circle.radius == 10);
     try expect(circle.radius == 10);
     try expect(circle.area() == 3.14 * 10 * 10);
     try expect(fii.circle_t.area(&circle) == 3.14 * 10 * 10);
@@ -34,7 +36,7 @@ test "index_this" {
     var p: fii.ImVec2 = .{ .x = 1, .y = 2 };
     try expect(p.get(0) == 1);
     try expect(p.get(1) == 2);
-    p.getRef(0).* = 2;
+    p.getPtr(0).* = 2;
     try expect(p.get(0) == 2);
 }
 

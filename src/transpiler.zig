@@ -592,7 +592,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
 
             var w = functions.writer();
             try w.print("    extern fn @\"{s}\"(self: *{s}) void;\n", .{ dtor, name });
-            try w.print("    pub inline fn deinit(self: *{s}) void {{ self.@\"{s}\"(); }}\n\n", .{ name, dtor });
+            try w.print("    pub const deinit = @\"{s}\";\n\n", .{dtor});
 
             if (!self.no_glue) {
                 try self.c_out.print("extern \"C\" void {s}({s} *self) {{ self->~{s}(); }}\n", .{ dtor, self.namespace.full_path.items, self.scope.name.? });
@@ -694,6 +694,16 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
 
     const sig = parseFnSignature(value).?;
 
+    if (!self.no_glue and sig.is_varidatic) {
+        log.warn("unsupported varidact contructor of `{s}`", .{self.namespace.full_path.items});
+        return;
+    }
+
+    if (sig.is_const) {
+        // todo: what?
+        log.err("constant contructor `{s}`", .{self.namespace.full_path.items});
+    }
+
     self.nodes_visited += 1;
 
     // todo: copy code from visitCXXMethodDecl
@@ -711,58 +721,74 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
     //     }
     // }
 
-    const mangled_name = value.object.get("mangledName").?.string;
+    const mangled_name = if (self.no_glue)
+        value.object.get("mangledName").?.string
+    else
+        try self.mangle("init", if (self.scope.ctors == 0) null else self.scope.ctors + 1);
+    defer {
+        if (!self.no_glue) self.allocator.free(mangled_name);
+    }
 
+    var ctor_comma = false;
     try self.out.print("extern fn @\"{s}\"(", .{mangled_name});
-
-    if (sig.is_const) {
-        try self.out.print("self: *const {s}", .{parent});
-    } else {
+    if (self.no_glue) {
+        ctor_comma = true;
         try self.out.print("self: *{s}", .{parent});
+    } else {
+        try self.c_out.print("extern \"C\" {s} {s}(", .{ self.namespace.full_path.items, mangled_name });
     }
 
     var comma = false;
-    var init_args = std.ArrayList(u8).init(self.allocator);
-    defer init_args.deinit();
-    var forward_init_args = std.ArrayList(u8).init(self.allocator);
-    defer forward_init_args.deinit();
+    var fn_args = std.ArrayList(u8).init(self.allocator);
+    defer fn_args.deinit();
+
+    var z_call = std.ArrayList(u8).init(self.allocator);
+    defer z_call.deinit();
+
+    var c_call = std.ArrayList(u8).init(self.allocator);
+    defer c_call.deinit();
 
     // method args
-    if (value.object.get("inner")) |v_inner| {
-        for (v_inner.array.items, 0..) |v_item, i| {
+    if (value.object.getPtr("inner")) |inner| {
+        for (inner.array.items, 0..) |*item, i| {
             self.nodes_visited += 1;
 
-            const arg_kind = v_item.object.get("kind").?.string;
+            const arg_kind = item.object.get("kind").?.string;
             if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
-                const v_type = v_item.object.get("type").?;
-                var v_qual = v_type.object.get("qualType").?.string;
+                var c_type = typeQualifier(item).?;
+                var z_type = try self.transpileType(c_type);
+                defer self.allocator.free(z_type);
 
-                // va_list is in practice a `char*`, but we can double check this by verifing the desugared type
-                if (mem.eql(u8, v_qual, "va_list")) {
-                    if (v_type.object.get("desugaredQualType")) |v_desurgared| {
-                        v_qual = v_desurgared.string;
-                    }
-                }
-
-                var arg_type = try self.transpileType(v_qual);
-                defer self.allocator.free(arg_type);
-
-                var free_arg_name = false;
-                var arg_name: []const u8 = undefined;
-                if (v_item.object.get("name")) |v_item_name| {
-                    arg_name = v_item_name.string;
+                var free_arg = false;
+                var arg: []const u8 = undefined;
+                if (item.object.get("name")) |v_item_name| {
+                    arg = v_item_name.string;
                 } else {
-                    free_arg_name = true;
-                    arg_name = try fmt.allocPrint(self.allocator, "arg{d}", .{i});
+                    free_arg = true;
+                    arg = try fmt.allocPrint(self.allocator, "__arg{d}", .{i});
                 }
-                defer if (free_arg_name) self.allocator.free(arg_name);
+                defer if (free_arg) self.allocator.free(arg);
 
-                if (comma) try init_args.writer().print(", ", .{});
+                if (!self.no_glue) {
+                    if (comma) {
+                        try c_call.appendSlice(", ");
+                        try self.c_buffer.appendSlice(", ");
+                    }
+                    try c_call.appendSlice(arg);
+                    try self.c_out.print("{s} {s}", .{ c_type, arg });
+                }
+
+                if (comma) {
+                    try fn_args.appendSlice(", ");
+                    try z_call.appendSlice(", ");
+                }
                 comma = true;
-                try init_args.writer().print("{s}: {s}", .{ arg_name, arg_type });
-                try forward_init_args.writer().print(", {s}", .{arg_name});
+                try fn_args.writer().print("{s}: {s}", .{ arg, z_type });
+                try z_call.writer().print("{s}", .{arg});
 
-                try self.out.print(", {s}: {s}", .{ arg_name, arg_type });
+                if (ctor_comma) try self.out.print(", ", .{});
+                ctor_comma = true;
+                try self.out.print("{s}: {s}", .{ arg, z_type });
             } else if (mem.eql(u8, arg_kind, "FormatAttr")) {
                 // varidatic function with the same properties as printf
             } else {
@@ -772,21 +798,29 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
         }
     }
 
-    if (sig.is_varidatic) {
-        try self.out.print(", ...) callconv(.C) void;\n", .{});
-    } else {
-        try self.out.print(") void;\n", .{});
-    }
+    if (self.no_glue) {
+        if (sig.is_varidatic) {
+            try self.out.print(", ...) callconv(.C) void;\n", .{});
+        } else {
+            try self.out.print(") void;\n", .{});
+        }
 
-    // sig
-    try self.out.print("pub inline fn init", .{});
-    if (self.scope.ctors != 0) try self.out.print("{d}", .{self.scope.ctors}); // avoid name conflict
-    try self.out.print("({s}) {s} {{\n", .{ init_args.items, parent });
-    // body
-    try self.out.print("    var self: {s} = undefined;\n", .{parent});
-    try self.out.print("    @\"{s}\"(&self{s});", .{ mangled_name, forward_init_args.items });
-    try self.out.print("    return self;\n", .{});
-    try self.out.print("}}\n\n", .{});
+        // sig
+        try self.out.print("pub inline fn init", .{});
+        if (self.scope.ctors != 0) try self.out.print("{d}", .{self.scope.ctors + 1}); // avoid name conflict
+        try self.out.print("({s}) {s} {{\n", .{ fn_args.items, parent });
+        // body
+        try self.out.print("    var self: {s} = undefined;\n", .{parent});
+        try self.out.print("    @\"{s}\"(&self{s});\n", .{ mangled_name, z_call.items });
+        try self.out.print("    return self;\n", .{});
+        try self.out.print("}}\n\n", .{});
+    } else {
+        try self.out.print(") {s};\npub const init", .{parent});
+        if (self.scope.ctors != 0) try self.out.print("{d}", .{self.scope.ctors + 1}); // avoid name conflict
+        try self.out.print(" = @\"{s}\";\n\n", .{mangled_name});
+
+        try self.c_out.print(") {{ return {s}({s}); }}\n", .{ self.namespace.full_path.items, c_call.items });
+    }
 
     self.scope.ctors += 1;
 }
@@ -801,12 +835,14 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
         return;
     }
 
+    var operator: ?[]const u8 = null;
     if (mem.startsWith(u8, name, "operator")) {
         var op = name["operator".len..];
         if (op.len > 0 and std.ascii.isAlphanumeric(op[0])) {
             // just a function starting with operator
         } else {
             // todo: implicit casting
+            operator = op;
             if (mem.eql(u8, op, "[]")) {
                 if (!sig.is_const and mem.endsWith(u8, sig.ret, "&")) {
                     // class[i] = value;
@@ -986,21 +1022,21 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                     try c_call.appendSlice(", ");
                 }
 
-                var c_arg = typeQualifier(item).?;
-                var arg = try self.transpileType(c_arg);
-                defer self.allocator.free(arg);
+                var c_type = typeQualifier(item).?;
+                var z_type = try self.transpileType(c_type);
+                defer self.allocator.free(z_type);
 
                 if (item.object.get("name")) |n| {
-                    try self.out.print("{s}: {s}", .{ n.string, arg });
+                    try self.out.print("{s}: {s}", .{ n.string, z_type });
                     if (has_glue) {
-                        try self.c_out.print("{s} {s}", .{ c_arg, n.string });
+                        try self.c_out.print("{s} {s}", .{ c_type, n.string });
                         try c_call.appendSlice(n.string);
                     }
                 } else {
                     // unnamed arg
-                    try self.out.print("{s}: __arg{d}", .{ arg, i });
+                    try self.out.print("__arg{d}: {s}", .{ i, z_type });
                     if (has_glue) {
-                        try self.c_out.print("{s} __arg{d}", .{ c_arg, i });
+                        try self.c_out.print("{s} __arg{d}", .{ c_type, i });
                         try c_call.writer().print("__arg{d}", .{i});
                     }
                 }
@@ -1065,13 +1101,33 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                 if (!mem.eql(u8, sig.ret, "void")) try self.c_out.print("return ", .{});
 
                 if (this_opt != null) {
-                    try self.c_out.print("self->{s}({s}); }}\n", .{ name, c_call.items });
-                } else {
-                    _ = try self.c_out.write(self.namespace.full_path.items);
-                    if (!mem.endsWith(u8, self.namespace.full_path.items, "::")) {
-                        _ = try self.c_out.write("::");
+                    if (operator != null) {
+                        if (mem.eql(u8, operator.?, "[]") or mem.eql(u8, operator.?, "()")) {
+                            try self.c_out.print("(*self){c}{s}{c}; }}\n", .{ operator.?[0], c_call.items, operator.?[1] });
+                        } else {
+                            try self.c_out.print("*self {s} {s}; }}\n", .{ operator.?, c_call.items });
+                        }
+                    } else {
+                        try self.c_out.print("self->{s}({s}); }}\n", .{ name, c_call.items });
                     }
-                    try self.c_out.print("{s}({s}); }}\n", .{ name, c_call.items });
+                } else {
+                    if (operator != null) {
+                        // cursed way of extending functionality by externally overloading operators
+                        var it = mem.split(u8, c_call.items, ", ");
+                        const a = it.next().?;
+                        const b = it.next().?;
+                        if (mem.eql(u8, operator.?, "[]") or mem.eql(u8, operator.?, "()")) {
+                            try self.c_out.print("{s}{c}{s}{c}; }}\n", .{ a, operator.?[0], b, operator.?[1] });
+                        } else {
+                            try self.c_out.print("{s} {s} {s}; }}\n", .{ a, operator.?, b });
+                        }
+                    } else {
+                        _ = try self.c_out.write(self.namespace.full_path.items);
+                        if (!mem.endsWith(u8, self.namespace.full_path.items, "::")) {
+                            _ = try self.c_out.write("::");
+                        }
+                        try self.c_out.print("{s}({s}); }}\n", .{ name, c_call.items });
+                    }
                 }
             }
         }
@@ -2361,6 +2417,10 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         try self.transpileArgs(ttname[less_than..], &args, &index);
 
         return try fmt.allocPrint(self.allocator, "{s}{s}", .{ root, args.items });
+    } else if (mem.startsWith(u8, ttname, "const ")) {
+        // doesn't mean anything to zig if is not a pointer
+        // todo: it could be a alises pointer type ...
+        return try self.transpileType(ttname["const ".len..]);
     } else if (mem.startsWith(u8, ttname, "enum ")) {
         return try self.transpileType(ttname["enum ".len..]);
     } else {
