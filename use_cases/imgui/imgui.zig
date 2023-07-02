@@ -2120,7 +2120,7 @@ pub fn ImVector(comptime T: type) type {
             if (new_size > self.Capacity) self.reserve(self._grow_capacity(new_size));
             self.Size = new_size;
         }
-        pub inline fn resizeWith(self: *Self, new_size: c_int, v: *const T) void {
+        pub inline fn resizeWithValue(self: *Self, new_size: c_int, v: *const T) void {
             if (new_size > self.Capacity) self.reserve(self._grow_capacity(new_size));
             if (new_size > self.Size) {
                 var n: c_int = self.Size;
@@ -2614,9 +2614,7 @@ pub const ImGuiTextBuffer = extern struct {
     Buf: ImVector(u8),
 
     extern fn _1_ImGuiTextBuffer_EmptyString_() *u8;
-    pub inline fn EmptyString() *u8 {
-        return _1_ImGuiTextBuffer_EmptyString_();
-    }
+    pub const EmptyString = _1_ImGuiTextBuffer_EmptyString_;
 
     extern fn _1_ImGuiTextBuffer_init_() ImGuiTextBuffer;
     pub const init = _1_ImGuiTextBuffer_init_;
@@ -2852,7 +2850,7 @@ pub const ImDrawFlags = extern struct {
     pub const RoundCornersDefault_: ImDrawFlags = .{ .bits = @intCast(c_uint, ImDrawFlags.RoundCornersAll.bits) };
     pub const RoundCornersMask_: ImDrawFlags = .{ .bits = @intCast(c_uint, ImDrawFlags.RoundCornersAll.bits | ImDrawFlags.RoundCornersNone.bits) };
 
-    // pub usingnamespace cpp.FlagsMixin(ImDrawFlags_);
+    pub usingnamespace cpp.FlagsMixin(ImDrawFlags);
 };
 
 pub const ImDrawListFlags = extern struct {
@@ -2864,7 +2862,7 @@ pub const ImDrawListFlags = extern struct {
     pub const AntiAliasedFill: ImDrawListFlags = .{ .bits = @intCast(c_uint, 1 << 2) };
     pub const AllowVtxOffset: ImDrawListFlags = .{ .bits = @intCast(c_uint, 1 << 3) };
 
-    // pub usingnamespace cpp.FlagsMixin(ImDrawListFlags_);
+    pub usingnamespace cpp.FlagsMixin(ImDrawListFlags);
 };
 
 pub const ImDrawList = extern struct {
@@ -3213,7 +3211,7 @@ pub const ImFontAtlasFlags = extern struct {
     pub const NoMouseCursors: ImFontAtlasFlags = .{ .bits = @intCast(c_uint, 1 << 1) };
     pub const NoBakedLines: ImFontAtlasFlags = .{ .bits = @intCast(c_uint, 1 << 2) };
 
-    // pub usingnamespace cpp.FlagsMixin(ImFontAtlasFlags_);
+    pub usingnamespace cpp.FlagsMixin(ImFontAtlasFlags);
 };
 
 pub const ImFontAtlas = extern struct {
@@ -3431,7 +3429,7 @@ pub const ImGuiViewportFlags = extern struct {
     pub const IsMinimized: ImGuiViewportFlags = .{ .bits = @intCast(c_uint, 1 << 12) };
     pub const IsFocused: ImGuiViewportFlags = .{ .bits = @intCast(c_uint, 1 << 13) };
 
-    // pub usingnamespace cpp.FlagsMixin(ImGuiViewportFlags_);
+    pub usingnamespace cpp.FlagsMixin(ImGuiViewportFlags);
 };
 
 pub const ImGuiViewport = extern struct {

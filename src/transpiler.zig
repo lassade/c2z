@@ -537,7 +537,6 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         try self.namespace.full_path.appendSlice("::");
     }
     try self.namespace.full_path.appendSlice(name);
-    log.info("{s}", .{self.namespace.full_path.items});
 
     for (inner.?.array.items) |*item| {
         if (item.object.getPtr("isImplicit")) |implicit| {
@@ -672,7 +671,7 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
         const mangled_name = try self.mangle(name, null);
         defer self.allocator.free(mangled_name);
         try self.out.print("extern fn {s}() *{s} {s};\n", .{ mangled_name, ptr_deco, ty });
-        try self.out.print("pub inline fn {s}() *{s} {s} {{ return {s}(); }}\n\n", .{ name, ptr_deco, ty, mangled_name });
+        try self.out.print("pub const {s} = {s};\n\n", .{ name, mangled_name });
 
         try self.c_out.print("extern \"C\" {s} {s} *{s}() {{ return &", .{ ptr_deco, raw_ty, mangled_name });
         _ = try self.c_out.write(self.namespace.full_path.items);
@@ -996,7 +995,14 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
     var comma = false;
 
     // self param
-    if (this_opt) |this| {
+    if (this_opt) |this| block: {
+        if (value.object.getPtr("storageClass")) |storage| {
+            if (mem.eql(u8, storage.string, "static")) {
+                // static method doesnt have self param
+                break :block;
+            }
+        }
+
         comma = true;
         if (sig.is_const) {
             try self.out.print("self: *const {s}", .{this});

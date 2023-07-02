@@ -33,16 +33,16 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 ## Todo
 
 - (easy) remove `-no-glue` option
-- (easy) handle `BlockCommandComment` and `ParamCommandComment` in `FullComment`
+- (easy) default optional function args
 - (easy) better input file not found error
 - (easy) walk a directory tree
 - (easy) verbose option
+- (easy) handle `BlockCommandComment` and `ParamCommandComment` in `FullComment`
 - (hard) `#include` -> `@import`
 - (easy) resolve return of function with a aliased return type
 - (easy) fail when clang ast-bump has failed, because missing headers or worng code
-- default optional function args
 - (easy) maybe use `@extern` as sugested byt kassame in [here](https://github.com/lassade/c2z/issues/1#issuecomment-1608463661)
-- (hard) `if (*data++ == v) { ... }` should generate `{ data += 1; if (data.* == v) { ... } }`
+- (hard) `if (*data++ == v) { ... }` should generate `{ if (data.* == v) { ... } data += 1; }`
 - (hard) solve `UnresolvedMemberExpr`, maybe when integrating clang ast directly
 - (hard) solve implicit destructors call
 - (easy) handle private members, class is default private, struct default public, in code is referenced as `self.public`
