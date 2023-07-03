@@ -32,7 +32,6 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Todo
 
-- (easy) remove `-no-glue` option
 - (easy) default optional function args
 - (easy) better input file not found error
 - (easy) walk a directory tree

@@ -691,10 +691,12 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
         }
     }
 
-    if (value.object.get("constexpr")) |constexpr| {
-        if (constexpr.bool) {
-            log.err("unhandled constexpr ctor of `{s}`", .{parent});
-            return;
+    if (self.no_glue) {
+        if (value.object.get("constexpr")) |constexpr| {
+            if (constexpr.bool) {
+                log.err("unhandled constexpr ctor of `{s}`", .{parent});
+                return;
+            }
         }
     }
 
@@ -810,14 +812,12 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
     }
 
     if (self.no_glue) {
-        if (sig.is_varidatic) {
-            try self.out.print(", ...) callconv(.C) void;\n", .{});
-        } else {
-            try self.out.print(") void;\n", .{});
-        }
-
         // sig
-        try self.out.print("pub inline fn init", .{});
+        if (sig.is_varidatic) {
+            try self.out.print(", ...) callconv(.C) void;\npub fn init", .{});
+        } else {
+            try self.out.print(") void;\npub inline fn init", .{});
+        }
         if (self.scope.ctors != 0) try self.out.print("{d}", .{self.scope.ctors + 1}); // avoid name conflict
         try self.out.print("({s}) {s} {{\n", .{ fn_args.items, parent });
         // body
@@ -840,11 +840,6 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
     const sig = parseFnSignature(value).?;
 
     var name = value.object.get("name").?.string;
-
-    if (!self.no_glue and sig.is_varidatic) {
-        log.warn("unsupported varidact fn `{s}::{s}`", .{ self.namespace.full_path.items, name });
-        return;
-    }
 
     var operator: ?[]const u8 = null;
     if (mem.startsWith(u8, name, "operator")) {
@@ -917,14 +912,14 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
         }
     }
 
-    if (value.object.get("constexpr")) |constexpr| {
-        if (constexpr.bool) {
-            log.err("unhandled constexpr method `{?s}::{s}`", .{ this_opt, name });
-            return;
+    if (self.no_glue) {
+        if (value.object.get("constexpr")) |constexpr| {
+            if (constexpr.bool) {
+                log.err("unhandled constexpr method `{?s}::{s}`", .{ this_opt, name });
+                return;
+            }
         }
     }
-
-    self.nodes_visited += 1;
 
     // note: if the function has a `= 0` at the end it will have "pure" = true attribute
 
@@ -933,7 +928,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
 
     var is_mangled: bool = undefined;
     var mangled_name: []const u8 = undefined;
-    // template function doent have the `mangledName` field
+    // template function doesn't have the `mangledName` field
     if (value.object.get("mangledName")) |v_mangled_name| {
         mangled_name = v_mangled_name.string;
         // functions decorated with `extern "C"` won't be mangled
@@ -942,6 +937,13 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
         mangled_name = name;
         is_mangled = false;
     }
+
+    if (!self.no_glue and is_mangled and sig.is_varidatic) {
+        log.warn("unsupported varidact fn `{s}::{s}`", .{ self.namespace.full_path.items, name });
+        return;
+    }
+
+    self.nodes_visited += 1;
 
     var overload_opt = try self.namespace.resolveOverloadIndex(name, sig.raw);
 
@@ -1087,6 +1089,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
         }
         try self.out.print("...) callconv(.C) {s}", .{method_tret});
         // note: glue doesn't support varidact
+        std.debug.assert(!has_glue);
     } else {
         try self.out.print(") {s}", .{method_tret});
         if (has_glue) try self.c_out.print(") ", .{});
