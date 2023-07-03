@@ -1015,11 +1015,21 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
         }
     }
 
+    var unnamed_buffer: [64]u8 = undefined;
+
     var c_call = std.ArrayList(u8).init(self.allocator);
     defer c_call.deinit();
 
     var body = std.ArrayList(u8).init(self.allocator);
     defer body.deinit();
+
+    // optional arguments
+    var z_args = std.ArrayList(u8).init(self.allocator);
+    defer z_args.deinit();
+    var z_opt = std.ArrayList(u8).init(self.allocator);
+    defer z_opt.deinit();
+    var z_call = std.ArrayList(u8).init(self.allocator);
+    defer z_call.deinit();
 
     // visit parameters then body (if any)
     if (inner != null) {
@@ -1032,6 +1042,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
 
                 if (comma) {
                     try self.out.print(", ", .{});
+                    try z_call.appendSlice(", ");
                     if (has_glue) try self.c_out.print(", ", .{});
                 }
                 comma = true;
@@ -1046,27 +1057,39 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                 var z_type = try self.transpileType(c_type);
                 defer self.allocator.free(z_type);
 
-                if (item.object.get("name")) |n| {
-                    try self.out.print("{s}: {s}", .{ n.string, z_type });
-                    if (has_glue) {
-                        if (mem.indexOf(u8, c_type, "(*)")) |o| {
-                            try self.c_out.print("{s}{s}{s}", .{ c_type[0 .. o + 2], n.string, c_type[o + 2 ..] });
-                        } else {
-                            try self.c_out.print("{s} {s}", .{ c_type, n.string });
-                        }
-                        try c_call.appendSlice(n.string);
-                    }
+                const arg_name = if (item.object.get("name")) |n| n.string else try fmt.bufPrint(&unnamed_buffer, "__arg{d}", .{i});
+
+                try self.out.print("{s}: {s}", .{ arg_name, z_type });
+
+                // default arg
+                const inner_opt = item.object.getPtr("inner");
+                if (inner_opt == null) {
+                    if (z_args.items.len > 0) try z_args.appendSlice(", ");
+                    try z_args.appendSlice(arg_name);
+                    try z_args.appendSlice(": ");
+                    try z_args.appendSlice(z_type);
+                    try z_call.appendSlice(arg_name);
                 } else {
-                    // unnamed arg
-                    try self.out.print("__arg{d}: {s}", .{ i, z_type });
-                    if (has_glue) {
-                        if (mem.indexOf(u8, c_type, "(*)")) |o| {
-                            try self.c_out.print("{s}__arg{d}{s}", .{ c_type[0 .. o + 2], i, c_type[o + 2 ..] });
-                        } else {
-                            try self.c_out.print("{s} __arg{d}", .{ c_type, i });
-                        }
-                        try c_call.writer().print("__arg{d}", .{i});
+                    // default
+                    const out2 = self.out;
+                    self.out = z_opt.writer();
+                    try self.out.print("{s}: {s} = ", .{ arg_name, z_type });
+                    try self.visit(&inner_opt.?.array.items[0]);
+                    try self.out.print(", ", .{});
+                    self.out = out2;
+
+                    // forward args
+                    try z_call.appendSlice("__opt.");
+                    try z_call.appendSlice(arg_name);
+                }
+
+                if (has_glue) {
+                    if (mem.indexOf(u8, c_type, "(*)")) |o| {
+                        try self.c_out.print("{s}{s}{s}", .{ c_type[0 .. o + 2], arg_name, c_type[o + 2 ..] });
+                    } else {
+                        try self.c_out.print("{s} {s}", .{ c_type, arg_name });
                     }
+                    try c_call.appendSlice(arg_name);
                 }
             } else if (mem.eql(u8, kind, "FormatAttr")) {
                 // varidatic function with the same properties as printf
@@ -1097,6 +1120,8 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
 
     // body must be after fields
     if (has_body) {
+        // todo: optional args
+
         try self.out.print(" {s}\n\n", .{body.items});
 
         self.out = out;
@@ -1116,12 +1141,31 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
         try self.out.print(";\n", .{});
         if (is_mangled) {
             try self.writeDocs(inner);
-            if (overload_opt) |i| {
-                try self.out.print("pub const {s}__Overload{d} = ", .{ name, i });
+
+            if (z_opt.items.len > 0) {
+                try self.out.print("pub fn ", .{});
             } else {
-                try self.out.print("pub const {s} = ", .{name});
+                try self.out.print("pub const ", .{});
             }
-            try self.out.print("@\"{s}\";\n\n", .{mangled_name});
+
+            if (overload_opt) |i| {
+                try self.out.print("{s}__Overload{d}", .{ name, i });
+            } else {
+                try self.out.print("{s}", .{name});
+            }
+
+            if (z_opt.items.len > 0) {
+                // optional arguments
+                try self.out.print("({s}", .{z_args.items});
+                if (z_args.items.len > 0) {
+                    try self.out.print(", ", .{});
+                }
+                try self.out.print("__opt: struct {{ {s} }},) {s} {{\n", .{ z_opt.items, method_tret });
+                try self.out.print("    return @\"{s}\"({s});\n", .{ mangled_name, z_call.items });
+                try self.out.print("}}\n\n", .{});
+            } else {
+                try self.out.print(" = @\"{s}\";\n\n", .{mangled_name});
+            }
 
             // glue body
             if (has_glue) {
