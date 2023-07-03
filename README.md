@@ -28,7 +28,7 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ### Misc
 
-- `msvc` is supported, just pass it as target tuple like as: `-no-glue -target x86_64-windows-msvc`
+- `msvc` is supported, just pass it as target tuple like as: `-no-glue -target x86_64-windows-msvc` it also requires at least `-O1`
 
 ## Todo
 
