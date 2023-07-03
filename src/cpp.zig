@@ -83,39 +83,40 @@ pub fn VectorAlloc(
     comptime T: type,
     comptime Alloc: type,
 ) type {
-    // todo: custom allocator
+    const Data = if (builtin.abi == .msvc)
+        // requires at least -O1 to work
+        extern struct { allocator: Alloc, head: ?*T = null, tail: ?*T = null, end: ?*T = null }
+    else
+        extern struct { head: ?*T = null, tail: ?*T = null, end: ?*T = null, allocator: Alloc };
+
     return extern struct {
         const Self = @This();
 
-        head: ?*T = null,
-        tail: ?*T = null,
-        end: ?*T = null,
-
-        allocator: Alloc,
+        data: Data,
 
         pub fn init(allocator: Alloc) Self {
-            return .{ .allocator = allocator };
+            return .{ .data = .{ .allocator = allocator } };
         }
 
         pub inline fn size(self: *const Self) usize {
-            return (@ptrToInt(self.tail) - @ptrToInt(self.head));
+            return (@ptrToInt(self.data.tail) - @ptrToInt(self.data.head));
         }
 
         pub inline fn capacity(self: *const Self) usize {
-            return (@ptrToInt(self.end) - @ptrToInt(self.head));
+            return (@ptrToInt(self.data.end) - @ptrToInt(self.data.head));
         }
 
         pub inline fn values(self: *Self) []T {
-            return if (self.head) |head| @ptrCast([*]T, head)[0..self.size()] else &[_]T{};
+            return if (self.data.head) |head| @ptrCast([*]T, head)[0..self.size()] else &[_]T{};
         }
 
         pub fn deinit(self: *Self) void {
-            if (self.head) |head| {
-                self.allocator.deallocate(head, self.size());
+            if (self.data.head) |head| {
+                self.data.allocator.deallocate(head, self.size());
 
-                self.head = null;
-                self.tail = null;
-                self.end = null;
+                self.data.head = null;
+                self.data.tail = null;
+                self.data.end = null;
             }
         }
     };

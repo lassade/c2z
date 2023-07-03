@@ -69,15 +69,20 @@ struct vector_layout {
 
 template <class _Alloc>
 struct vector_with_custom_alloc_layout {
+#ifdef _MSC_VER
+    _Alloc alloc;
+#endif
     void* head;
     void* tail;
     void* end;
+#ifndef _MSC_VER
     _Alloc alloc;
+#endif
 };
 
 int main() {
     printf("std::vector<char>\n");
-    printf("size: %d -> %d\n", sizeof(std::vector<char>), sizeof(vector_layout));
+    printf("size: %llu -> %llu\n", sizeof(std::vector<char>), sizeof(vector_layout));
 
     auto vec0 = std::vector<char>();
     vec0.push_back('a');
@@ -86,12 +91,12 @@ int main() {
     auto layout0 = (vector_layout*)(&vec0);
 
     printf("ptr: %p -> %p\n", vec0.data(), layout0->head);
-    printf("size: %d -> %d\n", vec0.size(), (size_t)layout0->tail - (size_t)layout0->head);
-    printf("capacity: %d -> %d\n", vec0.capacity(),  (size_t)layout0->end - (size_t)layout0->head);
+    printf("size: %lld -> %lld\n", (int64_t)vec0.size(), (int64_t)layout0->tail - (int64_t)layout0->head);
+    printf("capacity: %lld -> %lld\n", (int64_t)vec0.capacity(),  (int64_t)layout0->end - (int64_t)layout0->head);
     
     printf("=============================================\n");
     printf("std::vector<char, STLAlignedAllocator<char, 64>>\n");
-    printf("size: %d -> %d\n", sizeof(std::vector<char, STLAlignedAllocator<char, 64>>), sizeof(vector_with_custom_alloc_layout<STLAlignedAllocator<char, 64>>));
+    printf("size: %llu -> %llu\n", sizeof(std::vector<char, STLAlignedAllocator<char, 64>>), sizeof(vector_with_custom_alloc_layout<STLAlignedAllocator<char, 64>>));
 
 	auto vec1 = std::vector<char, STLAlignedAllocator<char, 64>>();
     vec1.push_back('a');
@@ -100,8 +105,8 @@ int main() {
     auto layout1 = (vector_with_custom_alloc_layout<STLAlignedAllocator<char, 64>>*)(&vec1);
 
     printf("ptr: %p -> %p\n", vec1.data(), layout1->head);
-    printf("size: %d -> %d\n", vec1.size(), (size_t)layout1->tail - (size_t)layout1->head);
-    printf("capacity: %d -> %d\n", vec1.capacity(),  (size_t)layout1->end - (size_t)layout1->head);
+    printf("size: %lld -> %lld\n", (int64_t)vec1.size(), (int64_t)layout1->tail - (int64_t)layout1->head);
+    printf("capacity: %lld -> %lld\n", (int64_t)vec1.capacity(),  (int64_t)layout1->end - (int64_t)layout1->head);
 
     return 0;
 }
