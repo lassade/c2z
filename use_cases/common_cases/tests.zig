@@ -1,5 +1,6 @@
 const std = @import("std");
 const cpp = @import("cpp");
+const mem = std.mem;
 const expect = std.testing.expect;
 
 test "inheritance" {
@@ -58,5 +59,33 @@ test "cpp_vector" {
     //     _ = fii.enumerate(&v, 256);
     //     v.deinit(); // this doesn't
     //     //v = .{}; // this leaks memory
+    // }
+}
+
+test "cpp_string" {
+    const fii = @import("c022_cpp_string.zig");
+
+    var tmp = fii.get_str();
+    defer tmp.deinit();
+    try expect(mem.eql(u8, tmp.values(), "Hello, World!"));
+
+    var buffer = cpp.String.init(.{});
+    defer buffer.deinit();
+
+    _ = fii.write_numbers(&buffer, 5);
+    try expect(mem.eql(u8, buffer.values(), "0, 1, 2, 3, 4"));
+    _ = fii.write_numbers(&buffer, 5);
+    try expect(mem.eql(u8, buffer.values(), "0, 1, 2, 3, 4, 0, 1, 2, 3, 4"));
+
+    _ = fii.write_numbers(&buffer, 5);
+    _ = fii.write_numbers(&buffer, 5);
+    _ = fii.write_numbers(&buffer, 5);
+    try expect(mem.eql(u8, buffer.values(), "0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4"));
+
+    // // dumb way of checking if the memory is leaking on my windows machine ... and after a couple of minutes it isn't
+    // while (true) {
+    //     _ = fii.write_numbers(&buffer, 256);
+    //     buffer.deinit(); // this doesn't
+    //     //buffer = cpp.String.init(.{}); // this leaks memory
     // }
 }

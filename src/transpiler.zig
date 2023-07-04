@@ -52,6 +52,7 @@ const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
     // custom types
     .{ "std::vector", "cpp.Vector" },
     .{ "std::array", "cpp.Array" }, // todo: std::array<T, N> -> [N]T
+    .{ "std::string", "cpp.String" },
 });
 
 const ScopeTag = enum {

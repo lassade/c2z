@@ -75,11 +75,11 @@ pub fn Allocator(comptime T: type) type {
 
 /// basic `std::vector` compatible type, it doesn't free items
 pub fn Vector(comptime T: type) type {
-    return VectorAlloc(T, Allocator(T), .{});
+    return VectorRaw(T, Allocator(T), .{});
 }
 
 /// base type for any `std::vector` derived type  with a custom allocator type and other configurations, it doesn't free items
-pub fn VectorAlloc(
+pub fn VectorRaw(
     comptime T: type,
     comptime Alloc: type,
     comptime config: struct {
@@ -110,7 +110,7 @@ pub fn VectorAlloc(
             return (@ptrToInt(self.data.limit) - @ptrToInt(self.data.head));
         }
 
-        pub inline fn values(self: *Self) []T {
+        pub inline fn values(self: Self) []T {
             return if (self.data.head) |head| @ptrCast([*]T, head)[0..self.size()] else &[_]T{};
         }
 
@@ -134,14 +134,75 @@ pub fn Array(
     return @Type([N]T);
 }
 
+// todo: cpp.String uses a inline string
+
 /// drop-in replacement for `std::string`
-pub fn String() type {
-    return Vector(c_char);
-}
+pub const String = StringRaw(Allocator(u8), .{});
 
 /// similar to `std::basic_string<char, std::char_traits<char>, Alloc>`
-pub fn StringAlloc(comptime Alloc: type) type {
-    return VectorAlloc(c_char, Alloc, .{});
+pub fn StringRaw(
+    comptime Alloc: type,
+    comptime config: struct {
+        /// support `msvc`, requires at least `-O1` to work
+        msvc: bool = builtin.abi == .msvc,
+    },
+) type {
+    if (config.msvc) {
+        @compileError("MSVC not supported yet");
+    }
+
+    const Heap = extern struct {
+        capacity: usize,
+        length: usize,
+        ptr: [*]u8,
+    };
+
+    const Data = extern union {
+        // in_place[0] >> 1 == length and in_place[in_place.len - 1] == '0' so the max in place length is @sizeOf(Heap) - 2
+        in_place: [@sizeOf(Heap)]u8,
+        heap: Heap,
+    };
+
+    return extern struct {
+        const Self = @This();
+        const IN_PLACE_CAPACITY = @sizeOf(Heap) - 2;
+
+        allocator: Alloc,
+        data: Data,
+
+        pub fn init(allocator: Alloc) Self {
+            return Self{
+                .data = Data{ .in_place = [_]u8{0} ** @sizeOf(Heap) },
+                .allocator = allocator,
+            };
+        }
+
+        inline fn in_heap(self: *const Self) bool {
+            return (self.data.in_place[0] & 1) != 0;
+        }
+
+        pub inline fn size(self: *const Self) usize {
+            return if (self.in_heap()) self.data.heap.length else (self.data.in_place[0] >> 1);
+        }
+
+        pub inline fn capacity(self: *const Self) usize {
+            return if (self.in_heap()) self.data.heap.capacity else IN_PLACE_CAPACITY;
+        }
+
+        pub inline fn values(self: *Self) []u8 {
+            return if (self.in_heap())
+                self.data.heap.ptr[0..self.size()]
+            else
+                self.data.in_place[1 .. (self.data.in_place[0] >> 1) + 1];
+        }
+
+        pub fn deinit(self: *Self) void {
+            if (self.in_heap()) {
+                self.allocator.deallocate(@ptrCast(*u8, self.data.heap.ptr), self.data.heap.capacity);
+                self.data.in_place[0] = 0;
+            }
+        }
+    };
 }
 
 // todo: UniquePtr, SharedPtr
