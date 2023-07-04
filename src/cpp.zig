@@ -148,63 +148,115 @@ pub fn StringRaw(
     },
 ) type {
     if (config.msvc) {
-        @compileError("MSVC not supported yet");
-    }
+        const Heap = extern struct {
+            ptr: [*]u8,
+            __payload: usize,
+        };
 
-    const Heap = extern struct {
-        capacity: usize,
-        length: usize,
-        ptr: [*]u8,
-    };
+        const Data = extern union {
+            in_place: [@sizeOf(Heap)]u8,
+            heap: Heap,
+        };
 
-    const Data = extern union {
-        in_place: [@sizeOf(Heap)]u8,
-        heap: Heap,
-    };
+        return extern struct {
+            const Self = @This();
 
-    return extern struct {
-        const Self = @This();
+            allocator: Alloc,
+            data: Data,
+            len: usize,
+            cap: usize,
 
-        data: Data,
-        allocator: Alloc,
-
-        pub fn init(allocator: Alloc) Self {
-            return Self{
-                .data = Data{ .in_place = [_]u8{0} ** @sizeOf(Heap) },
-                .allocator = allocator,
-            };
-        }
-
-        inline fn inHeap(self: *const Self) bool {
-            return (self.data.in_place[0] & 1) != 0;
-        }
-
-        pub inline fn size(self: *const Self) usize {
-            return if (self.inHeap()) self.data.heap.length else (self.data.in_place[0] >> 1);
-        }
-
-        pub inline fn capacity(self: *const Self) usize {
-            return if (self.inHeap())
-                self.data.heap.capacity
-            else
-                // in_place[0] >> 1 == length and in_place[in_place.len - 1] == '\0'
-                @sizeOf(Heap) - 2;
-        }
-
-        pub inline fn values(self: *Self) []u8 {
-            return if (self.inHeap())
-                self.data.heap.ptr[0..self.size()]
-            else
-                self.data.in_place[1 .. (self.data.in_place[0] >> 1) + 1];
-        }
-
-        pub fn deinit(self: *Self) void {
-            if (self.inHeap()) {
-                self.allocator.deallocate(@ptrCast(*u8, self.data.heap.ptr), self.data.heap.capacity);
-                self.data.in_place[0] = 0;
+            pub fn init(allocator: Alloc) Self {
+                return Self{
+                    .allocator = allocator,
+                    .data = undefined,
+                    .len = 0,
+                    .cap = @sizeOf(Heap) - 1,
+                };
             }
-        }
-    };
+
+            inline fn inHeap(self: *const Self) bool {
+                return self.cap == (@sizeOf(Heap) - 1);
+            }
+
+            pub inline fn size(self: *const Self) usize {
+                return self.len;
+            }
+
+            pub inline fn capacity(self: *const Self) usize {
+                return self.cap;
+            }
+
+            pub inline fn values(self: *Self) []u8 {
+                return if (self.inHeap())
+                    self.data.heap.ptr[0..self.len]
+                else
+                    self.data.in_place[0..self.len];
+            }
+
+            pub fn deinit(self: *Self) void {
+                if (self.inHeap()) {
+                    self.allocator.deallocate(@ptrCast(*u8, self.data.heap.ptr), self.cap);
+                    self.data.in_place[0] = 0;
+                }
+            }
+        };
+    } else {
+        const Heap = extern struct {
+            cap: usize,
+            len: usize,
+            ptr: [*]u8,
+        };
+
+        const Data = extern union {
+            in_place: [@sizeOf(Heap)]u8,
+            heap: Heap,
+        };
+
+        return extern struct {
+            const Self = @This();
+
+            data: Data,
+            allocator: Alloc,
+
+            pub fn init(allocator: Alloc) Self {
+                return Self{
+                    .data = Data{ .in_place = [_]u8{0} ** @sizeOf(Heap) },
+                    .allocator = allocator,
+                };
+            }
+
+            inline fn inHeap(self: *const Self) bool {
+                return (self.data.in_place[0] & 1) != 0;
+            }
+
+            pub inline fn size(self: *const Self) usize {
+                return if (self.inHeap()) self.data.heap.len else (self.data.in_place[0] >> 1);
+            }
+
+            pub inline fn capacity(self: *const Self) usize {
+                return if (self.inHeap())
+                    self.data.heap.cap
+                else
+                    // in_place[0] >> 1 == length and in_place[in_place.len - 1] == '\0'
+                    @sizeOf(Heap) - 2;
+            }
+
+            pub inline fn values(self: *Self) []u8 {
+                return if (self.inHeap())
+                    self.data.heap.ptr[0..self.data.heap.len]
+                else
+                    self.data.in_place[1 .. (self.data.in_place[0] >> 1) + 1];
+            }
+
+            pub fn deinit(self: *Self) void {
+                if (self.inHeap()) {
+                    self.allocator.deallocate(@ptrCast(*u8, self.data.heap.ptr), self.data.heap.cap);
+                    self.data.in_place[0] = 0;
+                }
+            }
+        };
+    }
 }
 
 // todo: UniquePtr, SharedPtr
