@@ -75,48 +75,30 @@ pub fn Allocator(comptime T: type) type {
 
 /// basic `std::vector` compatible type, it doesn't free items
 pub fn Vector(comptime T: type) type {
-    return VectorAlloc(T, Allocator(T));
+    return VectorAlloc(T, Allocator(T), .{});
 }
 
-/// basic `std::vector` with a custom allocator type, it doesn't free items
+/// base type for any `std::vector` derived type  with a custom allocator type and other configurations, it doesn't free items
 pub fn VectorAlloc(
     comptime T: type,
     comptime Alloc: type,
-) type {
-    return Vector(T, .{ .Alloc = Alloc });
-}
-
-/// drop-in replacement for `std::string`
-pub fn String() type {
-    return Vector(c_char);
-}
-
-/// similar to `std::basic_string<char, std::char_traits<char>, Alloc>`
-pub fn StringAlloc(comptime Alloc: type) type {
-    return VectorAlloc(c_char, Alloc);
-}
-
-/// base type for any `std::vector` derived type with multiple configurations, it doesn't free items
-pub fn VectorBase(
-    comptime T: type,
     comptime config: struct {
-        Alloc: type = Allocator(T),
         /// support `msvc`, requires at least `-O1` to work
         msvc: bool = builtin.abi == .msvc,
     },
 ) type {
     const Data = if (config.msvc)
         // requires at least -O1 to work
-        extern struct { allocator: config.Alloc, head: ?*T = null, tail: ?*T = null, limit: ?*T = null }
+        extern struct { allocator: Alloc, head: ?*T = null, tail: ?*T = null, limit: ?*T = null }
     else
-        extern struct { head: ?*T = null, tail: ?*T = null, limit: ?*T = null, allocator: config.Alloc };
+        extern struct { head: ?*T = null, tail: ?*T = null, limit: ?*T = null, allocator: Alloc };
 
     return extern struct {
         const Self = @This();
 
         data: Data,
 
-        pub fn init(allocator: config.Alloc) Self {
+        pub fn init(allocator: Alloc) Self {
             return .{ .data = .{ .allocator = allocator } };
         }
 
@@ -150,6 +132,16 @@ pub fn Array(
     comptime N: comptime_int,
 ) type {
     return @Type([N]T);
+}
+
+/// drop-in replacement for `std::string`
+pub fn String() type {
+    return Vector(c_char);
+}
+
+/// similar to `std::basic_string<char, std::char_traits<char>, Alloc>`
+pub fn StringAlloc(comptime Alloc: type) type {
+    return VectorAlloc(c_char, Alloc, .{});
 }
 
 // todo: UniquePtr, SharedPtr
