@@ -158,17 +158,15 @@ pub fn StringRaw(
     };
 
     const Data = extern union {
-        // in_place[0] >> 1 == length and in_place[in_place.len - 1] == '0' so the max in place length is @sizeOf(Heap) - 2
         in_place: [@sizeOf(Heap)]u8,
         heap: Heap,
     };
 
     return extern struct {
         const Self = @This();
-        const IN_PLACE_CAPACITY = @sizeOf(Heap) - 2;
 
-        allocator: Alloc,
         data: Data,
+        allocator: Alloc,
 
         pub fn init(allocator: Alloc) Self {
             return Self{
@@ -177,27 +175,31 @@ pub fn StringRaw(
             };
         }
 
-        inline fn in_heap(self: *const Self) bool {
+        inline fn inHeap(self: *const Self) bool {
             return (self.data.in_place[0] & 1) != 0;
         }
 
         pub inline fn size(self: *const Self) usize {
-            return if (self.in_heap()) self.data.heap.length else (self.data.in_place[0] >> 1);
+            return if (self.inHeap()) self.data.heap.length else (self.data.in_place[0] >> 1);
         }
 
         pub inline fn capacity(self: *const Self) usize {
-            return if (self.in_heap()) self.data.heap.capacity else IN_PLACE_CAPACITY;
+            return if (self.inHeap())
+                self.data.heap.capacity
+            else
+                // in_place[0] >> 1 == length and in_place[in_place.len - 1] == '\0'
+                @sizeOf(Heap) - 2;
         }
 
         pub inline fn values(self: *Self) []u8 {
-            return if (self.in_heap())
+            return if (self.inHeap())
                 self.data.heap.ptr[0..self.size()]
             else
                 self.data.in_place[1 .. (self.data.in_place[0] >> 1) + 1];
         }
 
         pub fn deinit(self: *Self) void {
-            if (self.in_heap()) {
+            if (self.inHeap()) {
                 self.allocator.deallocate(@ptrCast(*u8, self.data.heap.ptr), self.data.heap.capacity);
                 self.data.in_place[0] = 0;
             }

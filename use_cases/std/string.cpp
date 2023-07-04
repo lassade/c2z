@@ -7,7 +7,7 @@ template <typename T, size_t N>
 class STLAlignedAllocator
 {
 private:
-	size_t state = 0;
+	size_t state = 0xFAFA0000FAFA0000;
 public:
 	using value_type = T;
 
@@ -62,20 +62,32 @@ public:
 };
 
 struct string_layout {
-    void* capacity;
+#ifdef _MSC_VER
+    void* ptr;
+    size_t __data;
     size_t len;
-    size_t ptr;
+    size_t capacity;
+#else
+    size_t capacity;
+    size_t len;
+    void* ptr;
+#endif
 };
 
 template <class _Alloc>
 struct string_with_custom_alloc_layout {
-// #ifdef _MSC_VER
+#ifdef _MSC_VER
      _Alloc alloc;
-// #endif
-    string_layout layout;
-//#ifndef _MSC_VER
-//    _Alloc alloc;
-//#endif
+    void* ptr;
+    size_t __data;
+    size_t len;
+    size_t capacity;
+#else
+    size_t capacity;
+    size_t len;
+    void* ptr;
+	_Alloc alloc;
+#endif
 };
 
 int main() {
@@ -83,7 +95,7 @@ int main() {
     printf("size: %llu -> %llu\n", sizeof(std::string), sizeof(string_layout));
 
     auto vec0 = std::string();
-	for (size_t i = 0; i < 23; i++)
+	for (size_t i = 0; i < 55; i++)
 	{
     	vec0.push_back('0');
 	}
@@ -96,8 +108,8 @@ int main() {
     printf("in_place: ");
 	for (size_t i = 0; i < sizeof(std::string); i++)
 	{
-    	printf("%02X", in_place0[i]);
-		//if ((i != 0) && (i % 8 == 0)) printf(" ");
+		if ((i != 0) && (i % 8 == 0)) printf(" ");
+    	printf("%02hhX", in_place0[i]);
 	}
     printf("\n");
     printf("heap: %p %lld %lld\n", heap0->ptr, heap0->len, heap0->capacity);
@@ -107,9 +119,10 @@ int main() {
     printf("size: %llu -> %llu\n", sizeof(std::basic_string<char, std::char_traits<char>, STLAlignedAllocator<char, 64>>), sizeof(string_with_custom_alloc_layout<STLAlignedAllocator<char, 64>>));
 
 	auto vec1 = std::basic_string<char, std::char_traits<char>, STLAlignedAllocator<char, 64>>();
-    vec1.push_back('a');
-    vec1.push_back('b');
-    vec1.push_back('c');
+	for (size_t i = 0; i < 55; i++)
+	{
+    	vec1.push_back('0');
+	}
 
     auto in_place1 = (char*)(&vec1);
     auto heap1 = (string_with_custom_alloc_layout<STLAlignedAllocator<char, 64>>*)(&vec1);
@@ -119,16 +132,12 @@ int main() {
     printf("in_place: ");
 	for (size_t i = 0; i < sizeof(std::basic_string<char, std::char_traits<char>, STLAlignedAllocator<char, 64>>); i++)
 	{
-    	printf("%02X", in_place1[i]);
-		//if ((i != 0) && (i % 8 == 0)) printf(" ");
+		if ((i != 0) && (i % 8 == 0)) printf(" ");
+    	printf("%02hhX", in_place1[i]);
 	}
     printf("\n");
     printf("alloc: %p\n", heap1->alloc);
-
-
-    // printf("ptr: %p -> %p\n", vec1.data(), layout1->head);
-    // printf("size: %lld -> %lld\n", (int64_t)vec1.size(), (int64_t)layout1->tail - (int64_t)layout1->head);
-    // printf("capacity: %lld -> %lld\n", (int64_t)vec1.capacity(),  (int64_t)layout1->end - (int64_t)layout1->head);
+    printf("heap: %p %lld %lld\n", heap1->ptr, heap1->len, heap1->capacity);
 
     return 0;
 }
