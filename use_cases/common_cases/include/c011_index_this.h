@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <cstdio>
 
 void ImAssert(bool);
 #define IM_ASSERT(_EXPR)            ImAssert(_EXPR)
