@@ -51,6 +51,9 @@ pub fn FlagsMixin(comptime FlagsType: type) type {
     };
 }
 
+extern fn malloc(usize) ?*anyopaque;
+extern fn free(?*anyopaque) void;
+
 /// default stateless allocator, uses `malloc` and `free` internally
 pub fn Allocator(comptime T: type) type {
     return extern struct {
@@ -58,7 +61,7 @@ pub fn Allocator(comptime T: type) type {
 
         pub fn allocate(self: *Self, size: usize) !*T {
             _ = self;
-            if (@ptrCast(?*T, std.c.malloc(@sizeOf(T) * size))) |ptr| {
+            if (@ptrCast(?*T, malloc(@sizeOf(T) * size))) |ptr| {
                 return ptr;
             } else {
                 return std.mem.Allocator.Error.OutOfMemory;
@@ -68,7 +71,7 @@ pub fn Allocator(comptime T: type) type {
         pub fn deallocate(self: *Self, ptr: *T, size: usize) void {
             _ = self;
             _ = size;
-            std.c.free(ptr);
+            free(ptr);
         }
     };
 }

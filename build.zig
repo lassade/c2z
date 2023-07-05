@@ -61,17 +61,38 @@ pub fn build(b: *std.Build) void {
     });
 
     // build and link use cases
-    const cflags = &.{"-fno-sanitize=undefined"};
+    // see: https://stackoverflow.com/a/47951761
+    const cflags = &.{ "-Xclang", "-fno-sanitize=undefined", "-fno-rtti" };
     const lib = b.addStaticLibrary(.{
         .name = "use_cases",
         .target = target,
         .optimize = optimize,
     });
     lib.addIncludePath("./use_cases/common_cases/include");
-    //lib.linkLibC();
-    lib.linkLibCpp();
+    if (target.getAbi() == .msvc) {
+        // use x64 Native Tools Command Promp for VS 2019 and run: `zig build test -Doptimize=ReleaseFast -Dtarget=x86_64-windows-msvc`
+        // use "cl /c /EHsc [FILES]"
+        // use "lib [FILES]"
+        @panic("msvc isn't supported");
+        // const arch = switch (target.getCpu().arch) {
+        //     .x86 => "x86",
+        //     .x86_64 => "x64",
+        //     else => @panic("unsupported architecture"),
+        // };
+        // lib.addSystemIncludePath("C:/Program Files (x86)/Microsoft Visual Studio/2019/BuildTools/VC/Tools/MSVC/14.28.29333/include");
+        // lib.addSystemIncludePath("C:/Program Files (x86)/Windows Kits/10/Include/10.0.20348.0/ucrt");
+        // // lib.addSystemIncludePath("C:/Program Files (x86)/Windows Kits/10/Include/10.0.20348.0/um");
+        // // lib.addLibraryPath(b.fmt("C:/Program Files (x86)/Microsoft Visual Studio/2019/BuildTools/VC/Tools/MSVC/14.28.29333/lib/{s}", .{arch}));
+        // // lib.addLibraryPath(b.fmt("C:/Program Files (x86)/Windows Kits/10/Lib/10.0.20348.0/ucrt/{s}", .{arch}));
+        // // lib.addLibraryPath(b.fmt("C:/Program Files (x86)/Windows Kits/10/Lib/10.0.20348.0/um/{s}", .{arch}));
+        // lib.linkSystemLibrary("msvcrt");
+        // lib.linkSystemLibrary("msvcprt");
+        // lib.linkSystemLibrary("vcruntime");
+        // lib.linkSystemLibrary("ucrt");
+    } else {
+        lib.linkLibCpp();
+    }
     lib.addCSourceFile("./use_cases/common_cases/include/c005_inheritance.cpp", cflags);
-    lib.addCSourceFile("./use_cases/common_cases/include/c013_cpp_vector.cpp", cflags);
     lib.addCSourceFile("./use_cases/common_cases/include/c013_cpp_vector.cpp", cflags);
     lib.addCSourceFile("./use_cases/common_cases/include/c022_cpp_string.cpp", cflags);
     // glue files
