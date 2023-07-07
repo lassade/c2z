@@ -28,18 +28,19 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ### Misc
 
-- `msvc` is supported, just pass it as target tuple like as: `-no-glue -target x86_64-windows-msvc`, it only fully works in release builds use `ReleaseFast` or at least `-O1`.
+- `msvc` has a second tier support, just pass it as target tuple like as: `-no-glue -target x86_64-windows-msvc` to generate a target specifc binding for it. Debug builds aren't fully supported, use `ReleaseFast` or at least `-O1`, you might also wan't to find a way of define `_ITERATOR_DEBUG_LEVEL` to something different than `2`.
 
 ## Todo
 
-- refactor cpp to be simpler to read (put MSVC into it's own namespace)
 - default arguments inside structs
 - transpile inline or constexpr constructors when the class isn't polymorphic
+- (hard) `#include` -> `@import`
+
+- transpile vector of vectors
 - (easy) better input file not found error
 - (easy) walk a directory tree
 - (easy) verbose option
 - (easy) handle `BlockCommandComment` and `ParamCommandComment` in `FullComment`
-- (hard) `#include` -> `@import`
 - (easy) resolve return of function with a aliased return type
 - (easy) fail when clang ast-bump has failed, because missing headers or wrong code
 - (easy) maybe use `@extern` as sugested byt kassame in [here](https://github.com/lassade/c2z/issues/1#issuecomment-1608463661)
