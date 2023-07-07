@@ -45,6 +45,18 @@ test "index_this" {
 test "cpp_vector" {
     const fii = @import("c013_cpp_vector.zig");
 
+    try expectEqual(@as(usize, @sizeOf(cpp.Vector(u8))), fii.sizeof_vector_uint8_t());
+
+    var tmp = fii.create();
+    defer tmp.deinit();
+    try expectEqual(fii.vector_size(&tmp), tmp.size());
+    try expectEqual(fii.vector_capacity(&tmp), tmp.capacity());
+    try expectEqual(fii.vector_data(&tmp), tmp.values().ptr);
+    try expectEqual(fii.vector_size(&tmp), tmp.values().len);
+    try expectEqual(@as(u8, 0), tmp.values()[0]);
+    try expectEqual(@as(u8, 1), tmp.values()[1]);
+    try expectEqual(@as(u8, 2), tmp.values()[2]);
+
     // fails on MSVC release mode because `DebugData` isn't initialized
     var v = cpp.Vector(u8).init(.{});
     try expect(@ptrToInt(v.values().ptr) != 0); // odd, but expected
@@ -70,6 +82,7 @@ test "cpp_string" {
     try expectEqual(@as(c_int, @sizeOf(cpp.String)), fii.size_of_string());
 
     var tmp = fii.get_str();
+    defer tmp.deinit();
     try expectEqual("Hello, World!".len, tmp.size());
     try expectEqual(fii.cap(&tmp), @intCast(c_int, tmp.capacity()));
     try expectEqual(fii.data(&tmp), @ptrCast([*c]const u8, tmp.values().ptr));

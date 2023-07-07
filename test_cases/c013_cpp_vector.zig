@@ -2,5 +2,20 @@
 const std = @import("std");
 const cpp = @import("cpp");
 
+extern fn _1_create_() cpp.Vector(u8);
+pub const create = _1_create_;
+
+extern fn _1_sizeof_vector_uint8_t_() usize;
+pub const sizeof_vector_uint8_t = _1_sizeof_vector_uint8_t_;
+
+extern fn _1_vector_data_(vec: *const cpp.Vector(u8)) [*c]const u8;
+pub const vector_data = _1_vector_data_;
+
+extern fn _1_vector_size_(vec: *const cpp.Vector(u8)) usize;
+pub const vector_size = _1_vector_size_;
+
+extern fn _1_vector_capacity_(vec: *const cpp.Vector(u8)) usize;
+pub const vector_capacity = _1_vector_capacity_;
+
 extern fn _1_enumerate_(out_buf: *cpp.Vector(u8), count: usize) bool;
 pub const enumerate = _1_enumerate_;
