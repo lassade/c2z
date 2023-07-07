@@ -76,6 +76,11 @@ pub fn Allocator(comptime T: type) type {
     };
 }
 
+/// MSVC debug data, I dunno what is but I know it's there
+fn DebugData() type {
+    return if (builtin.mode == .Debug) usize else extern struct {};
+}
+
 /// basic `std::vector` compatible type, it doesn't free items
 pub fn Vector(comptime T: type) type {
     return VectorRaw(T, Allocator(T), .{});
@@ -92,9 +97,9 @@ pub fn VectorRaw(
 ) type {
     const Data = if (config.msvc)
         // requires at least -O1 to work
-        extern struct { allocator: Alloc, head: ?*T = null, tail: ?*T = null, limit: ?*T = null }
+        extern struct { __debug: DebugData() = undefined, allocator: Alloc, head: ?*T = null, tail: ?*T = null, limit: ?*T = null, }
     else
-        extern struct { head: ?*T = null, tail: ?*T = null, limit: ?*T = null, allocator: Alloc };
+        extern struct { head: ?*T = null, tail: ?*T = null, limit: ?*T = null, allocator: Alloc, };
 
     return extern struct {
         const Self = @This();
@@ -164,6 +169,7 @@ pub fn StringRaw(
         return extern struct {
             const Self = @This();
 
+            __debug: DebugData() = undefined,
             allocator: Alloc,
             data: Data,
             len: usize,
@@ -179,7 +185,7 @@ pub fn StringRaw(
             }
 
             inline fn inHeap(self: *const Self) bool {
-                return self.cap == (@sizeOf(Heap) - 1);
+                return self.cap > (@sizeOf(Heap) - 1);
             }
 
             pub inline fn size(self: *const Self) usize {

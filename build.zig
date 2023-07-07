@@ -54,63 +54,46 @@ pub fn build(b: *std.Build) void {
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
-    const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "./use_cases/tests.zig" },
+    const test_cases = b.addTest(.{
+        .root_source_file = .{ .path = "./test_cases/tests.zig" },
         .target = target,
         .optimize = optimize,
     });
 
     // build and link use cases
-    // see: https://stackoverflow.com/a/47951761
-    const cflags = &.{ "-Xclang", "-fno-sanitize=undefined", "-fno-rtti" };
+    const cflags = &.{"-fno-sanitize=undefined"};
     const lib = b.addStaticLibrary(.{
-        .name = "use_cases",
+        .name = "test_cases",
         .target = target,
         .optimize = optimize,
     });
-    lib.addIncludePath("./use_cases/common_cases/include");
+    lib.addIncludePath("./test_cases/include");
     if (target.getAbi() == .msvc) {
-        // use x64 Native Tools Command Promp for VS 2019 and run: `zig build test -Doptimize=ReleaseFast -Dtarget=x86_64-windows-msvc`
-        // use "cl /c /EHsc [FILES]"
-        // use "lib [FILES]"
-        @panic("msvc isn't supported");
-        // const arch = switch (target.getCpu().arch) {
-        //     .x86 => "x86",
-        //     .x86_64 => "x64",
-        //     else => @panic("unsupported architecture"),
-        // };
-        // lib.addSystemIncludePath("C:/Program Files (x86)/Microsoft Visual Studio/2019/BuildTools/VC/Tools/MSVC/14.28.29333/include");
-        // lib.addSystemIncludePath("C:/Program Files (x86)/Windows Kits/10/Include/10.0.20348.0/ucrt");
-        // // lib.addSystemIncludePath("C:/Program Files (x86)/Windows Kits/10/Include/10.0.20348.0/um");
-        // // lib.addLibraryPath(b.fmt("C:/Program Files (x86)/Microsoft Visual Studio/2019/BuildTools/VC/Tools/MSVC/14.28.29333/lib/{s}", .{arch}));
-        // // lib.addLibraryPath(b.fmt("C:/Program Files (x86)/Windows Kits/10/Lib/10.0.20348.0/ucrt/{s}", .{arch}));
-        // // lib.addLibraryPath(b.fmt("C:/Program Files (x86)/Windows Kits/10/Lib/10.0.20348.0/um/{s}", .{arch}));
-        // lib.linkSystemLibrary("msvcrt");
-        // lib.linkSystemLibrary("msvcprt");
-        // lib.linkSystemLibrary("vcruntime");
-        // lib.linkSystemLibrary("ucrt");
+        lib.linkLibC();
     } else {
         lib.linkLibCpp();
     }
-    lib.addCSourceFile("./use_cases/common_cases/include/c005_inheritance.cpp", cflags);
-    lib.addCSourceFile("./use_cases/common_cases/include/c013_cpp_vector.cpp", cflags);
-    lib.addCSourceFile("./use_cases/common_cases/include/c022_cpp_string.cpp", cflags);
-    // glue files
-    lib.addCSourceFile("./use_cases/common_cases/c005_inheritance_glue.cpp", cflags);
-    lib.addCSourceFile("./use_cases/common_cases/c009_enum_flags_glue.cpp", cflags);
-    lib.addCSourceFile("./use_cases/common_cases/c011_index_this_glue.cpp", cflags);
-    lib.addCSourceFile("./use_cases/common_cases/c013_cpp_vector_glue.cpp", cflags);
-    lib.addCSourceFile("./use_cases/common_cases/c022_cpp_string_glue.cpp", cflags);
-    unit_tests.linkLibrary(lib);
+    //lib.addCSourceFile("./test_cases/include/c002_cpp_structs.cpp", cflags);
+    lib.addCSourceFile("./test_cases/include/c005_inheritance.cpp", cflags);
+    lib.addCSourceFile("./test_cases/include/c013_cpp_vector.cpp", cflags);
+    lib.addCSourceFile("./test_cases/include/c022_cpp_string.cpp", cflags);
+    // glue
+    //lib.addCSourceFile("./test_cases/c001_c_structs_glue.cpp", cflags);
+    lib.addCSourceFile("./test_cases/c005_inheritance_glue.cpp", cflags);
+    lib.addCSourceFile("./test_cases/c009_enum_flags_glue.cpp", cflags);
+    lib.addCSourceFile("./test_cases/c011_index_this_glue.cpp", cflags);
+    lib.addCSourceFile("./test_cases/c013_cpp_vector_glue.cpp", cflags);
+    lib.addCSourceFile("./test_cases/c022_cpp_string_glue.cpp", cflags);
+    test_cases.linkLibrary(lib);
 
     const cpp_mod = b.addModule("cpp", .{ .source_file = .{ .path = "src/cpp.zig" } });
-    unit_tests.addModule("cpp", cpp_mod);
+    test_cases.addModule("cpp", cpp_mod);
 
-    const run_unit_tests = b.addRunArtifact(unit_tests);
+    const run_test_cases = b.addRunArtifact(test_cases);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_unit_tests.step);
+    test_step.dependOn(&run_test_cases.step);
 }
