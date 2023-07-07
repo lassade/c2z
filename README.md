@@ -28,11 +28,11 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ### Misc
 
-- `msvc` is supported, just pass it as target tuple like as: `-no-glue -target x86_64-windows-msvc` requires at least `-O1` or `ReleaseFast`. It can work in debug mode but you shouldn't be able to construct any of the std types directly right now.
+- `msvc` is supported, just pass it as target tuple like as: `-no-glue -target x86_64-windows-msvc`
 
 ## Todo
 
-- refactor cpp to be simpler to read (but MSVC into it's own namespace)
+- refactor cpp to be simpler to read (put MSVC into it's own namespace)
 - default arguments inside structs
 - transpile inline or constexpr constructors when the class isn't polymorphic
 - (easy) better input file not found error

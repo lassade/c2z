@@ -76,10 +76,37 @@ pub fn Allocator(comptime T: type) type {
     };
 }
 
-/// MSVC debug data, I dunno what is but I know it's there
-fn DebugData() type {
-    return if (builtin.mode == .Debug) usize else extern struct {};
-}
+/// MSVC proxy iterator, my guess is that is used in debug builds to invalidate iterators, look for `_MyProxy` in `xmemory`
+const ProxyIter = 
+    if (builtin.mode == .Debug)
+        extern struct {
+            const Self = @This();
+
+            const ContainerProxy = struct {
+                cont: ?*const anyopaque = null,
+                first_iter: ?*anyopaque = null,
+            };
+
+            container: ?*ContainerProxy = null,
+            
+            pub fn init() Self {
+                var container = @ptrCast(?*ContainerProxy, @alignCast(8, malloc(@sizeOf(ContainerProxy))));
+                container.?.* = .{};
+                return .{ .container = container };
+            }
+
+            pub fn deinit(self: *Self) void { 
+                // todo: test if will leak memory when passing containers between ffi bounds
+                free(self.container);
+            }
+        }
+    else
+        extern struct {
+            const Self = @This();
+
+            pub fn init() Self { return .{}; }
+            pub fn deinit(_: *Self) void {}
+        };
 
 /// basic `std::vector` compatible type, it doesn't free items
 pub fn Vector(comptime T: type) type {
@@ -96,8 +123,7 @@ pub fn VectorRaw(
     },
 ) type {
     const Data = if (config.msvc)
-        // requires at least -O1 to work
-        extern struct { __debug: DebugData() = undefined, allocator: Alloc, head: ?*T = null, tail: ?*T = null, limit: ?*T = null, }
+        extern struct { __proxy: ProxyIter, allocator: Alloc, head: ?*T = null, tail: ?*T = null, limit: ?*T = null, }
     else
         extern struct { head: ?*T = null, tail: ?*T = null, limit: ?*T = null, allocator: Alloc, };
 
@@ -107,7 +133,13 @@ pub fn VectorRaw(
         data: Data,
 
         pub fn init(allocator: Alloc) Self {
-            return .{ .data = .{ .allocator = allocator } };
+            var self: Self = undefined;
+            if (config.msvc) self.data.__proxy = ProxyIter.init();
+            self.data.allocator = allocator;
+            self.data.head = null;
+            self.data.tail = null;
+            self.data.limit = null;
+            return self;
         }
 
         pub inline fn size(self: *const Self) usize {
@@ -169,19 +201,20 @@ pub fn StringRaw(
         return extern struct {
             const Self = @This();
 
-            __debug: DebugData() = undefined,
+            __proxy: ProxyIter,
             allocator: Alloc,
             data: Data,
             len: usize,
             cap: usize,
 
             pub fn init(allocator: Alloc) Self {
-                return Self{
-                    .allocator = allocator,
-                    .data = undefined,
-                    .len = 0,
-                    .cap = @sizeOf(Heap) - 1,
-                };
+                var self: Self = undefined;
+                if (config.msvc) self.__proxy = ProxyIter.init();
+                self.allocator = allocator;
+                self.data = undefined;
+                self.len = 0;
+                self.cap = @sizeOf(Heap) - 1;
+                return self;
             }
 
             inline fn inHeap(self: *const Self) bool {

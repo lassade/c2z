@@ -57,8 +57,12 @@ test "cpp_vector" {
     try expectEqual(@as(u8, 1), tmp.values()[1]);
     try expectEqual(@as(u8, 2), tmp.values()[2]);
 
-    // fails on MSVC release mode because `DebugData` isn't initialized
     var v = cpp.Vector(u8).init(.{});
+    try expectEqual(fii.vector_size(&v), v.size());
+    try expectEqual(fii.vector_capacity(&v), v.capacity());
+    //try expectEqual(fii.vector_data(&v), v.values().ptr);
+    try expectEqual(fii.vector_size(&v), v.values().len);
+
     try expect(@ptrToInt(v.values().ptr) != 0); // odd, but expected
     try expect(v.values().len == 0);
     _ = fii.enumerate(&v, 15);

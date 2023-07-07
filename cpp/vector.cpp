@@ -86,13 +86,7 @@ struct vector_with_custom_alloc_layout {
 #endif
 };
 
-struct empty_struct {};
-
 int main() {
-	printf("allocator size: %llu\n", sizeof(std::allocator<char>));
-	printf("empty struct size: %llu\n", sizeof(empty_struct));
-	printf("=============================================\n");
-
     printf("std::vector<char>\n");
     printf("size: %llu -> %llu\n", sizeof(std::vector<char>), sizeof(vector_layout));
 
@@ -122,14 +116,24 @@ int main() {
     printf("ptr: %p -> %p\n", vec1.data(), layout1->head);
     printf("size: %lld -> %lld\n", (int64_t)vec1.size(), (int64_t)layout1->tail - (int64_t)layout1->head);
     printf("capacity: %lld -> %lld\n", (int64_t)vec1.capacity(),  (int64_t)layout1->end - (int64_t)layout1->head);
+	
+	printf("=============================================\n");
 
-	auto vec2 = new std::vector<char>();
-	for (size_t i = 0; i < 32; i++)
-	{
-		vec1.push_back('a');
-	}
-	delete vec2;
-
+#ifdef _MSC_VER &&_DEBUG
+	auto vec2 = std::vector<char>();
+	auto layout2 = (vector_layout*)(&vec2);
+	printf("ptr: %p\n", vec2.data());
+	printf("size: %llu\n", vec2.size());
+	printf("capacity: %llu\n", vec2.capacity());
+	layout2->__debug = 0;// 0xAAAAAAAAAAAAAAAA;
+	vec2.push_back('a');
+	vec2.push_back('a');
+	vec2.push_back('a');
+	vec2.push_back('a');
+	vec2.push_back('a');
+	vec2.push_back('a');
+	vec2.push_back('a');
+#endif
 
     return 0;
 }
