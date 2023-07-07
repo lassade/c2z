@@ -32,7 +32,6 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 ## Todo
 
-- default arguments inside structs
 - transpile inline or constexpr constructors when the class isn't polymorphic
 - (hard) `#include` -> `@import`
 
@@ -43,7 +42,7 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 - (easy) handle `BlockCommandComment` and `ParamCommandComment` in `FullComment`
 - (easy) resolve return of function with a aliased return type
 - (easy) fail when clang ast-bump has failed, because missing headers or wrong code
-- (easy) maybe use `@extern` as sugested byt kassame in [here](https://github.com/lassade/c2z/issues/1#issuecomment-1608463661)
+- (hard) apply `keywordFix`
 - (hard) `if (*data++ == v) { ... }` should generate `{ const __tmp0 = data; data += 1; if (__tmp0.* == v) { ... }  }`
 - (hard) solve `UnresolvedMemberExpr`, maybe when integrating clang ast directly
 - (hard) solve implicit destructors call

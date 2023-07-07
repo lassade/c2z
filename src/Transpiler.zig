@@ -16,6 +16,10 @@ const FnSig = struct {
     ret: []const u8,
 };
 
+const KeywordsLUT = std.ComptimeStringMap([]const u8, .{
+    .{ "error", "err" },
+});
+
 const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
     .{ "bool", "bool" },
     .{ "char", "u8" },
@@ -334,6 +338,8 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitMemberExpr(value);
     } else if (mem.eql(u8, kind, "IntegerLiteral")) {
         try self.visitIntegerLiteral(value);
+    } else if (mem.eql(u8, kind, "FloatingLiteral")) {
+        try self.visitFloatingLiteral(value);
     } else if (mem.eql(u8, kind, "CStyleCastExpr")) {
         try self.visitCStyleCastExpr(value);
     } else if (mem.eql(u8, kind, "ArraySubscriptExpr")) {
@@ -562,11 +568,32 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
                 }
             }
 
-            try self.writeDocs(item.object.getPtr("inner"));
+            const item_inner = item.object.getPtr("inner");
+            try self.writeDocs(item_inner);
 
             const field_type = try self.transpileType(typeQualifier(item).?);
             defer self.allocator.free(field_type);
-            try self.out.print("    {s}: {s},\n", .{ field_name, field_type });
+
+            try self.out.print("    {s}: {s}", .{ field_name, field_type });
+
+            // field default value
+            if (item_inner != null) {
+                var value_exp = std.ArrayList(u8).init(self.allocator);
+                defer value_exp.deinit();
+
+                const out = self.out;
+                self.out = value_exp.writer();
+                for (item_inner.?.array.items) |*item_inner_item| {
+                    try self.visit(item_inner_item);
+                }
+                self.out = out;
+
+                if (value_exp.items.len > 0) {
+                    try self.out.print(" = {s}", .{value_exp.items});
+                }
+            }
+
+            try self.out.print(",\n", .{});
         } else if (mem.eql(u8, kind, "CXXMethodDecl")) {
             const out = self.out;
             self.out = functions.writer();
@@ -1953,6 +1980,12 @@ fn visitIntegerLiteral(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 }
 
+fn visitFloatingLiteral(self: *Self, value: *const json.Value) !void {
+    const literal = value.object.getPtr("value").?.string;
+    _ = try self.out.write(literal);
+    self.nodes_visited += 1;
+}
+
 inline fn visitCStyleCastExpr(self: *Self, value: *const json.Value) !void {
     return self.visitImplicitCastExpr(value);
 }
@@ -2423,6 +2456,25 @@ fn nodeCount(value: *const json.Value) usize {
     return count;
 }
 
+inline fn keywordFix(name: []const u8) []const u8 {
+    return if (KeywordsLUT.get(name)) |fix| fix else name;
+}
+
+fn mangle(self: *Self, name: []const u8, overload: ?usize) ![]u8 {
+    var tmp = try std.ArrayList(u8).initCapacity(self.allocator, self.namespace.full_path.items.len + 32);
+    defer tmp.deinit();
+    var o = tmp.writer();
+
+    _ = try o.print("_{d}_", .{if (overload) |i| i else 1});
+    var it = mem.split(u8, self.namespace.full_path.items, "::");
+    while (it.next()) |value| {
+        if (value.len != 0) _ = try o.print("{s}_", .{value});
+    }
+    _ = try o.print("{s}_", .{name});
+
+    return try self.allocator.dupe(u8, tmp.items);
+}
+
 fn transpileType(self: *Self, tname: []const u8) ![]u8 {
     var ttname = mem.trim(u8, tname, " ");
 
@@ -2515,21 +2567,6 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
     var buf = try self.allocator.alloc(u8, ttname.len);
     mem.copyForwards(u8, buf, ttname);
     return buf;
-}
-
-fn mangle(self: *Self, name: []const u8, overload: ?usize) ![]u8 {
-    var tmp = try std.ArrayList(u8).initCapacity(self.allocator, self.namespace.full_path.items.len + 32);
-    defer tmp.deinit();
-    var o = tmp.writer();
-
-    _ = try o.print("_{d}_", .{if (overload) |i| i else 1});
-    var it = mem.split(u8, self.namespace.full_path.items, "::");
-    while (it.next()) |value| {
-        if (value.len != 0) _ = try o.print("{s}_", .{value});
-    }
-    _ = try o.print("{s}_", .{name});
-
-    return try self.allocator.dupe(u8, tmp.items);
 }
 
 // generics `Vector<TypeArgs>`
