@@ -15,10 +15,13 @@ jobs:
         with:
           version: 0.11.0-dev.3220+447a30299
 
-      - name: build summary
+      - name: build
         run: zig build -freference-trace
-      
-      - name: test
+
+      - name: test release
+        run: zig build test -Doptimize=ReleaseFast -freference-trace
+        
+      - name: test debug
         run: zig build test -freference-trace
 
   zig-msvc:
@@ -31,14 +34,16 @@ jobs:
         with:
           version: 0.11.0-dev.3220+447a30299
 
-      # not fully supported yet ...
-      # - name: build summary
-      #   run: zig build -freference-trace -Dtarget=native-windows-msvc
+      - name: build
+        run: zig build -freference-trace -Dtarget=native-windows-msvc
       
       # - name: Run transpiler
       #   run: |
       #       ./zig-out/bin/c2z.exe $PWD/use_cases/common_cases/include/c013_cpp_vector.h
       #       Get-Content $PWD/x86_64/windows/msvc/c013_cpp_vector.zig
 
-      - name: test summary
+      - name: test release
         run: zig build test -Doptimize=ReleaseFast -freference-trace -Dtarget=native-windows-msvc
+        
+      - name: test debug
+        run: zig build test -freference-trace -Dtarget=native-windows-msvc
