@@ -1,0 +1,44 @@
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.11.0-dev.3220+447a30299
+
+      - name: build summary
+        run: zig build -freference-trace
+      
+      - name: test
+        run: zig build test -freference-trace
+
+  zig-msvc:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.11.0-dev.3220+447a30299
+
+      # not fully supported yet ...
+      # - name: build summary
+      #   run: zig build -freference-trace -Dtarget=native-windows-msvc
+      
+      # - name: Run transpiler
+      #   run: |
+      #       ./zig-out/bin/c2z.exe $PWD/use_cases/common_cases/include/c013_cpp_vector.h
+      #       Get-Content $PWD/x86_64/windows/msvc/c013_cpp_vector.zig
+
+      - name: test summary
+        run: zig build test -Doptimize=ReleaseFast -freference-trace -Dtarget=native-windows-msvc
