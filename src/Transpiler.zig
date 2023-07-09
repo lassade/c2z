@@ -51,6 +51,8 @@ const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
     .{ "uintptr_t", "usize" },
     .{ "size_t", "usize" },
     // assumed types
+    .{ "va_list", "[*c]u8" },
+    .{ "__va_list_tag", "[*c]u8" },
     .{ "ptrdiff_t", "isize" },
     .{ "ssize_t", "isize" },
     // custom types
@@ -1051,6 +1053,8 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
     var body = std.ArrayList(u8).init(self.allocator);
     defer body.deinit();
 
+    var va_args = false;
+
     // optional arguments
     var z_args = std.ArrayList(u8).init(self.allocator);
     defer z_args.deinit();
@@ -1084,6 +1088,9 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                 var c_type = typeQualifier(item).?;
                 var z_type = try self.transpileType(c_type);
                 defer self.allocator.free(z_type);
+
+                // check if requires a second helper function to call it
+                va_args = va_args or mem.eql(u8, c_type, "va_list") or mem.eql(u8, c_type, "__va_list_tag");
 
                 const arg_name = if (item.object.get("name")) |n| n.string else try fmt.bufPrint(&unnamed_buffer, "__arg{d}", .{i});
 
@@ -1230,6 +1237,10 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                         try self.c_out.print("{s}({s}); }}\n", .{ name, c_call.items });
                     }
                 }
+
+                if (va_args) {
+                    // todo:
+                }
             }
         }
     }
@@ -1290,17 +1301,11 @@ fn visitFunctionTemplateDecl(self: *Self, node: *const json.Value) !void {
             for (f_items) |*f_item| {
                 const arg_kind = f_item.object.get("kind").?.string;
                 if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
+                    // todo: obsolete
                     self.nodes_visited += 1;
 
                     const ty = f_item.object.get("type").?;
                     var qual = ty.object.get("qualType").?.string;
-
-                    // va_list is in practice a `char*`, but we can double check this by verifing the desugared type
-                    if (mem.eql(u8, qual, "va_list")) {
-                        if (ty.object.get("desugaredQualType")) |v_desurgared| {
-                            qual = v_desurgared.string;
-                        }
-                    }
 
                     if (comma) {
                         try self.out.print(", ", .{});
@@ -2396,13 +2401,6 @@ fn visitParagraphComment(self: *Self, node: *const json.Value) !void {
 inline fn typeQualifier(value: *const json.Value) ?[]const u8 {
     if (value.object.getPtr("type")) |ty| {
         if (ty.object.getPtr("qualType")) |qual| {
-            // va_list is in practice a `char*`, but we can double check this by verifing the desugared type
-            if (mem.eql(u8, qual.string, "va_list") or mem.eql(u8, qual.string, "__va_list_tag")) {
-                if (ty.object.get("desugaredQualType")) |desurgared| {
-                    return desurgared.string;
-                }
-            }
-
             return qual.string;
         }
     }

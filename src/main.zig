@@ -41,11 +41,11 @@ pub fn main() !void {
         const arg = argv[i];
         if (mem.eql(u8, arg, "-h") or mem.eql(u8, arg, "-help")) {
             _ = try io.getStdErr().writer().write(
-                \\-h, --help                   Display this help and exit
-                \\-target TARGET_TUPLE         Clang target tuple
+                \\-h, -help                    Display this help and exit
+                \\-target TARGET_TUPLE         Clang target tuple, e.g. x86_86-windows-gnu
                 \\-R                           Recursive transpiling, use to also parse includes
                 \\-no-glue                     No c++ glue code, bindings will be target specific
-                \\[clang arguments]            Pass any clang arguments, e.g. -DNDEBUG -I.\include -target x86-linux
+                \\[clang arguments]            Pass any clang arguments, e.g. -DNDEBUG -I.\include -target x86-linux-gnu
                 \\[--] [FILES]                 Input files
                 \\
             );

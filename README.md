@@ -34,20 +34,20 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 
 - transpile inline or constexpr constructors when the class isn't polymorphic
 - (hard) `#include` -> `@import`
+- (easy) walk a directory tree
 
 - transpile vector of vectors
 - (easy) better input file not found error
-- (easy) walk a directory tree
 - (easy) verbose option
 - (easy) handle `BlockCommandComment` and `ParamCommandComment` in `FullComment`
 - (easy) resolve return of function with a aliased return type
 - (easy) fail when clang ast-bump has failed, because missing headers or wrong code
-- (hard) apply `keywordFix`
 - (hard) `if (*data++ == v) { ... }` should generate `{ const __tmp0 = data; data += 1; if (__tmp0.* == v) { ... }  }`
 - (hard) solve `UnresolvedMemberExpr`, maybe when integrating clang ast directly
-- (hard) solve implicit destructors call
-- (hard) figure out what the deal is with the DebugData in the MSVC std containers 
+- (hard) solve implicit destructors calls
 - (easy) handle private members, class is default private, struct default public, in code is referenced as `self.public`
+- (hard) handle varidact functions `myFunction(va_args) -> myFunction(args: [*c]u8) and myFunction__VA(...)`
+- (hard) apply `keywordFix`
 - use `@compileError` for objects that couldn't be transpiled
 - write layout tests
 
