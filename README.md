@@ -22,8 +22,7 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 ### Running it
 
 1. `zig build run -- lib.h` or `c2z lib.h`
-2. you can pass any clang argument that e.g. `zig build run -- -DNDEBUG -I.\include -target x86-linux -- .\include\lib.h`
-3. it is a good idea to expecify a target with `-target x86-linux`, bindings are not always cross-platform due to type differences see [#3](https://github.com/lassade/c2z/issues/3)
+2. pass any clang argument like include and defines e.g. `zig build run -- -DNDEBUG -I.\include -target x86-linux -- .\include\lib.h`
 4. modify the generated bindings until it works ;) you might need to import `cpp.zig` it is located in the src folder
 
 ### Misc
