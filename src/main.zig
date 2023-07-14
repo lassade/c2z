@@ -123,19 +123,16 @@ pub fn main() !void {
             allocator.free(astdump.stderr);
         }
 
-        var parser = json.Parser.init(allocator, .alloc_if_needed);
-        defer parser.deinit();
-
-        var tree = try parser.parse(astdump.stdout);
-        defer tree.deinit();
+        var parsed = try json.parseFromSlice(json.Value, allocator, astdump.stdout, .{});
+        defer parsed.deinit();
 
         transpiler.header = std.fs.path.basename(file_path);
-        try transpiler.run(&tree.root);
+        try transpiler.run(&parsed.value);
 
         log.info("transpiled {d}/{d} ({d:.2} %)", .{
             transpiler.nodes_visited,
             transpiler.nodes_count,
-            (100.0 * @intToFloat(f64, transpiler.nodes_visited) / @intToFloat(f64, transpiler.nodes_count)),
+            (100.0 * @as(f64, @floatFromInt(transpiler.nodes_visited)) / @as(f64, @floatFromInt(transpiler.nodes_count))),
         });
 
         const file_name = std.fs.path.stem(file_path);

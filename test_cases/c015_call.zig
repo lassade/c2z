@@ -9,7 +9,7 @@ extern fn _1_free_(__arg0: ?*anyopaque) void;
 pub const free = _1_free_;
 
 pub fn run() void {
-    var a: ?*anyopaque = malloc(@intCast(c_ulonglong, 1));
+    var a: ?*anyopaque = malloc(@as(c_ulonglong, @intCast(1)));
     free(a);
 }
 pub const Foo = extern struct {
@@ -17,7 +17,7 @@ pub const Foo = extern struct {
 
     pub fn init(self: *Foo, val: bool) bool {
         if (self.ptr == null) {
-            self.ptr = @ptrCast([*c]c_int, malloc(@sizeOf(c_int)));
+            self.ptr = @as([*c]c_int, @ptrCast(malloc(@sizeOf(c_int))));
         }
         return !val;
     }

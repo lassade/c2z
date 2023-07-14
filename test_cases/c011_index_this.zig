@@ -11,10 +11,10 @@ pub const ImVec2 = extern struct {
 
     pub fn getPtr(self: *ImVec2, idx: usize) *f32 {
         //ImAssert(idx == 0 or idx == 1);
-        return &(@ptrCast([*]f32, self)[idx]);
+        return &(@as([*]f32, @ptrCast(self))[idx]);
     }
     pub fn get(self: *const ImVec2, idx: usize) f32 {
         //ImAssert(idx == 0 or idx == 1);
-        return @ptrCast([*]const f32, self)[idx];
+        return @as([*]const f32, @ptrCast(self))[idx];
     }
 };

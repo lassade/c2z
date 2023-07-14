@@ -63,7 +63,7 @@ test "cpp_vector" {
     //try expectEqual(fii.vector_data(&v), v.values().ptr);
     try expectEqual(fii.vector_size(&v), v.values().len);
 
-    try expect(@ptrToInt(v.values().ptr) != 0); // odd, but expected
+    try expect(@intFromPtr(v.values().ptr) != 0); // odd, but expected
     try expect(v.values().len == 0);
     _ = fii.enumerate(&v, 15);
     for (v.values(), 0..) |num, i| {
@@ -88,8 +88,8 @@ test "cpp_string" {
     var tmp = fii.get_str();
     defer tmp.deinit();
     try expectEqual("Hello, World!".len, tmp.size());
-    try expectEqual(fii.cap(&tmp), @intCast(c_int, tmp.capacity()));
-    try expectEqual(fii.data(&tmp), @ptrCast([*c]const u8, tmp.values().ptr));
+    try expectEqual(fii.cap(&tmp), @as(c_int, @intCast(tmp.capacity())));
+    try expectEqual(fii.data(&tmp), @as([*c]const u8, @ptrCast(tmp.values().ptr)));
     defer tmp.deinit();
     try expect(mem.eql(u8, tmp.values(), "Hello, World!"));
 
