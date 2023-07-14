@@ -1938,14 +1938,16 @@ fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
 
     if (mem.eql(u8, kind, "BitCast")) {
         if (mem.startsWith(u8, dst, "*") or mem.startsWith(u8, dst, "[*c]")) {
-            try self.out.print("@ptrCast({s}, ", .{dst});
+            try self.out.print("@as({s}, @ptrCast(", .{dst});
         } else {
-            try self.out.print("@bitCast({s}, ", .{dst});
+            try self.out.print("@as({s}, @bitCast(", .{dst});
         }
         try self.visit(&value.object.getPtr("inner").?.array.items[0]);
+        try self.out.print(")", .{});
     } else if (mem.eql(u8, kind, "IntegralCast")) {
-        try self.out.print("@intCast({s}, ", .{dst});
+        try self.out.print("@as({s}, @intCast(", .{dst});
         try self.visit(&value.object.getPtr("inner").?.array.items[0]);
+        try self.out.print(")", .{});
     } else if (mem.eql(u8, kind, "NullToPointer")) {
         self.nodes_visited += 1;
         try self.out.print("null", .{});

@@ -61,7 +61,7 @@ pub fn Allocator(comptime T: type) type {
 
         pub fn allocate(self: *Self, size: usize) !*T {
             _ = self;
-            if (@ptrCast(?*T, malloc(@sizeOf(T) * size))) |ptr| {
+            if (@as(?*T, @ptrCast(malloc(@sizeOf(T) * size)))) |ptr| {
                 return ptr;
             } else {
                 return std.mem.Allocator.Error.OutOfMemory;
@@ -101,7 +101,7 @@ pub const msvc = struct {
             proxy: ?*ContainerProxy,
 
             pub fn init() Self {
-                var proxy = @ptrCast(?*ContainerProxy, @alignCast(8, malloc(@sizeOf(ContainerProxy))));
+                var proxy = @as(?*ContainerProxy, @ptrCast(@alignCast(malloc(@sizeOf(ContainerProxy)))));
                 proxy.?.* = .{};
                 return .{ .proxy = proxy };
             }
@@ -147,15 +147,15 @@ pub const msvc = struct {
             }
 
             pub inline fn size(self: *const Self) usize {
-                return (@ptrToInt(self.tail) - @ptrToInt(self.head));
+                return (@intFromPtr(self.tail) - @intFromPtr(self.head));
             }
 
             pub inline fn capacity(self: *const Self) usize {
-                return (@ptrToInt(self.limit) - @ptrToInt(self.head));
+                return (@intFromPtr(self.limit) - @intFromPtr(self.head));
             }
 
             pub inline fn values(self: Self) []T {
-                return if (self.head) |head| @ptrCast([*]T, head)[0..self.size()] else &[_]T{};
+                return if (self.head) |head| @as([*]T, @ptrCast(head))[0..self.size()] else &[_]T{};
             }
 
             pub fn deinit(self: *Self) void {
@@ -226,7 +226,7 @@ pub const msvc = struct {
 
             pub fn deinit(self: *Self) void {
                 if (self.inHeap()) {
-                    self.allocator.deallocate(@ptrCast(*u8, self.data.heap.ptr), self.cap);
+                    self.allocator.deallocate(@as(*u8, @ptrCast(self.data.heap.ptr)), self.cap);
                     self.data.in_place[0] = 0;
                 }
                 self.__proxy.deinit();
@@ -256,15 +256,15 @@ pub const gnu = struct {
             }
 
             pub inline fn size(self: *const Self) usize {
-                return (@ptrToInt(self.tail) - @ptrToInt(self.head));
+                return (@intFromPtr(self.tail) - @intFromPtr(self.head));
             }
 
             pub inline fn capacity(self: *const Self) usize {
-                return (@ptrToInt(self.limit) - @ptrToInt(self.head));
+                return (@intFromPtr(self.limit) - @intFromPtr(self.head));
             }
 
             pub inline fn values(self: Self) []T {
-                return if (self.head) |head| @ptrCast([*]T, head)[0..self.size()] else &[_]T{};
+                return if (self.head) |head| @as([*]T, @ptrCast(head))[0..self.size()] else &[_]T{};
             }
 
             pub fn deinit(self: *Self) void {
@@ -333,7 +333,7 @@ pub const gnu = struct {
 
             pub fn deinit(self: *Self) void {
                 if (self.inHeap()) {
-                    self.allocator.deallocate(@ptrCast(*u8, self.data.heap.ptr), self.data.heap.cap);
+                    self.allocator.deallocate(@as(*u8, @ptrCast(self.data.heap.ptr)), self.data.heap.cap);
                     self.data.in_place[0] = 0;
                 }
             }
