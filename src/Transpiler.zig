@@ -1191,12 +1191,19 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
 
             if (z_opt.items.len > 0) {
                 // optional arguments
-                try self.out.print("({s}", .{z_args.items});
+                try self.out.print("(", .{});
+                if (this_opt != null) {
+                    try self.out.print("self, ", .{});
+                }
                 if (z_args.items.len > 0) {
-                    try self.out.print(", ", .{});
+                    try self.out.print("{s}, ", .{z_args.items});
                 }
                 try self.out.print("__opt: struct {{ {s} }},) {s} {{\n", .{ z_opt.items, method_tret });
-                try self.out.print("    return @\"{s}\"({s});\n", .{ mangled_name, z_call.items });
+                if (this_opt != null) {
+                    try self.out.print("    return @\"{s}\"(self{s});\n", .{ mangled_name, z_call.items });
+                } else {
+                    try self.out.print("    return @\"{s}\"({s});\n", .{ mangled_name, z_call.items });
+                }
                 try self.out.print("}}\n\n", .{});
             } else {
                 try self.out.print(" = @\"{s}\";\n\n", .{mangled_name});
