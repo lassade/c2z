@@ -1215,8 +1215,12 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
             if (z_opt.items.len > 0) {
                 // optional arguments
                 try self.out.print("(", .{});
-                if (this_opt != null) {
-                    try self.out.print("self, ", .{});
+                if (this_opt) |this| {
+                    if (sig.is_const) {
+                        try self.out.print("self: *const {s}, ", .{this});
+                    } else {
+                        try self.out.print("self: *{s}, ", .{this});
+                    }
                 }
                 if (z_args.items.len > 0) {
                     try self.out.print("{s}, ", .{z_args.items});
