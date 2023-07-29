@@ -51,8 +51,12 @@ pub fn FlagsMixin(comptime FlagsType: type) type {
     };
 }
 
-extern fn malloc(usize) ?*anyopaque;
-extern fn free(?*anyopaque) void;
+extern fn memset(ptr: *anyopaque, value: c_int, num: usize) *anyopaque;
+extern fn memcpy(destination: *anyopaque, source: *const anyopaque, num: usize) *anyopaque;
+extern fn memmove(destination: *anyopaque, source: *const anyopaque, num: usize) *anyopaque;
+extern fn strcmp(str1: *const c_char, str2: *const c_char) c_int;
+extern fn malloc(size: usize) ?*anyopaque;
+extern fn free(ptr: ?*anyopaque) void;
 
 /// default stateless allocator, uses `malloc` and `free` internally
 pub fn Allocator(comptime T: type) type {

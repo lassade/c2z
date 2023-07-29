@@ -2426,7 +2426,7 @@ fn visitUnresolvedMemberExpr(self: *Self, _: *const json.Value) !void {
 
     // todo: wut?!
     log.warn("impossible to solve `UnresolvedMemberExpr`", .{});
-    _ = try self.out.write("@\"unresolvedMemberExpr!\"");
+    _ = try self.out.write("0=0=UnresolvedMemberExpr");
 }
 
 fn visitConditionalOperator(self: *Self, node: *const json.Value) !void {
