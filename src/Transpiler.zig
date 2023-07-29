@@ -396,6 +396,10 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitStringLiteral(value);
     } else if (mem.eql(u8, kind, "CXXTemporaryObjectExpr")) {
         try self.visitCXXTemporaryObjectExpr(value);
+    } else if (mem.eql(u8, kind, "ExprWithCleanups")) {
+        try self.visitExprWithCleanups(value);
+    } else if (mem.eql(u8, kind, "MaterializeTemporaryExpr")) {
+        try self.visitMaterializeTemporaryExpr(value);
     } else if (mem.eql(u8, kind, "FullComment")) {
         // skip
     } else {
@@ -887,6 +891,21 @@ fn visitCXXTemporaryObjectExpr(self: *Self, value: *const json.Value) !void {
         // todo: figure out when using `.{}` is a valid option
     }
     try self.out.print(")", .{});
+}
+
+fn visitExprWithCleanups(self: *Self, value: *const json.Value) !void {
+    if (value.object.getPtr("inner")) |inner| {
+        const entry = &inner.array.items[0];
+        try self.visit(entry);
+    }
+}
+
+fn visitMaterializeTemporaryExpr(self: *Self, value: *const json.Value) !void {
+    if (value.object.getPtr("inner")) |inner| {
+        // boundToLValueRef boolean
+        const entry = &inner.array.items[0];
+        try self.visit(entry);
+    }
 }
 
 fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const u8) !void {
