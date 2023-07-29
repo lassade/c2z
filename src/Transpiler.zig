@@ -2086,6 +2086,9 @@ fn visitUnaryOperator(self: *Self, value: *const json.Value) !void {
     } else if (mem.eql(u8, opcode, "--")) {
         try self.visit(&value.object.get("inner").?.array.items[0]);
         try self.out.print(" -= 1", .{});
+    } else if (mem.eql(u8, opcode, "+")) {
+        // don't print "+360"
+        try self.visit(&value.object.get("inner").?.array.items[0]);
     } else {
         // note: any special cases should be handled with ifelse branches
         try self.out.print("{s}", .{opcode});
