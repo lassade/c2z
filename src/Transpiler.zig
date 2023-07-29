@@ -394,6 +394,8 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitBreakStmt(value);
     } else if (mem.eql(u8, kind, "StringLiteral")) {
         try self.visitStringLiteral(value);
+    } else if (mem.eql(u8, kind, "CXXTemporaryObjectExpr")) {
+        try self.visitCXXTemporaryObjectExpr(value);
     } else if (mem.eql(u8, kind, "FullComment")) {
         // skip
     } else {
@@ -864,6 +866,27 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
     }
 
     self.scope.ctors += 1;
+}
+
+// fn visitCXXCtorInitializer(self: *Self, value: *const json.Value) !void {
+//
+// }
+
+fn visitCXXTemporaryObjectExpr(self: *Self, value: *const json.Value) !void {
+    const ty = typeQualifier(value).?;
+    // todo: resolve contructor override
+    try self.out.print("{s}.init(", .{ty});
+    if (value.object.getPtr("inner")) |inner| {
+        var comma = false;
+        for (inner.array.items) |*entry| {
+            if (comma) try self.out.print(", ", .{});
+            try self.visit(entry);
+            comma = true;
+        }
+    } else {
+        // todo: figure out when using `.{}` is a valid option
+    }
+    try self.out.print(")", .{});
 }
 
 fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const u8) !void {
@@ -1958,6 +1981,17 @@ fn visitImplicitCastExpr(self: *Self, value: *const json.Value) !void {
     } else if (mem.eql(u8, kind, "NullToPointer")) {
         self.nodes_visited += 1;
         try self.out.print("null", .{});
+        return;
+    } else if (mem.eql(u8, kind, "IntegralToFloating")) {
+        try self.out.print("@floatFromInt(", .{});
+        try self.visit(&value.object.getPtr("inner").?.array.items[0]);
+    } else if (mem.eql(u8, kind, "ArrayToPointerDecay")) {
+        try self.out.print("&", .{});
+        try self.visit(&value.object.getPtr("inner").?.array.items[0]);
+        return;
+    } else if (mem.eql(u8, kind, "PointerToBoolean")) {
+        try self.visit(&value.object.getPtr("inner").?.array.items[0]);
+        try self.out.print(" != null", .{});
         return;
     } else {
         log.warn("unknown `{s}` cast", .{kind});
