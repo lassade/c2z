@@ -16,8 +16,43 @@ const FnSig = struct {
     ret: []const u8,
 };
 
-const KeywordsLUT = std.ComptimeStringMap([]const u8, .{
-    .{ "error", "err" },
+// https://ziglang.org/documentation/master/#Keyword-Reference
+const KeywordsLUT = std.ComptimeStringMap(void, .{
+    .{ "addrspace", "__addrspace" },
+    .{ "align", "__align" },
+    .{ "allowzero", "__allowzero" },
+    .{ "and", "__and" },
+    .{ "anyframe", "__anyframe" },
+    .{ "anytype", "__anytype" },
+    .{ "asm", "__asm" },
+    .{ "async", "__async" },
+    .{ "await", "__await" },
+    .{ "catch", "__catch" },
+    .{ "comptime", "__comptime" },
+    .{ "defer", "__defer" },
+    .{ "errdefer", "__errdefer" },
+    .{ "error", "__error" },
+    .{ "export", "__export" },
+    .{ "fn", "__fn" },
+    .{ "linksection", "__linksection" },
+    .{ "noalias", "__noalias" },
+    .{ "noinline", "__noinline" },
+    .{ "nosuspend", "__nosuspend" },
+    .{ "or", "__or" },
+    .{ "orelse", "__orelse" },
+    .{ "packed", "__packed" },
+    .{ "pub", "__pub" },
+    .{ "resume", "__resume" },
+    .{ "suspend", "__suspend" },
+    .{ "test", "__test" },
+    .{ "threadlocal", "__threadlocal" },
+    .{ "try", "__try" },
+    .{ "type", "__type" },
+    .{ "undefined", "__undefined" },
+    .{ "unreachable", "__unreachable" },
+    .{ "usingnamespace", "__usingnamespace" },
+    .{ "var", "__var" },
+    .{ "volatile", "__volatile" },
 });
 
 const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
