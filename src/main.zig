@@ -82,10 +82,6 @@ pub fn main() !void {
     if (target_tuple == null) {
         // assing a default target tuple
         target_tuple = host_target;
-
-        try clang.append("-target");
-        try clang.append(host_target);
-        log.info("using host `{s}` as target", .{host_target});
     }
 
     var dclang = std.ArrayList(u8).init(allocator);
@@ -95,10 +91,6 @@ pub fn main() !void {
         try dclang.appendSlice(" ");
     }
     log.info("{s}", .{dclang.items});
-
-    const target_path = if (target_tuple != null) try mem.replaceOwned(u8, allocator, target_tuple.?, "-", "/") else ".";
-    defer if (target_tuple != null) allocator.free(target_path);
-    try std.fs.cwd().makePath(target_path);
 
     const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd);
@@ -140,7 +132,7 @@ pub fn main() !void {
         // zig output
         {
             output_path.clearRetainingCapacity();
-            try output_path.writer().print("{s}/{s}.zig", .{ target_path, file_name });
+            try output_path.writer().print("{s}.zig", .{file_name});
 
             var file = try std.fs.cwd().createFile(output_path.items, .{});
             try file.writeAll(transpiler.buffer.items);
@@ -162,7 +154,7 @@ pub fn main() !void {
 
         if (!transpiler.no_glue) {
             output_path.clearRetainingCapacity();
-            try output_path.writer().print("{s}/{s}_glue.cpp", .{ target_path, file_name });
+            try output_path.writer().print("{s}_glue.cpp", .{file_name});
 
             var file = try std.fs.cwd().createFile(output_path.items, .{});
             try file.writeAll(transpiler.c_buffer.items);

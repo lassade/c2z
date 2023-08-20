@@ -108,6 +108,7 @@ const Scope = struct {
     ctors: usize = 0,
     /// Generate unnamed nodes
     fields: usize = 0,
+    is_polymorphic: bool = false,
 };
 
 const NamespaceScope = struct {
@@ -578,7 +579,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     defer functions.deinit();
 
     const parent_state = self.scope;
-    self.scope = .{ .tag = .class, .name = name };
+    self.scope = .{ .tag = .class, .name = name, .is_polymorphic = is_polymorphic };
     defer self.scope = parent_state;
 
     const parent_namespace = self.beginNamespace();
@@ -656,7 +657,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         } else if (mem.eql(u8, kind, "CXXConstructorDecl")) {
             const out = self.out;
             self.out = functions.writer();
-            try self.visitCXXConstructorDecl(item, name);
+            try self.visitCXXConstructorDecl(item);
             self.out = out;
         } else if (mem.eql(u8, kind, "CXXDestructorDecl")) {
             const dtor = if (self.no_glue)
@@ -754,7 +755,9 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
     }
 }
 
-fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []const u8) !void {
+fn visitCXXConstructorDecl(self: *Self, value: *const json.Value) !void {
+    const parent = self.scope.name.?;
+
     if (value.object.get("isInvalid")) |invalid| {
         if (invalid.bool) {
             log.err("invalid ctor of `{s}`", .{parent});
@@ -785,7 +788,11 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value, parent: []cons
 
     self.nodes_visited += 1;
 
-    // todo: copy code from visitCXXMethodDecl
+    if (self.scope.is_polymorphic) {
+        // todo: inlnie function
+    } else {
+        // default behaviour
+    }
 
     // note: if the function has a `= 0` at the end it will have "pure" = true attribute
 

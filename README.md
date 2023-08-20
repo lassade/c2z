@@ -32,6 +32,7 @@ inspeired by this [article](https://floooh.github.io/2020/08/23/sokol-bindgen.ht
 ## Todo
 
 - transpile inline or constexpr constructors when the class isn't polymorphic
+- use function pointers to handle varidact functions
 - (hard) `#include` -> `@import`
 - (easy) walk a directory tree
 
