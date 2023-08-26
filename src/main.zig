@@ -44,7 +44,6 @@ pub fn main() !void {
                 \\-h, -help                    Display this help and exit
                 \\-target TARGET_TUPLE         Clang target tuple, e.g. x86_86-windows-gnu
                 \\-R                           Recursive transpiling, use to also parse includes
-                \\-no-glue                     No c++ glue code, bindings will be target specific
                 \\[clang arguments]            Pass any clang arguments, e.g. -DNDEBUG -I.\include -target x86-linux-gnu
                 \\[--] [FILES]                 Input files
                 \\
@@ -52,9 +51,6 @@ pub fn main() !void {
             return;
         } else if (mem.eql(u8, arg, "-R")) {
             transpiler.recursive = true;
-            continue;
-        } else if (mem.eql(u8, arg, "-no-glue")) {
-            transpiler.no_glue = true;
             continue;
         } else if (mem.eql(u8, arg, "--")) {
             // positionals arguments
@@ -152,7 +148,8 @@ pub fn main() !void {
             _ = try zfmt.spawnAndWait();
         }
 
-        if (!transpiler.no_glue) {
+        // glue output
+        {
             output_path.clearRetainingCapacity();
             try output_path.writer().print("{s}_glue.cpp", .{file_name});
 
