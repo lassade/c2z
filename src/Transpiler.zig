@@ -727,16 +727,16 @@ fn visitVarDecl(self: *Self, value: *const json.Value) !void {
 
     const mangled_name = try self.mangle(name, null);
     defer self.allocator.free(mangled_name);
-    try self.out.print("extern fn {s}() *{s} {s};\n", .{ mangled_name, ptr_deco, ty });
-    try self.out.print("pub const {s} = {s};\n\n", .{ name, mangled_name });
+    try self.out.print("extern {s} {s}: *{s} {s};\n", .{ decl, mangled_name, ptr_deco, ty });
+    try self.out.print("pub const {s} = {s};\n\n", .{ name, mangled_name }); // alias
 
-    try self.c_out.print("extern \"C\" {s} {s} *{s}() {{ return &", .{ ptr_deco, raw_ty, mangled_name });
+    try self.c_out.print("extern \"C\" const void* {s} = (void*)& ", .{mangled_name});
     _ = try self.c_out.write(self.namespace.full_path.items);
     if (!self.namespace.root) {
         _ = try self.c_out.write("::");
     }
     _ = try self.c_out.write(name);
-    _ = try self.c_out.write("; }\n");
+    _ = try self.c_out.write(";\n");
 }
 
 fn visitCXXConstructorDecl(self: *Self, value: *const json.Value) !void {
