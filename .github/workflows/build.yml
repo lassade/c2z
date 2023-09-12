@@ -12,12 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.11.0-dev.3949+27a66191c
-
       - name: build
         run: zig build -freference-trace
-
       - name: test release
         run: zig build test -Doptimize=ReleaseFast -freference-trace
         
@@ -31,9 +27,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.11.0-dev.3949+27a66191c
-
       - name: build
         run: zig build -freference-trace -Dtarget=native-windows-msvc
       
