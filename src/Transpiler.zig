@@ -2406,13 +2406,17 @@ fn visitStringLiteral(self: *Self, node: *const json.Value) !void {
 fn visitFriendDecl(self: *Self, node: *const json.Value) !void {
     self.nodes_visited += 1;
 
-    for (node.object.getPtr("inner").?.array.items) |*item| {
-        const kind = item.object.getPtr("kind").?.string;
-        if (mem.eql(u8, kind, "FunctionDecl")) {
-            try self.visitFunctionDecl(item);
-        } else {
-            log.err("unhandled `{s}` in `FriendDecl`", .{kind});
+    if (node.object.getPtr("inner")) |inner| {
+        for (inner.array.items) |*item| {
+            const kind = item.object.getPtr("kind").?.string;
+            if (mem.eql(u8, kind, "FunctionDecl")) {
+                try self.visitFunctionDecl(item);
+            } else {
+                log.err("unhandled `{s}` in `FriendDecl`", .{kind});
+            }
         }
+    } else {
+        log.err("no `inner` in `FriendDecl`", .{});
     }
 }
 
