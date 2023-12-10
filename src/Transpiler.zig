@@ -908,10 +908,6 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value) !void {
         if (self.scope.ctors != 0) try self.out.print("{d}", .{self.scope.ctors + 1}); // avoid name conflict
         try self.out.print(" = @\"{s}\";\n\n", .{mangled_name});
 
-        try self.out.print(") {s};\npub const init", .{parent});
-        if (self.scope.ctors != 0) try self.out.print("{d}", .{self.scope.ctors + 1}); // avoid name conflict
-        try self.out.print(" = @\"{s}\";\n\n", .{mangled_name});
-
         try self.c_out.print(") {{ return {s}({s}); }}\n", .{ self.namespace.full_path.items, c_call.items });
     }
 
