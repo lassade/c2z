@@ -2631,6 +2631,13 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         var inner = try self.transpileType(raw_name);
         defer self.allocator.free(inner);
         return try fmt.allocPrint(self.allocator, "{s}{s}{s}", .{ ptr, constness, inner });
+    } else if (mem.endsWith(u8, ttname, " *const")) {
+        // NOTE: This can probably be improved to handle more cases, or maybe combined with the
+        // above case.
+        var raw_name = ttname[0..(ttname.len - (" *const".len))];
+        var inner = try self.transpileType(raw_name);
+        defer self.allocator.free(inner);
+        return try fmt.allocPrint(self.allocator, "*const {s}", .{inner});
     } else if (ch == ']') {
         // fixed sized array
         const len = mem.lastIndexOf(u8, ttname, "[").?;
