@@ -438,8 +438,14 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         try self.visitMaterializeTemporaryExpr(value);
     } else if (mem.eql(u8, kind, "FullComment")) {
         // skip
+    } else if (mem.eql(u8, kind, "ParagraphComment")) {
+        try self.visitParagraphComment(value);
+    } else if (mem.eql(u8, kind, "ParamCommandComment")) {
+        try self.visitParamCommandComment(value);
+    } else if (mem.eql(u8, kind, "TextComment")) {
+        try self.visitTextComment(value);
     } else {
-        log.err("unhandled `{s}`", .{kind});
+        log.err("unhandled `{s}` node kind", .{kind});
     }
 }
 
@@ -689,7 +695,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         }
     }
 
-    // delcarations must be after fields
+    // declarations must be after fields
     if (functions.items.len > 0) {
         try self.out.print("\n{s}", .{functions.items});
     }
@@ -807,6 +813,25 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value) !void {
     //     }
     // }
 
+    // Inner nodes counter
+    var buffer: [256 * @sizeOf(bool)]u8 = undefined; // ought to be enough for anyone
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const fb_allocator = fba.allocator();
+    var handled_inner_nodes = std.ArrayList(bool).init(fb_allocator);
+
+    // Docs first
+    if (value.object.getPtr("inner")) |inner| {
+        try handled_inner_nodes.ensureTotalCapacity(inner.array.items.len);
+        handled_inner_nodes.appendNTimesAssumeCapacity(false, inner.array.items.len);
+        for (inner.array.items, 0..) |*item, i| {
+            const arg_kind = item.object.get("kind").?.string;
+            if (mem.eql(u8, arg_kind, "FullComment")) {
+                handled_inner_nodes.items[i] = true;
+                try self.visitFullComment(item);
+            }
+        }
+    }
+
     const mangled_name = if (self.no_glue)
         value.object.get("mangledName").?.string
     else
@@ -837,10 +862,11 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value) !void {
     // method args
     if (value.object.getPtr("inner")) |inner| {
         for (inner.array.items, 0..) |*item, i| {
-            self.nodes_visited += 1;
-
             const arg_kind = item.object.get("kind").?.string;
             if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
+                self.nodes_visited += 1;
+                handled_inner_nodes.items[i] = true;
+
                 var c_type = typeQualifier(item).?;
                 var z_type = try self.transpileType(c_type);
                 defer self.allocator.free(z_type);
@@ -882,8 +908,24 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value) !void {
                 try self.out.print("{s}: {s}", .{ arg, z_type });
             } else if (mem.eql(u8, arg_kind, "FormatAttr")) {
                 // varidatic function with the same properties as printf
-            } else {
-                self.nodes_visited -= 1;
+                handled_inner_nodes.items[i] = true;
+                self.nodes_visited += 1;
+            } else if (mem.eql(u8, arg_kind, "CXXCtorInitializer")) {
+                // constructor initializer for a single variable, not interesting here
+                handled_inner_nodes.items[i] = true;
+                self.nodes_visited += 1;
+                // try self.visitCXXCtorInitializer(item);
+            } else if (mem.eql(u8, arg_kind, "CompoundStmt")) {
+                handled_inner_nodes.items[i] = true;
+                self.nodes_visited += 1;
+                // try self.visitCompoundStmt(item);
+            }
+        }
+
+        for (handled_inner_nodes.items, 0..) |handled, i| {
+            if (!handled) {
+                const item = inner.array.items[i];
+                const arg_kind = item.object.get("kind").?.string;
                 log.err("unhandled `{s}` in ctor `{s}`", .{ arg_kind, parent });
             }
         }
@@ -1352,9 +1394,12 @@ fn visitFunctionTemplateDecl(self: *Self, node: *const json.Value) !void {
     var cp = std.ArrayList(u8).init(self.allocator);
     defer cp.deinit();
 
+    const inner = node.object.getPtr("inner").?;
+    try self.writeDocs(inner);
+
     var comma = false;
     const name = node.object.getPtr("name").?.string;
-    for (node.object.getPtr("inner").?.array.items) |*item| {
+    for (inner.array.items) |*item| {
         const kind = item.object.getPtr("kind").?.string;
         if (mem.eql(u8, kind, "TemplateTypeParmDecl")) {
             if (comma) try self.out.print(", ", .{});
@@ -2488,31 +2533,112 @@ fn visitFriendDecl(self: *Self, node: *const json.Value) !void {
 
 fn visitFullComment(self: *Self, node: *const json.Value) !void {
     self.nodes_visited += 1;
+
+    // This is a bit convoluted but seems to match the style of the input
+    var has_paragraph_comment = false;
+
     for (node.object.getPtr("inner").?.array.items) |*item| {
         const kind = item.object.getPtr("kind").?.string;
         if (mem.eql(u8, kind, "ParagraphComment")) {
+            if (has_paragraph_comment) {
+                _ = try self.out.write("\n///\n");
+            }
+            has_paragraph_comment = true;
+            _ = try self.out.write("///");
             try self.visitParagraphComment(item);
+        } else if (mem.eql(u8, kind, "VerbatimLineComment")) {
+            try self.visitVerbatimLineComment(item);
+        } else if (mem.eql(u8, kind, "ParamCommandComment")) {
+            try self.visitParamCommandComment(item);
+        } else if (mem.eql(u8, kind, "BlockCommandComment")) {
+            try self.visitBlockCommandComment(item);
         } else {
             log.err("unhandled `{s}` in `FullComment`", .{kind});
         }
     }
+
+    // Write newline after
+    _ = try self.out.write("\n");
 }
 
 fn visitParagraphComment(self: *Self, node: *const json.Value) !void {
     self.nodes_visited += 1;
-    for (node.object.getPtr("inner").?.array.items) |*item| {
+    const inner = node.object.getPtr("inner").?;
+    for (inner.array.items, 0..) |*item, i| {
         const kind = item.object.getPtr("kind").?.string;
-        self.nodes_visited += 1;
-        if (mem.eql(u8, kind, "TextComment")) {
-            self.nodes_visited += 1;
-            const text = item.object.getPtr("text").?.string;
+
+        if (i > 0) {
             _ = try self.out.write("///");
-            _ = try self.out.write(text);
-            _ = try self.out.write("\n");
+        }
+
+        if (mem.eql(u8, kind, "TextComment")) {
+            try self.visitTextComment(item);
+        } else if (mem.eql(u8, kind, "InlineCommandComment")) {
+            self.nodes_visited += 1;
+            const name = item.object.getPtr("name").?.string;
+            _ = try self.out.write("@");
+            _ = try self.out.write(name);
+            _ = try self.out.write(" ");
         } else {
+            self.nodes_visited -= 1;
             log.err("unhandled `{s}` in `ParagraphComment`", .{kind});
         }
+
+        if (i + 1 < inner.array.items.len) {
+            // No newline after last element
+            _ = try self.out.write("\n");
+        }
     }
+}
+
+fn visitTextComment(self: *Self, node: *const json.Value) !void {
+    const text = node.object.getPtr("text").?.string;
+    _ = try self.out.write(text);
+}
+
+fn visitParamCommandComment(self: *Self, node: *const json.Value) !void {
+    self.nodes_visited += 1;
+
+    const direction = node.object.getPtr("direction").?.string;
+    const param = node.object.getPtr("param").?.string;
+    _ = try self.out.write("@param[");
+    _ = try self.out.write(direction);
+    _ = try self.out.write("] ");
+    _ = try self.out.write(param);
+    _ = try self.out.write(" ");
+
+    for (node.object.getPtr("inner").?.array.items) |*item| {
+        try self.visit(item);
+    }
+}
+
+fn visitBlockCommandComment(self: *Self, node: *const json.Value) !void {
+    self.nodes_visited += 1;
+
+    _ = try self.out.write("@see");
+
+    for (node.object.getPtr("inner").?.array.items) |*item| {
+        try self.visit(item);
+    }
+}
+
+fn visitVerbatimLineComment(self: *Self, node: *const json.Value) !void {
+    self.nodes_visited += 1;
+
+    // TODO: To do this access to the original source is required
+    // const loc = node.object.get("loc").?;
+    // const loc_offset: usize = @intCast(loc.object.get("offset").?.integer);
+    // const tok_len: usize = @intCast(loc.object.get("tokLen").?.integer);
+    // const start = loc_offset; // Add col here?
+    // const end = loc_offset + tok_len;
+    // const text = SOURCE CODE GOES HERE
+    // const range = text[start..end];
+    // _ = try self.out.write(range);
+
+    _ = try self.out.write("@UntranspiledVerbatimLineCommentCommand");
+
+    const text = node.object.getPtr("text").?.string;
+    _ = try self.out.write(text);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
