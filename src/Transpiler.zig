@@ -1419,12 +1419,18 @@ fn visitFunctionTemplateDecl(self: *Self, node: *const json.Value) !void {
             }
 
             const f_items = f_inner.?.array.items;
-
-            if (f_items.len > 0) {
-                if (!mem.eql(u8, f_items[f_items.len - 1].object.getPtr("kind").?.string, "CompoundStmt")) {
-                    log.err("`FunctionTemplateDecl` `{s}` without `CompoundStmt`", .{name});
-                    return;
+            const found_compound_stmt = blk: {
+                for (f_items) |f_item| {
+                    const f_item_kind = f_item.object.getPtr("kind").?.string;
+                    if (mem.eql(u8, f_item_kind, "CompoundStmt")) {
+                        break :blk true;
+                    }
                 }
+                break :blk false;
+            };
+            if (!found_compound_stmt) {
+                log.err("`FunctionTemplateDecl` `{s}` without `CompoundStmt`", .{name});
+                return;
             }
 
             const sig = parseFnSignature(item).?;
