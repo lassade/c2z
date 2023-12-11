@@ -182,6 +182,7 @@ class_info: std.StringArrayHashMap(ClassInfo),
 // options
 recursive: bool = false,
 no_glue: bool = false,
+no_comments: bool = false,
 header: []const u8 = "",
 
 pub fn init(allocator: Allocator) Self {
@@ -322,6 +323,7 @@ fn writeCommentedCode(self: *Self, code: []const u8) !void {
 }
 
 fn writeDocs(self: *Self, inner: ?*json.Value) !void {
+    if (self.no_comments) return;
     if (inner != null) {
         for (inner.?.array.items) |*item| {
             const kind = item.object.get("kind").?.string;
