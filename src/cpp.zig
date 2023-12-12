@@ -16,7 +16,7 @@ pub fn targetSwitch(
 ) T {
     var buffer: [1024]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    var tuple = builtin.target.linuxTriple(fba.allocator()) catch unreachable;
+    const tuple = builtin.target.linuxTriple(fba.allocator()) catch unreachable;
     for (lookup) |entry| {
         if (std.mem.eql(u8, entry[0], tuple)) {
             return entry[1];
@@ -105,7 +105,7 @@ pub const msvc = struct {
             proxy: ?*ContainerProxy,
 
             pub fn init() Self {
-                var proxy = @as(?*ContainerProxy, @ptrCast(@alignCast(malloc(@sizeOf(ContainerProxy)))));
+                const proxy = @as(?*ContainerProxy, @ptrCast(@alignCast(malloc(@sizeOf(ContainerProxy)))));
                 proxy.?.* = .{};
                 return .{ .proxy = proxy };
             }

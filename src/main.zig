@@ -28,7 +28,7 @@ pub fn main() !void {
     try clang.append("-ast-dump=json");
     try clang.append("-fsyntax-only");
 
-    var argv = try std.process.argsAlloc(allocator);
+    const argv = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, argv);
 
     var target_tuple: ?[]const u8 = null;
@@ -80,7 +80,7 @@ pub fn main() !void {
         try clang.append(arg);
     }
 
-    var host_target = try builtin.target.linuxTriple(allocator);
+    const host_target = try builtin.target.linuxTriple(allocator);
     defer allocator.free(host_target);
 
     if (target_tuple == null) {
@@ -109,7 +109,7 @@ pub fn main() !void {
         try clang.append(file_path);
         defer _ = clang.pop();
 
-        var astdump = try std.ChildProcess.exec(.{
+        const astdump = try std.ChildProcess.run(.{
             .allocator = allocator,
             .argv = clang.items,
             .max_output_bytes = 512 * 1024 * 1024,

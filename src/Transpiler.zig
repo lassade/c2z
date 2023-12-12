@@ -134,7 +134,7 @@ const NamespaceScope = struct {
             if (lut.get(signature)) |index| {
                 return index;
             } else {
-                var index: usize = lut.count() + 2;
+                const index: usize = lut.count() + 2;
                 try lut.put(signature, index);
                 return index;
             }
@@ -349,7 +349,7 @@ fn visit(self: *Self, value: *const json.Value) anyerror!void {
         return;
     }
 
-    var kind = value.object.getPtr("kind").?.string;
+    const kind = value.object.getPtr("kind").?.string;
     if (mem.eql(u8, kind, "TranslationUnitDecl")) {
         try self.visitTranslationUnitDecl(value);
     } else if (mem.eql(u8, kind, "LinkageSpecDecl")) {
@@ -508,7 +508,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     }
     defer if (is_generated_name) self.allocator.free(name);
 
-    var inner = value.object.getPtr("inner");
+    const inner = value.object.getPtr("inner");
     if (inner == null) {
         // e.g. `struct ImDrawChannel;`
         try self.namespace.opaques.put(name, undefined);
@@ -844,7 +844,7 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value) !void {
             const arg_kind = item.object.get("kind").?.string;
             if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
                 var c_type = typeQualifier(item).?;
-                var z_type = try self.transpileType(c_type);
+                const z_type = try self.transpileType(c_type);
                 defer self.allocator.free(z_type);
 
                 var free_arg = false;
@@ -959,7 +959,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
 
     var operator: ?[]const u8 = null;
     if (mem.startsWith(u8, name, "operator")) {
-        var op = name["operator".len..];
+        const op = name["operator".len..];
         if (op.len > 0 and std.ascii.isAlphanumeric(op[0])) {
             // just a function starting with operator
         } else {
@@ -1061,7 +1061,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
 
     self.nodes_visited += 1;
 
-    var overload_opt = try self.namespace.resolveOverloadIndex(name, sig.raw);
+    const overload_opt = try self.namespace.resolveOverloadIndex(name, sig.raw);
 
     var has_glue = false;
     var glue: ?[]u8 = null;
@@ -1172,7 +1172,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                 }
 
                 var c_type = typeQualifier(item).?;
-                var z_type = try self.transpileType(c_type);
+                const z_type = try self.transpileType(c_type);
                 defer self.allocator.free(z_type);
 
                 // check if requires a second helper function to call it
@@ -1402,7 +1402,7 @@ fn visitFunctionTemplateDecl(self: *Self, node: *const json.Value) !void {
                     self.nodes_visited += 1;
 
                     const ty = f_item.object.get("type").?;
-                    var qual = ty.object.get("qualType").?.string;
+                    const qual = ty.object.get("qualType").?.string;
 
                     if (comma) {
                         try self.out.print(", ", .{});
@@ -1465,7 +1465,7 @@ fn visitEnumDecl(self: *Self, node: *const json.Value) !void {
         return;
     }
 
-    var inner = node.object.getPtr("inner");
+    const inner = node.object.getPtr("inner");
     if (inner == null) {
         // e.g. `enum ImGuiKey : int;`
         try self.namespace.opaques.put(name, undefined);
@@ -1635,7 +1635,7 @@ fn visitNamespaceDecl(self: *Self, value: *const json.Value) !void {
 
     const v_name = value.object.get("name");
 
-    var inner = value.object.get("inner");
+    const inner = value.object.get("inner");
     if (inner == null) {
         if (v_name) |name| {
             log.warn("empty namespace `{s}`", .{name.string});
@@ -1678,7 +1678,7 @@ inline fn visitFunctionDecl(self: *Self, value: *const json.Value) !void {
 fn visitTemplateTypeParmDecl(self: *Self, node: *const json.Value, this: []const u8) !void {
     self.nodes_visited += 1;
 
-    var name = node.object.get("name");
+    const name = node.object.get("name");
     if (name == null) {
         log.err("unnamed `TemplateTypeParmDecl` in `{s}`", .{this});
         return;
@@ -1697,7 +1697,7 @@ fn visitTemplateTypeParmDecl(self: *Self, node: *const json.Value, this: []const
 fn visitNonTypeTemplateParmDecl(self: *Self, node: *const json.Value, this: []const u8) !void {
     self.nodes_visited += 1;
 
-    var name = node.object.get("name");
+    const name = node.object.get("name");
     if (name == null) {
         log.err("unnamed `NonTypeTemplateParmDecl` in `{s}`", .{this});
         return;
@@ -1730,7 +1730,7 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
         return;
     }
 
-    var inner = value.object.get("inner");
+    const inner = value.object.get("inner");
     if (inner == null) {
         log.warn("generic opaque `{s}`", .{name});
         return;
@@ -1771,7 +1771,7 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
             try self.out.print(") type {{\n    return extern struct {{\n", .{});
             try self.out.print("        const Self = @This();\n\n", .{});
 
-            var inner_inner = item.object.get("inner");
+            const inner_inner = item.object.get("inner");
             if (inner_inner == null) {
                 log.warn("blank `{s}` template", .{name});
                 return;
@@ -1792,7 +1792,7 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
                     // class or struct
                 } else if (mem.eql(u8, inner_item_kind, "FieldDecl")) {
                     const field_name = inner_item.object.get("name").?.string;
-                    var field_type = try self.transpileType(typeQualifier(inner_item).?);
+                    const field_type = try self.transpileType(typeQualifier(inner_item).?);
                     defer self.allocator.free(field_type);
                     try self.out.print("        {s}: {s},\n", .{ field_name, field_type });
                 } else if (mem.eql(u8, inner_item_kind, "CXXMethodDecl")) {
@@ -1830,7 +1830,7 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
 fn visitCompoundStmt(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 
-    var inner = value.object.get("inner");
+    const inner = value.object.get("inner");
     if (inner == null) {
         return;
     }
@@ -1877,7 +1877,7 @@ fn visitIfStmt(self: *Self, value: *const json.Value) !void {
     }
 
     // don't print a semicolon when the if else is guarded with braces `if { ... }`
-    var body_kind = body.object.getPtr("kind").?.string;
+    const body_kind = body.object.getPtr("kind").?.string;
     self.semicolon = !(mem.eql(u8, body_kind, "CompoundStmt") or mem.eql(u8, body_kind, "ForStmt") or mem.eql(u8, body_kind, "IfStmt"));
 
     self.nodes_visited += 1;
@@ -1923,7 +1923,7 @@ fn visitForStmt(self: *Self, value: *const json.Value) !void {
     try self.visit(body);
 
     // don't print a semicolon when the if else is guarded with braces `for (...) { ... }`
-    var body_kind = body.object.getPtr("kind").?.string;
+    const body_kind = body.object.getPtr("kind").?.string;
     self.semicolon = !(mem.eql(u8, body_kind, "CompoundStmt") or mem.eql(u8, body_kind, "ForStmt") or mem.eql(u8, body_kind, "IfStmt"));
 
     if (braces) {
@@ -1940,7 +1940,7 @@ fn visitWhileStmt(self: *Self, node: *const json.Value) !void {
     const j_inner = node.object.getPtr("inner").?;
 
     try self.out.print("while (", .{});
-    var exp = &j_inner.array.items[0];
+    const exp = &j_inner.array.items[0];
     try self.visit(exp);
     try self.out.print(")", .{});
 
@@ -2530,8 +2530,8 @@ inline fn resolveEnumVariantName(base: []const u8, variant: []const u8) []const 
 
 fn parseFnSignature(value: *const json.Value) ?FnSig {
     if (typeQualifier(value)) |raw| {
-        var rp = mem.lastIndexOf(u8, raw, ")").?;
-        var lp = mem.indexOf(u8, raw, "(").?;
+        const rp = mem.lastIndexOf(u8, raw, ")").?;
+        const lp = mem.indexOf(u8, raw, "(").?;
         return .{
             .raw = raw,
             .is_const = mem.endsWith(u8, raw[rp..], ") const"),
@@ -2608,7 +2608,7 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         var raw_name: []const u8 = undefined;
 
         var buf: [7]u8 = undefined;
-        var template = try fmt.bufPrint(&buf, "const {c}", .{ch});
+        const template = try fmt.bufPrint(&buf, "const {c}", .{ch});
         if (mem.endsWith(u8, ttname, template)) {
             // const pointer of pointers
             raw_name = ttname[0..(ttname.len - template.len)];
@@ -2626,20 +2626,20 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
             return try fmt.allocPrint(self.allocator, "?*{s}anyopaque", .{constness});
         }
 
-        var inner = try self.transpileType(raw_name);
+        const inner = try self.transpileType(raw_name);
         defer self.allocator.free(inner);
         return try fmt.allocPrint(self.allocator, "{s}{s}{s}", .{ ptr, constness, inner });
     } else if (mem.endsWith(u8, ttname, " *const")) {
         // NOTE: This can probably be improved to handle more cases, or maybe combined with the
         // above case.
-        var raw_name = ttname[0..(ttname.len - (" *const".len))];
-        var inner = try self.transpileType(raw_name);
+        const raw_name = ttname[0..(ttname.len - (" *const".len))];
+        const inner = try self.transpileType(raw_name);
         defer self.allocator.free(inner);
         return try fmt.allocPrint(self.allocator, "*const {s}", .{inner});
     } else if (ch == ']') {
         // fixed sized array
         const len = mem.lastIndexOf(u8, ttname, "[").?;
-        var inner_name = try self.transpileType(ttname[0..len]);
+        const inner_name = try self.transpileType(ttname[0..len]);
         defer self.allocator.free(inner_name);
         return try fmt.allocPrint(self.allocator, "{s}{s}", .{ ttname[len..], inner_name });
     } else if (ch == ')') {
@@ -2686,7 +2686,7 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         }
     }
 
-    var buf = try self.allocator.alloc(u8, ttname.len);
+    const buf = try self.allocator.alloc(u8, ttname.len);
     mem.copyForwards(u8, buf, ttname);
     return buf;
 }
