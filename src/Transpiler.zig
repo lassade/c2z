@@ -1392,12 +1392,18 @@ fn visitFunctionTemplateDecl(self: *Self, node: *const json.Value) !void {
             }
 
             const f_items = f_inner.?.array.items;
-
-            if (f_items.len > 0) {
-                if (!mem.eql(u8, f_items[f_items.len - 1].object.getPtr("kind").?.string, "CompoundStmt")) {
-                    log.err("`FunctionTemplateDecl` `{s}` without `CompoundStmt`", .{name});
-                    return;
+            const found_compound_stmt = blk: {
+                for (f_items) |f_item| {
+                    const f_item_kind = f_item.object.getPtr("kind").?.string;
+                    if (mem.eql(u8, f_item_kind, "CompoundStmt")) {
+                        break :blk true;
+                    }
                 }
+                break :blk false;
+            };
+            if (!found_compound_stmt) {
+                log.err("`FunctionTemplateDecl` `{s}` without `CompoundStmt`", .{name});
+                return;
             }
 
             const sig = parseFnSignature(item).?;
@@ -1850,30 +1856,30 @@ fn visitClassTemplateDecl(self: *Self, value: *const json.Value) !void {
 fn visitCompoundStmt(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 
-    var inner = value.object.get("inner");
-    if (inner == null) {
-        return;
-    }
+    try self.out.print("{{", .{});
 
-    try self.out.print("{{\n", .{});
+    var inner_opt = value.object.get("inner");
+    if (inner_opt) |inner| {
+        try self.out.print("\n", .{});
 
-    const scope = self.scope;
-    defer self.scope = scope;
-    self.scope = .{
-        .tag = .local,
-        .name = null,
-    };
+        const scope = self.scope;
+        defer self.scope = scope;
+        self.scope = .{
+            .tag = .local,
+            .name = null,
+        };
 
-    self.semicolon = true;
+        self.semicolon = true;
 
-    for (inner.?.array.items) |*item| {
-        try self.visit(item);
+        for (inner.array.items) |*item| {
+            try self.visit(item);
 
-        if (self.semicolon) {
-            _ = try self.out.write(";\n");
-        } else {
-            // reset
-            self.semicolon = true;
+            if (self.semicolon) {
+                _ = try self.out.write(";\n");
+            } else {
+                // reset
+                self.semicolon = true;
+            }
         }
     }
 
