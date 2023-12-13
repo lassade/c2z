@@ -813,24 +813,9 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value) !void {
     //     }
     // }
 
-    // Inner nodes counter
-    var buffer: [256 * @sizeOf(bool)]u8 = undefined; // ought to be enough for anyone
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const fb_allocator = fba.allocator();
-    var handled_inner_nodes = std.ArrayList(bool).init(fb_allocator);
-
     // Docs first
-    if (value.object.getPtr("inner")) |inner| {
-        try handled_inner_nodes.ensureTotalCapacity(inner.array.items.len);
-        handled_inner_nodes.appendNTimesAssumeCapacity(false, inner.array.items.len);
-        for (inner.array.items, 0..) |*item, i| {
-            const arg_kind = item.object.get("kind").?.string;
-            if (mem.eql(u8, arg_kind, "FullComment")) {
-                handled_inner_nodes.items[i] = true;
-                try self.visitFullComment(item);
-            }
-        }
-    }
+    const inner_opt = value.object.getPtr("inner");
+    try self.writeDocs(inner_opt);
 
     const mangled_name = if (self.no_glue)
         value.object.get("mangledName").?.string
@@ -860,13 +845,12 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value) !void {
     defer c_call.deinit();
 
     // method args
-    if (value.object.getPtr("inner")) |inner| {
+    if (inner_opt) |inner| {
         for (inner.array.items, 0..) |*item, i| {
+            self.nodes_visited += 1;
+
             const arg_kind = item.object.get("kind").?.string;
             if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
-                self.nodes_visited += 1;
-                handled_inner_nodes.items[i] = true;
-
                 var c_type = typeQualifier(item).?;
                 var z_type = try self.transpileType(c_type);
                 defer self.allocator.free(z_type);
@@ -908,24 +892,15 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value) !void {
                 try self.out.print("{s}: {s}", .{ arg, z_type });
             } else if (mem.eql(u8, arg_kind, "FormatAttr")) {
                 // varidatic function with the same properties as printf
-                handled_inner_nodes.items[i] = true;
-                self.nodes_visited += 1;
             } else if (mem.eql(u8, arg_kind, "CXXCtorInitializer")) {
                 // constructor initializer for a single variable, not interesting here
-                handled_inner_nodes.items[i] = true;
-                self.nodes_visited += 1;
                 // try self.visitCXXCtorInitializer(item);
             } else if (mem.eql(u8, arg_kind, "CompoundStmt")) {
-                handled_inner_nodes.items[i] = true;
-                self.nodes_visited += 1;
                 // try self.visitCompoundStmt(item);
-            }
-        }
-
-        for (handled_inner_nodes.items, 0..) |handled, i| {
-            if (!handled) {
-                const item = inner.array.items[i];
-                const arg_kind = item.object.get("kind").?.string;
+            } else if (mem.eql(u8, arg_kind, "FullComment")) {
+                // Already handled in writeDocs above
+            } else {
+                self.nodes_visited -= 1;
                 log.err("unhandled `{s}` in ctor `{s}`", .{ arg_kind, parent });
             }
         }
