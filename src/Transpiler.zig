@@ -1421,7 +1421,10 @@ fn visitFunctionTemplateDecl(self: *Self, node: *const json.Value) !void {
             var body = std.ArrayList(u8).init(self.allocator);
             defer body.deinit();
 
-            for (f_items) |*f_item| {
+            var unused_arg_names = try std.ArrayList(u8).initCapacity(self.allocator, 16);
+            defer unused_arg_names.deinit();
+
+            for (f_items, 0..) |*f_item, i_item| {
                 const arg_kind = f_item.object.get("kind").?.string;
                 if (mem.eql(u8, arg_kind, "ParmVarDecl")) {
                     // todo: obsolete
@@ -1435,7 +1438,16 @@ fn visitFunctionTemplateDecl(self: *Self, node: *const json.Value) !void {
                     }
                     comma = true;
 
-                    const arg_name = f_item.object.get("name").?.string;
+                    const arg_name_opt = f_item.object.get("name");
+                    const arg_name = blk: {
+                        if (arg_name_opt) |an|
+                            break :blk an.string
+                        else {
+                            unused_arg_names.resize(0) catch unreachable;
+                            try unused_arg_names.writer().print("arg_{}", .{i_item});
+                            break :blk unused_arg_names.items;
+                        }
+                    };
                     const arg_type = try self.transpileType(qual);
                     defer self.allocator.free(arg_type);
 
