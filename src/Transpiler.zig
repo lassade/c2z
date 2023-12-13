@@ -182,6 +182,7 @@ class_info: std.StringArrayHashMap(ClassInfo),
 // options
 recursive: bool = false,
 no_glue: bool = false,
+no_comments: bool = false,
 header: []const u8 = "",
 
 pub fn init(allocator: Allocator) Self {
@@ -322,6 +323,7 @@ fn writeCommentedCode(self: *Self, code: []const u8) !void {
 }
 
 fn writeDocs(self: *Self, inner: ?*json.Value) !void {
+    if (self.no_comments) return;
     if (inner != null) {
         for (inner.?.array.items) |*item| {
             const kind = item.object.get("kind").?.string;
@@ -921,10 +923,6 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value) !void {
         try self.out.print("    return self;\n", .{});
         try self.out.print("}}\n\n", .{});
     } else {
-        try self.out.print(") {s};\npub const init", .{parent});
-        if (self.scope.ctors != 0) try self.out.print("{d}", .{self.scope.ctors + 1}); // avoid name conflict
-        try self.out.print(" = @\"{s}\";\n\n", .{mangled_name});
-
         try self.out.print(") {s};\npub const init", .{parent});
         if (self.scope.ctors != 0) try self.out.print("{d}", .{self.scope.ctors + 1}); // avoid name conflict
         try self.out.print(" = @\"{s}\";\n\n", .{mangled_name});
@@ -2750,6 +2748,13 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         var inner = try self.transpileType(raw_name);
         defer self.allocator.free(inner);
         return try fmt.allocPrint(self.allocator, "{s}{s}{s}", .{ ptr, constness, inner });
+    } else if (mem.endsWith(u8, ttname, " *const")) {
+        // NOTE: This can probably be improved to handle more cases, or maybe combined with the
+        // above case.
+        var raw_name = ttname[0..(ttname.len - (" *const".len))];
+        var inner = try self.transpileType(raw_name);
+        defer self.allocator.free(inner);
+        return try fmt.allocPrint(self.allocator, "*const {s}", .{inner});
     } else if (ch == ']') {
         // fixed sized array
         const len = mem.lastIndexOf(u8, ttname, "[").?;
