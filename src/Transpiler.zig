@@ -597,6 +597,10 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     }
     try self.namespace.full_path.appendSlice(name);
 
+    var is_in_bitfield = false;
+    var bitfield_group: u32 = 0;
+    var bitfield_struct_size_remaining: u32 = 0;
+
     for (inner.?.array.items) |*item| {
         if (item.object.getPtr("isImplicit")) |implicit| {
             if (implicit.bool) {
@@ -620,16 +624,48 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
                 }
             }
 
+            if (item.object.getPtr("isBitfield")) |is_bitfield| {
+                if (!is_in_bitfield and is_bitfield.bool) {
+                    is_in_bitfield = true;
+                    bitfield_group += 1;
+
+                    // TODO: Calculate this.
+                    bitfield_struct_size_remaining = 32;
+
+                    try self.out.print("    field_{d}: packed struct(u{d})  {{\n", .{ bitfield_group, bitfield_struct_size_remaining });
+                } else if (is_in_bitfield and is_bitfield.bool) {
+                    // pass
+                } else if (is_in_bitfield) {
+                    is_in_bitfield = false;
+                    try self.finalizeBitfield(bitfield_struct_size_remaining);
+                }
+            } else if (is_in_bitfield) {
+                is_in_bitfield = false;
+                try self.finalizeBitfield(bitfield_struct_size_remaining);
+            }
+
             const item_inner = item.object.getPtr("inner");
             try self.writeDocs(item_inner);
 
-            const field_type = try self.transpileType(typeQualifier(item).?);
+            const field_type = switch (is_in_bitfield) {
+                true => blk: {
+                    const inner_value_index = 0; // Not sure if this is always 0.
+                    const inner_value_elem = item_inner.?.array.items[inner_value_index];
+                    const bitfield_size_str = inner_value_elem.object.getPtr("value").?.string;
+                    const bitfield_size = try std.fmt.parseInt(u32, bitfield_size_str, 10);
+                    // TODO: Handle this.
+                    std.debug.assert(bitfield_struct_size_remaining >= bitfield_size);
+                    bitfield_struct_size_remaining -= bitfield_size;
+                    break :blk try fmt.allocPrint(self.allocator, "u{d}", .{bitfield_size});
+                },
+                false => try self.transpileType(typeQualifier(item).?),
+            };
             defer self.allocator.free(field_type);
 
             try self.out.print("    {s}: {s}", .{ field_name, field_type });
 
             // field default value
-            if (item_inner != null) {
+            if (item_inner != null and !is_in_bitfield) {
                 var value_exp = std.ArrayList(u8).init(self.allocator);
                 defer value_exp.deinit();
 
@@ -697,6 +733,11 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         }
     }
 
+    if (is_in_bitfield) {
+        is_in_bitfield = false;
+        try self.out.print("    }},\n", .{});
+    }
+
     // declarations must be after fields
     if (functions.items.len > 0) {
         try self.out.print("\n{s}", .{functions.items});
@@ -709,6 +750,14 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     } else {
         try self.out.print("}};\n\n", .{});
     }
+}
+
+fn finalizeBitfield(self: *Self, bits_remaining: u32) !void {
+    if (bits_remaining > 0) {
+        try self.out.print("   /// Padding added by c2z\n", .{});
+        try self.out.print("    _dummy_padding: u{d},\n", .{bits_remaining});
+    }
+    try self.out.print("    }},\n", .{});
 }
 
 fn visitVarDecl(self: *Self, value: *const json.Value) !void {
