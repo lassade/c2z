@@ -36,6 +36,8 @@ pub fn main() !void {
     var transpiler = Transpiler.init(allocator);
     defer transpiler.deinit();
 
+    var output_ast = false;
+
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
         const arg = argv[i];
@@ -71,6 +73,9 @@ pub fn main() !void {
 
             target_tuple = argv[i];
             try clang.append(argv[i]);
+            continue;
+        } else if (mem.eql(u8, arg, "-output-ast")) {
+            output_ast = true;
             continue;
         } else if (i == argv.len - 1 and arg[0] != '-') {
             // last arg is not a command, so it must be a input arg
@@ -117,6 +122,12 @@ pub fn main() !void {
         defer {
             allocator.free(astdump.stdout);
             allocator.free(astdump.stderr);
+        }
+
+        if (output_ast) {
+            var astfile = try std.fs.cwd().createFile("c2z_ast.json", .{});
+            try astfile.writeAll(astdump.stdout);
+            astfile.close();
         }
 
         var parsed = try json.parseFromSlice(json.Value, allocator, astdump.stdout, .{});
