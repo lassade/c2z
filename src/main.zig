@@ -114,7 +114,7 @@ pub fn main() !void {
         try clang.append(file_path);
         defer _ = clang.pop();
 
-        const astdump = try std.ChildProcess.exec(.{
+        const astdump = try std.ChildProcess.run(.{
             .allocator = allocator,
             .argv = clang.items,
             .max_output_bytes = 512 * 1024 * 1024,
