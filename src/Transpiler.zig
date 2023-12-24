@@ -1594,13 +1594,10 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 
     const name = value.object.get("name").?.string;
+    const v_inner_opt = value.object.getPtr("inner");
+    try self.writeDocs(v_inner_opt);
 
-    if (value.object.get("inner")) |v_inner| {
-        if (v_inner.array.items.len != 1) {
-            log.err("complex typedef `{s}`", .{name});
-            return;
-        }
-
+    if (v_inner_opt) |v_inner| {
         const v_item = &v_inner.array.items[0];
         const tag = v_item.object.get("kind").?.string;
         if (mem.eql(u8, tag, "BuiltinType") or mem.eql(u8, tag, "TypedefType")) {
@@ -1652,6 +1649,16 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
             self.nodes_visited += 1;
             try self.out.print("pub const {s} = {s};\n\n", .{ name, typeQualifier(v_item).? });
             return;
+        } else if (mem.eql(u8, tag, "ParenType")) {
+            self.nodes_visited += 1;
+            const parentype_inner_opt = v_inner.array.items[0].object.getPtr("inner");
+            if (parentype_inner_opt) |parentype_inner| {
+                const parentype_inner_kind = parentype_inner.array.items[0].object.get("kind").?.string;
+                if (mem.eql(u8, parentype_inner_kind, "FunctionProtoType")) {
+                    try self.visitFunctionProtoType(name, &parentype_inner.array.items[0]);
+                }
+            }
+            return;
         } else {
             log.err("unhandled `{s}` in typedef `{s}`", .{ tag, name });
             return;
@@ -1661,6 +1668,38 @@ fn visitTypedefDecl(self: *Self, value: *const json.Value) !void {
         const type_alised = try self.transpileType(typeQualifier(v_item).?);
         defer self.allocator.free(type_alised);
         try self.out.print("pub const {s} = {s};\n\n", .{ name, type_alised });
+    }
+}
+
+fn visitFunctionProtoType(self: *Self, name: []const u8, value: *const json.Value) !void {
+    self.nodes_visited += 1;
+
+    try self.out.print("pub const {s} = fn(", .{name});
+
+    var return_type_opt: ?*const json.Value = null;
+    var inner_opt = value.object.getPtr("inner");
+    if (inner_opt) |inner| {
+        for (inner.array.items, 0..) |*item, i| {
+            if (return_type_opt == null) {
+                return_type_opt = item;
+                continue;
+            }
+
+            const zig_type = try self.transpileType(typeQualifier(item).?);
+            defer self.allocator.free(zig_type);
+            try self.out.print("{s}", .{zig_type});
+            if (i + 1 < inner.array.items.len) {
+                try self.out.print(", ", .{});
+            }
+        }
+    }
+
+    if (return_type_opt) |return_type| {
+        const zig_type = try self.transpileType(typeQualifier(return_type).?);
+        defer self.allocator.free(zig_type);
+        try self.out.print(") callconv(.C) {s};\n\n", .{zig_type});
+    } else {
+        try self.out.print(") callconv(.C) {s};\n\n", .{"void"});
     }
 }
 

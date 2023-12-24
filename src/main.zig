@@ -27,6 +27,7 @@ pub fn main() !void {
     try clang.append("-Xclang");
     try clang.append("-ast-dump=json");
     try clang.append("-fsyntax-only");
+    try clang.append("-fparse-all-comments");
 
     const argv = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, argv);
