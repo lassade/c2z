@@ -2717,6 +2717,11 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         ttname = ttname["struct ".len..];
     }
 
+    // remove class from C style definition
+    if (mem.startsWith(u8, ttname, "class ")) {
+        ttname = ttname["class ".len..];
+    }
+
     const ch = ttname[ttname.len - 1];
     if (ch == '*' or ch == '&') {
         // note: avoid c-style pointers `[*c]` when dealing with references types
