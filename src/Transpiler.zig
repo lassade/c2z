@@ -1677,7 +1677,7 @@ fn visitFunctionProtoType(self: *Self, name: []const u8, value: *const json.Valu
     try self.out.print("pub const {s} = fn(", .{name});
 
     var return_type_opt: ?*const json.Value = null;
-    var inner_opt = value.object.getPtr("inner");
+    const inner_opt = value.object.getPtr("inner");
     if (inner_opt) |inner| {
         for (inner.array.items, 0..) |*item, i| {
             if (return_type_opt == null) {
