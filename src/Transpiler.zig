@@ -735,7 +735,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
 
     if (is_in_bitfield) {
         is_in_bitfield = false;
-        try self.out.print("    }},\n", .{});
+        try self.finalizeBitfield(bitfield_struct_size_remaining);
     }
 
     // declarations must be after fields
