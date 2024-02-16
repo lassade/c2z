@@ -4,7 +4,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "build",
+            "label": "buildDebug",
             "type": "shell",
             "command": "zig build --summary failures -freference-trace",
             "group": "build",
