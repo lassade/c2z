@@ -68,7 +68,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     lib.addIncludePath(.{ .path = "./test_cases/include" });
-    if (target.getAbi() == .msvc) {
+    if (target.result.abi == .msvc) {
         lib.linkLibC();
     } else {
         lib.linkLibCpp();
@@ -86,8 +86,8 @@ pub fn build(b: *std.Build) void {
     lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c022_cpp_string_glue.cpp" }, .flags = cflags });
     test_cases.linkLibrary(lib);
 
-    const cpp_mod = b.addModule("cpp", .{ .source_file = .{ .path = "src/cpp.zig" } });
-    test_cases.addModule("cpp", cpp_mod);
+    const cpp_mod = b.addModule("cpp", .{ .root_source_file = .{ .path = "src/cpp.zig" } });
+    test_cases.root_module.addImport("cpp", cpp_mod);
 
     const run_test_cases = b.addRunArtifact(test_cases);
 
