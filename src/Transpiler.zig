@@ -124,6 +124,7 @@ const TypeToByteSizeLUT = std.ComptimeStringMap(u32, .{
 });
 
 const TypeToSignedLUT = std.ComptimeStringMap(bool, .{
+    .{ "bool", false },
     .{ "c_int", true },
     .{ "c_long", true },
     .{ "c_longdouble", true },
@@ -649,7 +650,6 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     }
     try self.namespace.full_path.appendSlice(name);
 
-    var is_in_bitfield = false;
     var bitfield_type_bytes_curr: ?u32 = null;
     var bitfield_signed_curr = false;
     var bitfield_group: u32 = 0;
@@ -685,7 +685,6 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
             try self.writeDocs(item_inner);
 
             var bitfield_field_bits: u32 = 0;
-            is_in_bitfield = false;
 
             if (item.object.getPtr("isBitfield")) |is_bitfield| {
                 if (!is_bitfield.bool) {
@@ -693,16 +692,14 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
                     std.debug.assert(false);
                 }
 
-                is_in_bitfield = true;
-
                 const inner_value_index = 0; // Not sure if this is always 0.
                 const inner_value_elem = item_inner.?.array.items[inner_value_index];
                 const bitfield_field_bits_str = inner_value_elem.object.getPtr("value").?.string;
                 bitfield_field_bits = try std.fmt.parseInt(u32, bitfield_field_bits_str, 10);
 
-                const bitfield_type_bytes = TypeToByteSizeLUT.get(item_type).?;
+                const bitfield_type_bytes = if (TypeToByteSizeLUT.has(item_type)) TypeToByteSizeLUT.get(item_type).? else 4;
                 const bitfield_type_bits = bitfield_type_bytes * 8;
-                const bitfield_signed = TypeToSignedLUT.get(item_type).?;
+                const bitfield_signed = if (TypeToSignedLUT.has(item_type)) TypeToSignedLUT.get(item_type).? else false;
 
                 const bitfield_type_changed = bitfield_type_bytes_curr == null or bitfield_type_bytes_curr.? != bitfield_type_bytes;
                 const bitfield_sign_changed = bitfield_signed_curr != bitfield_signed;
@@ -728,7 +725,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
                     bitfield_group += 1;
                     try self.startBitfield(bitfield_group, bitfield_type_bits);
                     bitfield_struct_bits_remaining = bitfield_type_bits;
-                } else if (is_in_bitfield and bitfield_struct_bits_remaining < bitfield_field_bits) {
+                } else if (bitfield_struct_bits_remaining < bitfield_field_bits) {
                     // Existing bitfield but new field doesn't fit
                     try self.finalizeBitfield(bitfield_struct_bits_remaining);
 
@@ -736,11 +733,12 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
                     try self.startBitfield(bitfield_group, bitfield_type_bits);
                     bitfield_struct_bits_remaining = bitfield_type_bits;
                 }
-            } else {
-                is_in_bitfield = false;
+            } else if (bitfield_type_bytes_curr != null) {
+                try self.finalizeBitfield(bitfield_struct_bits_remaining);
+                bitfield_type_bytes_curr = null;
             }
 
-            const field_type = switch (is_in_bitfield) {
+            const field_type = switch (bitfield_type_bytes_curr != null) {
                 true => blk: {
                     bitfield_struct_bits_remaining -= bitfield_field_bits;
                     break :blk try self.addBitfieldField(bitfield_signed_curr, bitfield_field_bits);
@@ -752,7 +750,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
             try self.out.print("    {s}: {s}", .{ field_name, field_type });
 
             // field default value
-            if (item_inner != null and !is_in_bitfield) {
+            if (item_inner != null and bitfield_type_bytes_curr == null) {
                 var value_exp = std.ArrayList(u8).init(self.allocator);
                 defer value_exp.deinit();
 
@@ -826,8 +824,8 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         }
     }
 
-    if (is_in_bitfield) {
-        is_in_bitfield = false;
+    if (bitfield_type_bytes_curr != null) {
+        bitfield_type_bytes_curr = null;
         try self.finalizeBitfield(bitfield_struct_bits_remaining);
     }
 
