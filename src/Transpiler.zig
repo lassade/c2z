@@ -96,6 +96,57 @@ const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
     .{ "std::string", "cpp.String" },
 });
 
+const TypeToByteSizeLUT = std.ComptimeStringMap(u32, .{
+    .{ "bool", @sizeOf(bool) },
+    .{ "c_int", @sizeOf(c_int) },
+    .{ "c_long", @sizeOf(c_long) },
+    .{ "c_longdouble", @sizeOf(c_longdouble) },
+    .{ "c_longlong", @sizeOf(c_longlong) },
+    .{ "c_short", @sizeOf(c_short) },
+    .{ "c_uint", @sizeOf(c_uint) },
+    .{ "c_ulong", @sizeOf(c_ulong) },
+    .{ "c_ulonglong", @sizeOf(c_ulonglong) },
+    .{ "c_ushort", @sizeOf(c_ushort) },
+    .{ "f32", @sizeOf(f32) },
+    .{ "f64", @sizeOf(f64) },
+    .{ "i128", @sizeOf(i128) },
+    .{ "i16", @sizeOf(i16) },
+    .{ "i32", @sizeOf(i32) },
+    .{ "i64", @sizeOf(i64) },
+    .{ "i8", @sizeOf(i8) },
+    .{ "isize", @sizeOf(isize) },
+    .{ "u128", @sizeOf(u128) },
+    .{ "u16", @sizeOf(u16) },
+    .{ "u32", @sizeOf(u32) },
+    .{ "u64", @sizeOf(u64) },
+    .{ "u8", @sizeOf(u8) },
+    .{ "usize", @sizeOf(usize) },
+});
+
+const TypeToSignedLUT = std.ComptimeStringMap(bool, .{
+    .{ "c_int", true },
+    .{ "c_long", true },
+    .{ "c_longdouble", true },
+    .{ "c_longlong", true },
+    .{ "c_short", true },
+    .{ "c_uint", false },
+    .{ "c_ulong", false },
+    .{ "c_ulonglong", false },
+    .{ "c_ushort", false },
+    .{ "i128", true },
+    .{ "i16", true },
+    .{ "i32", true },
+    .{ "i64", true },
+    .{ "i8", true },
+    .{ "isize", true },
+    .{ "u128", false },
+    .{ "u16", false },
+    .{ "u32", false },
+    .{ "u64", false },
+    .{ "u8", false },
+    .{ "usize", false },
+});
+
 const ScopeTag = enum {
     root,
     class,
@@ -599,8 +650,10 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     try self.namespace.full_path.appendSlice(name);
 
     var is_in_bitfield = false;
+    var bitfield_type_bytes_curr: ?u32 = null;
+    var bitfield_signed_curr = false;
     var bitfield_group: u32 = 0;
-    var bitfield_struct_size_remaining: u32 = 0;
+    var bitfield_struct_bits_remaining: u32 = 0;
 
     for (inner.?.array.items) |*item| {
         if (item.object.getPtr("isImplicit")) |implicit| {
@@ -625,39 +678,72 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
                 }
             }
 
-            if (item.object.getPtr("isBitfield")) |is_bitfield| {
-                if (!is_in_bitfield and is_bitfield.bool) {
-                    is_in_bitfield = true;
-                    bitfield_group += 1;
-
-                    // TODO: Calculate this.
-                    bitfield_struct_size_remaining = 32;
-
-                    try self.out.print("    field_{d}: packed struct(u{d})  {{\n", .{ bitfield_group, bitfield_struct_size_remaining });
-                } else if (is_in_bitfield and is_bitfield.bool) {
-                    // pass
-                } else if (is_in_bitfield) {
-                    is_in_bitfield = false;
-                    try self.finalizeBitfield(bitfield_struct_size_remaining);
-                }
-            } else if (is_in_bitfield) {
-                is_in_bitfield = false;
-                try self.finalizeBitfield(bitfield_struct_size_remaining);
-            }
-
             const item_inner = item.object.getPtr("inner");
+            const item_type = try self.transpileType(typeQualifier(item).?);
+            defer self.allocator.free(item_type);
+
             try self.writeDocs(item_inner);
+
+            var bitfield_field_bits: u32 = 0;
+            is_in_bitfield = false;
+
+            if (item.object.getPtr("isBitfield")) |is_bitfield| {
+                if (!is_bitfield.bool) {
+                    // Not sure when this would be true.
+                    std.debug.assert(false);
+                }
+
+                is_in_bitfield = true;
+
+                const inner_value_index = 0; // Not sure if this is always 0.
+                const inner_value_elem = item_inner.?.array.items[inner_value_index];
+                const bitfield_field_bits_str = inner_value_elem.object.getPtr("value").?.string;
+                bitfield_field_bits = try std.fmt.parseInt(u32, bitfield_field_bits_str, 10);
+
+                const bitfield_type_bytes = TypeToByteSizeLUT.get(item_type).?;
+                const bitfield_type_bits = bitfield_type_bytes * 8;
+                const bitfield_signed = TypeToSignedLUT.get(item_type).?;
+
+                const bitfield_type_changed = bitfield_type_bytes_curr == null or bitfield_type_bytes_curr.? != bitfield_type_bytes;
+                const bitfield_sign_changed = bitfield_signed_curr != bitfield_signed;
+                if (bitfield_type_changed or bitfield_sign_changed) {
+                    // A new bitfield
+                    // - or -
+                    // Underlying type's size changed, need to start a new bitfield
+
+                    // NOTE: C's behavior of padding when the type and signedness has changed seems tricky and perhaps
+                    //       not even consistent across platforms/compilers so leaving a warning when it's noticed.
+
+                    if (bitfield_type_bytes_curr != null) {
+                        if (bitfield_struct_bits_remaining > 0) {
+                            try self.out.print("   /// C2Z WARNING: This perhaps shouldn't be padded in this way! \n", .{});
+                        }
+
+                        try self.finalizeBitfield(bitfield_struct_bits_remaining);
+                    }
+
+                    bitfield_type_bytes_curr = bitfield_type_bytes;
+                    bitfield_signed_curr = bitfield_signed;
+
+                    bitfield_group += 1;
+                    try self.startBitfield(bitfield_group, bitfield_type_bits);
+                    bitfield_struct_bits_remaining = bitfield_type_bits;
+                } else if (is_in_bitfield and bitfield_struct_bits_remaining < bitfield_field_bits) {
+                    // Existing bitfield but new field doesn't fit
+                    try self.finalizeBitfield(bitfield_struct_bits_remaining);
+
+                    bitfield_group += 1;
+                    try self.startBitfield(bitfield_group, bitfield_type_bits);
+                    bitfield_struct_bits_remaining = bitfield_type_bits;
+                }
+            } else {
+                is_in_bitfield = false;
+            }
 
             const field_type = switch (is_in_bitfield) {
                 true => blk: {
-                    const inner_value_index = 0; // Not sure if this is always 0.
-                    const inner_value_elem = item_inner.?.array.items[inner_value_index];
-                    const bitfield_size_str = inner_value_elem.object.getPtr("value").?.string;
-                    const bitfield_size = try std.fmt.parseInt(u32, bitfield_size_str, 10);
-                    // TODO: Handle this.
-                    std.debug.assert(bitfield_struct_size_remaining >= bitfield_size);
-                    bitfield_struct_size_remaining -= bitfield_size;
-                    break :blk try fmt.allocPrint(self.allocator, "u{d}", .{bitfield_size});
+                    bitfield_struct_bits_remaining -= bitfield_field_bits;
+                    break :blk try self.addBitfieldField(bitfield_signed_curr, bitfield_field_bits);
                 },
                 false => try self.transpileType(typeQualifier(item).?),
             };
@@ -742,7 +828,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
 
     if (is_in_bitfield) {
         is_in_bitfield = false;
-        try self.finalizeBitfield(bitfield_struct_size_remaining);
+        try self.finalizeBitfield(bitfield_struct_bits_remaining);
     }
 
     // declarations must be after fields
@@ -757,6 +843,15 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     } else {
         try self.out.print("}};\n\n", .{});
     }
+}
+
+fn startBitfield(self: *Self, bitfield_group: u32, bitfield_type_bits: u32) !void {
+    try self.out.print("    bitfield_{d}: packed struct(u{d})  {{\n", .{ bitfield_group, bitfield_type_bits });
+}
+
+fn addBitfieldField(self: *Self, is_signed: bool, bitfield_field_bits: u32) ![]u8 {
+    const signed_str = if (is_signed) "i" else "u";
+    return try fmt.allocPrint(self.allocator, "{s}{d}", .{ signed_str, bitfield_field_bits });
 }
 
 fn finalizeBitfield(self: *Self, bits_remaining: u32) !void {
