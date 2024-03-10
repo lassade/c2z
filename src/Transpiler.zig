@@ -209,11 +209,15 @@ const NamespaceScope = struct {
     }
 };
 
+// ClassInfo is now stored in class_info both with its name as the key,
+// and with it's line and column.
 const ClassInfo = struct {
     is_polymorphic: bool,
+    name: []const u8,
 };
 
 allocator: Allocator,
+arena: std.heap.ArenaAllocator,
 
 buffer: std.ArrayList(u8),
 out: std.ArrayList(u8).Writer,
@@ -240,6 +244,7 @@ header: []const u8 = "",
 pub fn init(allocator: Allocator) Self {
     return Self{
         .allocator = allocator,
+        .arena = std.heap.ArenaAllocator.init(allocator),
         .buffer = std.ArrayList(u8).init(allocator),
         .out = undefined, // can't be initialized because Self will be moved
         .c_buffer = std.ArrayList(u8).init(allocator),
@@ -253,6 +258,7 @@ pub fn init(allocator: Allocator) Self {
 }
 
 pub fn deinit(self: *Self) void {
+    self.arena.deinit();
     self.buffer.deinit();
     self.c_buffer.deinit();
     self.namespace.deinit();
@@ -545,19 +551,18 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     self.nodes_visited += 1;
 
     const tag = value.object.get("tagUsed").?.string;
-
-    // nested unamed strucs or unions are treated as implicit fields
-    var is_field = false;
+    const is_union = mem.eql(u8, tag, "union");
 
     var is_generated_name = false;
     var name: []const u8 = undefined;
     if (value.object.get("name")) |v| {
         name = v.string;
     } else if (self.scope.tag == .class) {
-        // unamed struct, class or union inside a class definition should be treated as a field
-        is_field = true;
         is_generated_name = true;
-        name = try fmt.allocPrint(self.allocator, "__field{d}", .{self.scope.fields});
+        name = try fmt.allocPrint(self.allocator, "__{s}{d}", .{
+            if (is_union) "Union" else "Struct",
+            self.scope.fields,
+        });
         self.scope.fields += 1;
     } else {
         // referenced by someone else
@@ -594,11 +599,10 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
 
     try self.writeDocs(inner);
 
-    if (is_field) {
-        try self.out.print("{s}: extern {s} {{\n", .{ name, tag });
-    } else {
-        try self.out.print("pub const {s} = extern struct {{\n", .{name});
-    }
+    try self.out.print("pub const {s} = extern {s} {{\n", .{
+        name,
+        if (is_union) "union" else "struct",
+    });
 
     const v_bases = value.object.get("bases");
 
@@ -620,7 +624,22 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         try self.out.print("    vtable: *const anyopaque,\n\n", .{});
     }
 
-    _ = try self.class_info.put(name, .{ .is_polymorphic = is_polymorphic });
+    _ = try self.class_info.put(name, .{
+        .is_polymorphic = is_polymorphic,
+        .name = name,
+    });
+
+    // Double-storing class info by the line and col so we can look up it's name using that.
+    // Need to store this 'globally' so using an arena
+    // For anonymous structs and similar constructs, the corresponding FieldDecl comes *after*
+    // the CXXRecordDecl.
+    if (location(value)) |loc| {
+        const line_col_key = try fmt.allocPrint(self.arena.allocator(), "{d}:{d}", .{ loc.line, loc.col });
+        _ = try self.class_info.put(line_col_key, .{
+            .is_polymorphic = is_polymorphic,
+            .name = try fmt.allocPrint(self.arena.allocator(), "{s}", .{name}),
+        });
+    }
 
     if (v_bases != null) {
         if (v_bases.?.array.items.len > 1) {
@@ -656,20 +675,34 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
     var bitfield_struct_bits_remaining: u32 = 0;
 
     for (inner.?.array.items) |*item| {
+        const kind = item.object.getPtr("kind").?.string;
+
+        // FieldDecls that are implicit shouldn't be skipped. This is things like
+        // anonymous structs.
+        const inner_is_field = mem.eql(u8, kind, "FieldDecl");
+        var is_implicit = false;
         if (item.object.getPtr("isImplicit")) |implicit| {
             if (implicit.bool) {
-                self.nodes_visited += nodeCount(item);
-                continue;
+                is_implicit = true;
+                if (!inner_is_field) {
+                    self.nodes_visited += nodeCount(item);
+                    continue;
+                }
             }
         }
 
-        const kind = item.object.getPtr("kind").?.string;
         if (mem.eql(u8, kind, "FullComment")) {
             // skip
-        } else if (mem.eql(u8, kind, "FieldDecl")) {
+        } else if (inner_is_field) {
             self.nodes_visited += 1;
 
-            const field_name = item.object.getPtr("name").?.string;
+            const field_name = if (is_implicit) blk: {
+                const type_name = item.object.getPtr("type").?.object.get("qualType").?.string;
+                const field_type = if (mem.indexOf(u8, type_name, "union at") != null) "union_field" else if (mem.indexOf(u8, type_name, "struct at") != null) "struct_field" else "field";
+                const field_name_tmp = try fmt.allocPrint(self.arena.allocator(), "__{s}{d}", .{ field_type, self.scope.fields });
+                self.scope.fields += 1;
+                break :blk field_name_tmp;
+            } else item.object.getPtr("name").?.string;
 
             if (item.object.getPtr("isInvalid")) |invalid| {
                 if (invalid.bool) {
@@ -681,8 +714,6 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
             const item_inner = item.object.getPtr("inner");
             const item_type = try self.transpileType(typeQualifier(item).?);
             defer self.allocator.free(item_type);
-
-            try self.writeDocs(item_inner);
 
             var bitfield_field_bits: u32 = 0;
 
@@ -738,6 +769,8 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
                 bitfield_type_bytes_curr = null;
             }
 
+            try self.writeDocs(item_inner);
+
             const field_type = switch (bitfield_type_bytes_curr != null) {
                 true => blk: {
                     bitfield_struct_bits_remaining -= bitfield_field_bits;
@@ -778,8 +811,11 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
             // nested enums
             try self.visitEnumDecl(item);
         } else if (mem.eql(u8, kind, "CXXRecordDecl")) {
-            // nested stucts, classes and unions
+            // nested stucts, classes and unions, mustn't be intermixed with fields.
+            const out = self.out;
+            self.out = functions.writer();
             try self.visitCXXRecordDecl(item);
+            self.out = out;
         } else if (mem.eql(u8, kind, "VarDecl")) {
             const out = self.out;
             self.out = functions.writer();
@@ -836,11 +872,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
 
     try self.endNamespace(parent_namespace);
 
-    if (is_field) {
-        try self.out.print("}},\n\n", .{});
-    } else {
-        try self.out.print("}};\n\n", .{});
-    }
+    try self.out.print("}};\n\n", .{});
 }
 
 fn startBitfield(self: *Self, bitfield_group: u32, bitfield_type_bits: u32) !void {
@@ -857,7 +889,7 @@ fn finalizeBitfield(self: *Self, bits_remaining: u32) !void {
         try self.out.print("   /// Padding added by c2z\n", .{});
         try self.out.print("    _dummy_padding: u{d},\n", .{bits_remaining});
     }
-    try self.out.print("    }},\n", .{});
+    try self.out.print("    }},\n\n", .{});
 }
 
 fn visitVarDecl(self: *Self, value: *const json.Value) !void {
@@ -2824,6 +2856,25 @@ inline fn typeQualifier(value: *const json.Value) ?[]const u8 {
     return null;
 }
 
+inline fn location(value: *const json.Value) ?struct { line: i64, col: i64 } {
+    if (value.object.getPtr("loc")) |loc| {
+        if (loc.object.getPtr("spellingLoc")) |spelling_loc| {
+            const line = spelling_loc.object.get("line").?.integer;
+            const col = spelling_loc.object.get("col").?.integer;
+            return .{ .line = line, .col = col };
+        } else if (loc.object.getPtr("expansionLoc")) |expansion_loc| {
+            const line = expansion_loc.object.get("line").?.integer;
+            const col = expansion_loc.object.get("col").?.integer;
+            return .{ .line = line, .col = col };
+        }
+
+        const line = loc.object.get("line").?.integer;
+        const col = loc.object.get("col").?.integer;
+        return .{ .line = line, .col = col };
+    }
+    return null;
+}
+
 inline fn resolveEnumVariantName(base: []const u8, variant: []const u8) []const u8 {
     return if (mem.startsWith(u8, variant, base)) variant[base.len..] else variant;
 }
@@ -2903,6 +2954,11 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         ttname = ttname["class ".len..];
     }
 
+    // remove union from C style definition
+    if (mem.startsWith(u8, ttname, "union ")) {
+        ttname = ttname["union ".len..];
+    }
+
     const ch = ttname[ttname.len - 1];
     if (ch == '*' or ch == '&') {
         // note: avoid c-style pointers `[*c]` when dealing with references types
@@ -2934,6 +2990,20 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         const inner = try self.transpileType(raw_name);
         defer self.allocator.free(inner);
         return try fmt.allocPrint(self.allocator, "{s}{s}{s}", .{ ptr, constness, inner });
+    } else if (mem.indexOf(u8, ttname, "struct at ") != null or
+        mem.indexOf(u8, ttname, "union at ") != null) // or
+        // mem.indexOf(u8, ttname, "enum at ") != null)
+    {
+        // "qualType": "RootStruct::(anonymous union at bitfieldtest.h:4:5)"
+        // "qualType": "RootStruct::(anonymous struct at bitfieldtest.h:25:5)"
+        // "qualType": "struct (unnamed struct at header.h:4:5)"
+        var separator_index = mem.lastIndexOf(u8, ttname, ":").?;
+        const tmpname = ttname[0 .. separator_index - 1];
+        separator_index = mem.lastIndexOf(u8, tmpname, ":").?;
+        ttname = ttname[separator_index + 1 ..];
+        ttname = ttname[0 .. ttname.len - 1];
+        const class = self.class_info.get(ttname).?;
+        ttname = class.name;
     } else if (mem.endsWith(u8, ttname, " *const")) {
         // NOTE: This can probably be improved to handle more cases, or maybe combined with the
         // above case.
@@ -2961,7 +3031,7 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
 
             return try fmt.allocPrint(self.allocator, "?*const fn({s}) callconv(.C) {s} ", .{ args.items, tret });
         } else {
-            log.err("unknow type `{s}`, falling back to `*anyopaque`", .{ttname});
+            log.err("unknown type `{s}`, falling back to `*anyopaque`", .{ttname});
             ttname = "*anyopaque";
         }
     } else if (ch == '>') {

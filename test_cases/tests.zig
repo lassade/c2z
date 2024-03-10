@@ -113,3 +113,20 @@ test "cpp_string" {
     //     //buffer = cpp.String.init(.{}); // this leaks memory
     // }
 }
+
+test "cpp_nested_structs" {
+    const fii = @import("c023_cpp_nested_structs.zig");
+
+    const zig_size_struct = @as(c_int, @sizeOf(fii.RootStruct));
+    const cpp_size_struct = fii.test_sizeof_RootStruct();
+    try expectEqual(zig_size_struct, cpp_size_struct);
+
+    const zig_size_union = @as(c_int, @sizeOf(fii.RootUnion));
+    const cpp_size_union = fii.test_sizeof_RootUnion();
+    try expectEqual(zig_size_union, cpp_size_union);
+
+    // TODO
+    // const zig_size_enum = @as(c_int, @sizeOf(fii.RootEnum));
+    // const cpp_size_enum = fii.test_sizeof_RootEnum();
+    // try expectEqual(zig_size_enum, cpp_size_enum);
+}
