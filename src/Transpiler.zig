@@ -681,6 +681,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
             const item_inner = item.object.getPtr("inner");
             const item_type = try self.transpileType(typeQualifier(item).?);
             defer self.allocator.free(item_type);
+            const bitfield_signed = if (TypeToSignedLUT.has(item_type)) TypeToSignedLUT.get(item_type).? else false;
 
             try self.writeDocs(item_inner);
 
@@ -699,11 +700,11 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
 
                 const bitfield_type_bytes = if (TypeToByteSizeLUT.has(item_type)) TypeToByteSizeLUT.get(item_type).? else 4;
                 const bitfield_type_bits = bitfield_type_bytes * 8;
-                const bitfield_signed = if (TypeToSignedLUT.has(item_type)) TypeToSignedLUT.get(item_type).? else false;
 
-                const bitfield_type_changed = bitfield_type_bytes_curr == null or bitfield_type_bytes_curr.? != bitfield_type_bytes;
-                const bitfield_sign_changed = bitfield_signed_curr != bitfield_signed;
-                if (bitfield_type_changed or bitfield_sign_changed) {
+                const bitfield_type_size_prev = if (bitfield_type_bytes_curr == null) 0 else bitfield_type_bytes_curr.?;
+                const bitfield_type_size_increased = bitfield_type_size_prev < bitfield_type_bytes;
+                const bitfield_sign_changed = false; // Actually fine to mix I think? bitfield_signed_curr != bitfield_signed;
+                if (bitfield_type_size_increased or bitfield_sign_changed) {
                     // A new bitfield
                     // - or -
                     // Underlying type's size changed, need to start a new bitfield
@@ -741,7 +742,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
             const field_type = switch (bitfield_type_bytes_curr != null) {
                 true => blk: {
                     bitfield_struct_bits_remaining -= bitfield_field_bits;
-                    break :blk try self.addBitfieldField(bitfield_signed_curr, bitfield_field_bits);
+                    break :blk try self.addBitfieldField(bitfield_signed, bitfield_field_bits);
                 },
                 false => try self.transpileType(typeQualifier(item).?),
             };
@@ -766,7 +767,11 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
                 }
             }
 
-            try self.out.print(",\n", .{});
+            if (bitfield_type_bytes_curr != null) {
+                try self.out.print(", // {d} bits\n", .{bitfield_type_bytes_curr.? * 8 - bitfield_struct_bits_remaining});
+            } else {
+                try self.out.print(",\n", .{});
+            }
         } else if (mem.eql(u8, kind, "CXXMethodDecl")) {
             if (!self.public) continue;
 
