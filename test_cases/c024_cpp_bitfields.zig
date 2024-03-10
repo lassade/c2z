@@ -6,21 +6,40 @@ pub const Bitfields = extern struct {
     bitfield_1: packed struct(u64) {
         bitfield1: u10, // 10 bits
         bitfield2: u10, // 20 bits
-        bitfield3: u5, // 25 bits
-        bitfield4: i5, // 30 bits
-        bitfield5: u2, // 32 bits
-        bitfield6: u2, // 34 bits
+        /// C2Z WARNING: This perhaps shouldn't be padded in this way!
         /// Padding added by c2z
-        _dummy_padding: u30,
+        _dummy_padding: u44,
     },
     bitfield_2: packed struct(u32) {
-        bitfield7: i31, // 63 bits
+        bitfield3: u5, // 5 bits
+        bitfield4: i5, // 10 bits
+        /// C2Z WARNING: This perhaps shouldn't be padded in this way!
+        /// Padding added by c2z
+        _dummy_padding: u22,
+    },
+    bitfield_3: packed struct(u8) {
+        bitfield5: u2, // 2 bits
+        bitfield6: u2, // 4 bits
+        bitfield7: u2, // 6 bits
+        /// C2Z WARNING: This perhaps shouldn't be padded in this way!
+        /// Padding added by c2z
+        _dummy_padding: u2,
+    },
+    bitfield_4: packed struct(u32) {
+        bitfield8: i31, // 31 bits
+        /// C2Z WARNING: This perhaps shouldn't be padded in this way!
         /// Padding added by c2z
         _dummy_padding: u1,
     },
-    bitfield_3: packed struct(u64) {
-        bitfield8: i30, // 30 bits
+    bitfield_5: packed struct(u64) {
+        bitfield9: i30, // 30 bits
+        /// TODO: Add test of 0-length bitfield here
+        /// long long : 0;
+        bitfield11: i30, // 60 bits
         /// Padding added by c2z
-        _dummy_padding: u34,
+        _dummy_padding: u4,
     },
 };
+
+extern fn _1_size_of_Bitfields_() c_int;
+pub const size_of_Bitfields = _1_size_of_Bitfields_;

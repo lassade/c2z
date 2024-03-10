@@ -701,10 +701,11 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
                 const bitfield_type_bytes = if (TypeToByteSizeLUT.has(item_type)) TypeToByteSizeLUT.get(item_type).? else 4;
                 const bitfield_type_bits = bitfield_type_bytes * 8;
 
+                // TODO: Need to handle 0-length (unnamed) bitfields (used for re-aligning next field)
                 const bitfield_type_size_prev = if (bitfield_type_bytes_curr == null) 0 else bitfield_type_bytes_curr.?;
-                const bitfield_type_size_increased = bitfield_type_size_prev < bitfield_type_bytes;
+                const bitfield_type_size_changed = bitfield_type_size_prev != bitfield_type_bytes;
                 const bitfield_sign_changed = false; // Actually fine to mix I think? bitfield_signed_curr != bitfield_signed;
-                if (bitfield_type_size_increased or bitfield_sign_changed) {
+                if (bitfield_type_size_changed or bitfield_sign_changed) {
                     // A new bitfield
                     // - or -
                     // Underlying type's size changed, need to start a new bitfield

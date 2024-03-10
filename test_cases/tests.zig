@@ -112,4 +112,11 @@ test "cpp_string" {
     //     buffer.deinit(); // this doesn't
     //     //buffer = cpp.String.init(.{}); // this leaks memory
     // }
+
+test "cpp_bitfields" {
+    const fii = @import("c024_cpp_bitfields.zig");
+
+    const zig_size_bitfields = @as(c_int, @sizeOf(fii.Bitfields));
+    const cpp_size_bitfields = fii.size_of_Bitfields();
+    try expectEqual(zig_size_bitfields, cpp_size_bitfields);
 }
