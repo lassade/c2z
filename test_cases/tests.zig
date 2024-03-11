@@ -112,6 +112,7 @@ test "cpp_string" {
     //     buffer.deinit(); // this doesn't
     //     //buffer = cpp.String.init(.{}); // this leaks memory
     // }
+}
 
 test "cpp_bitfields" {
     const fii = @import("c024_cpp_bitfields.zig");
