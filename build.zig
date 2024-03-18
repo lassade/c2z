@@ -77,7 +77,8 @@ pub fn build(b: *std.Build) void {
     lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/include/c005_inheritance.cpp" }, .flags = cflags });
     lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/include/c013_cpp_vector.cpp" }, .flags = cflags });
     lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/include/c022_cpp_string.cpp" }, .flags = cflags });
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/include/c023_cpp_nested_structs.cpp" }, .flags = cflags });    // glue
+    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/include/c023_cpp_nested_structs.cpp" }, .flags = cflags });
+    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/include/c024_cpp_bitfields.cpp" }, .flags = cflags });
     //lib.addCSourceFile("./test_cases/c001_c_structs_glue.cpp", cflags);
     lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c005_inheritance_glue.cpp" }, .flags = cflags });
     lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c009_enum_flags_glue.cpp" }, .flags = cflags });
@@ -85,6 +86,7 @@ pub fn build(b: *std.Build) void {
     lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c013_cpp_vector_glue.cpp" }, .flags = cflags });
     lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c022_cpp_string_glue.cpp" }, .flags = cflags });
     lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c023_cpp_nested_structs_glue.cpp" }, .flags = cflags });
+    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c024_cpp_bitfields_glue.cpp" }, .flags = cflags });
     test_cases.linkLibrary(lib);
 
     const cpp_mod = b.addModule("cpp", .{ .root_source_file = .{ .path = "src/cpp.zig" } });
