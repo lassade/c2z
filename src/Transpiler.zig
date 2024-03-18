@@ -883,6 +883,7 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
 
 fn startBitfield(self: *Self, bitfield_group: u32, bitfield_type_bits: u32) !void {
     try self.out.print("    bitfield_{d}: packed struct(u{d})  {{\n", .{ bitfield_group, bitfield_type_bits });
+    try self.out.print("    // NOTE: Bitfield generation not guaranteed to work on all platforms, use with caution. \n\n", .{});
 }
 
 fn addBitfieldField(self: *Self, is_signed: bool, bitfield_field_bits: u32) ![]u8 {
