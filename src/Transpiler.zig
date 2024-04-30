@@ -1089,25 +1089,21 @@ fn visitCXXConstructorDecl(self: *Self, value: *const json.Value) !void {
         }
     }
 
-    if (self.no_glue) {
-        // sig
-        if (sig.is_varidatic) {
-            try self.out.print(", ...) callconv(.C) void;\npub fn init", .{});
-        } else {
-            try self.out.print(") void;\npub inline fn init", .{});
-        }
-        if (self.scope.ctors != 0) try self.out.print("{d}", .{self.scope.ctors + 1}); // avoid name conflict
-        try self.out.print("({s}) {s} {{\n", .{ fn_args.items, parent });
-        // body
-        try self.out.print("    var self: {s} = undefined;\n", .{parent});
-        try self.out.print("    @\"{s}\"(&self{s});\n", .{ mangled_name, z_call.items });
-        try self.out.print("    return self;\n", .{});
-        try self.out.print("}}\n\n", .{});
+    // sig
+    if (sig.is_varidatic) {
+        try self.out.print(", ...) callconv(.C) void;\npub fn init", .{});
     } else {
-        try self.out.print(") void;\npub const init", .{});
-        if (self.scope.ctors != 0) try self.out.print("{d}", .{self.scope.ctors + 1}); // avoid name conflict
-        try self.out.print(" = @\"{s}\";\n\n", .{mangled_name});
+        try self.out.print(") void;\npub inline fn init", .{});
+    }
+    if (self.scope.ctors != 0) try self.out.print("{d}", .{self.scope.ctors + 1}); // avoid name conflict
+    try self.out.print("({s}) {s} {{\n", .{ fn_args.items, parent });
+    // body
+    try self.out.print("    var self: {s} = undefined;\n", .{parent});
+    try self.out.print("    @\"{s}\"(&self, {s});\n", .{ mangled_name, z_call.items });
+    try self.out.print("    return self;\n", .{});
+    try self.out.print("}}\n\n", .{});
 
+    if (!self.no_glue) {
         try self.c_out.print(") {{ new (self) {s}({s}); }}\n", .{ self.namespace.full_path.items, c_call.items });
     }
 

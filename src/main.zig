@@ -118,7 +118,7 @@ pub fn main() !void {
         const astdump = try std.ChildProcess.run(.{
             .allocator = allocator,
             .argv = clang.items,
-            .max_output_bytes = 512 * 1024 * 1024,
+            .max_output_bytes = 4 * 512 * 1024 * 1024,
         });
         defer {
             allocator.free(astdump.stdout);
