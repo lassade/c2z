@@ -55,7 +55,7 @@ const KeywordsLUT = std.ComptimeStringMap(void, .{
     .{ "volatile", "__volatile" },
 });
 
-const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
+const PrimitivesTypeLUT = std.StaticStringMap([]const u8).initComptime(.{
     .{ "bool", "bool" },
     .{ "char", "u8" },
     .{ "signed char", "i8" },
@@ -96,7 +96,7 @@ const PrimitivesTypeLUT = std.ComptimeStringMap([]const u8, .{
     .{ "std::string", "cpp.String" },
 });
 
-const TypeToByteSizeLUT = std.ComptimeStringMap(u32, .{
+const TypeToByteSizeLUT = std.StaticStringMap(u32).initComptime(.{
     .{ "bool", @sizeOf(bool) },
     .{ "c_int", @sizeOf(c_int) },
     .{ "c_long", @sizeOf(c_long) },
@@ -123,7 +123,7 @@ const TypeToByteSizeLUT = std.ComptimeStringMap(u32, .{
     .{ "usize", @sizeOf(usize) },
 });
 
-const TypeToSignedLUT = std.ComptimeStringMap(bool, .{
+const TypeToSignedLUT = std.StaticStringMap(bool).initComptime(.{
     .{ "bool", false },
     .{ "c_int", true },
     .{ "c_long", true },
