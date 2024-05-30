@@ -19,11 +19,11 @@ pub fn main() !void {
     var clang = std.ArrayList([]const u8).init(allocator);
     defer clang.deinit();
 
-    try clang.append("zig");
-    try clang.append("cc");
-    try clang.append("-x");
-    try clang.append("c++");
-    try clang.append("-lc++");
+    try clang.append("zig"); // 0
+    try clang.append("cc"); // 1
+    try clang.append("-x"); // 2
+    try clang.append("c++"); // 3
+    try clang.append("-lc++"); // 4
     try clang.append("-Xclang");
     try clang.append("-ast-dump=json");
     try clang.append("-fsyntax-only");
@@ -47,13 +47,19 @@ pub fn main() !void {
                 \\-h, -help                    Display this help and exit
                 \\-target TARGET_TUPLE         Clang target tuple, e.g. x86_86-windows-gnu
                 \\-R                           Recursive transpiling, use to also parse includes
-                \\-no-glue                     No c++ glue code, bindings will be target specific
+                \\-no-glue                     No C++ glue code, bindings will be target specific
                 \\-no-comments                 Don't write comments
+                \\-c99                         Use C99 instead of C++
                 \\[clang arguments]            Pass any clang arguments, e.g. -DNDEBUG -I.\include -target x86-linux-gnu
                 \\[--] [FILES]                 Input files
                 \\
             );
             return;
+        } else if (mem.eql(u8, arg, "-c99")) {
+            clang.items[3] = "c";
+            clang.items[4] = "-std=c99";
+            transpiler.no_glue = true; // glue is not needed for c
+            continue;
         } else if (mem.eql(u8, arg, "-R")) {
             transpiler.recursive = true;
             continue;
