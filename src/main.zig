@@ -121,7 +121,7 @@ pub fn main() !void {
         try clang.append(file_path);
         defer _ = clang.pop();
 
-        const astdump = try std.ChildProcess.run(.{
+        const astdump = try std.process.Child.run(.{
             .allocator = allocator,
             .argv = clang.items,
             .max_output_bytes = 4 * 512 * 1024 * 1024,
@@ -168,7 +168,7 @@ pub fn main() !void {
             try zfmt_args.append("fmt");
             try zfmt_args.append(output_path.items);
 
-            var zfmt = std.ChildProcess.init(zfmt_args.items, allocator);
+            var zfmt = std.process.Child.init(zfmt_args.items, allocator);
             zfmt.stderr_behavior = .Ignore;
             zfmt.stdout_behavior = .Ignore;
             _ = try zfmt.spawnAndWait();
