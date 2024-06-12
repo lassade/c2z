@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) void {
         .name = "c2z",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -55,7 +55,7 @@ pub fn build(b: *std.Build) void {
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const test_cases = b.addTest(.{
-        .root_source_file = .{ .path = "./test_cases/tests.zig" },
+        .root_source_file = b.path("./test_cases/tests.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -67,29 +67,29 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    lib.addIncludePath(.{ .path = "./test_cases/include" });
+    lib.addIncludePath(b.path("./test_cases/include"));
     if (target.result.abi == .msvc) {
         lib.linkLibC();
     } else {
         lib.linkLibCpp();
     }
     //lib.addCSourceFile("./test_cases/include/c002_cpp_structs.cpp", cflags);
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/include/c005_inheritance.cpp" }, .flags = cflags });
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/include/c013_cpp_vector.cpp" }, .flags = cflags });
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/include/c022_cpp_string.cpp" }, .flags = cflags });
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/include/c023_cpp_nested_structs.cpp" }, .flags = cflags });
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/include/c024_cpp_bitfields.cpp" }, .flags = cflags });
+    lib.addCSourceFile(.{ .file = b.path("./test_cases/include/c005_inheritance.cpp"), .flags = cflags });
+    lib.addCSourceFile(.{ .file = b.path("./test_cases/include/c013_cpp_vector.cpp"), .flags = cflags });
+    lib.addCSourceFile(.{ .file = b.path("./test_cases/include/c022_cpp_string.cpp"), .flags = cflags });
+    lib.addCSourceFile(.{ .file = b.path("./test_cases/include/c023_cpp_nested_structs.cpp"), .flags = cflags });
+    lib.addCSourceFile(.{ .file = b.path("./test_cases/include/c024_cpp_bitfields.cpp"), .flags = cflags });
     //lib.addCSourceFile("./test_cases/c001_c_structs_glue.cpp", cflags);
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c005_inheritance_glue.cpp" }, .flags = cflags });
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c009_enum_flags_glue.cpp" }, .flags = cflags });
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c011_index_this_glue.cpp" }, .flags = cflags });
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c013_cpp_vector_glue.cpp" }, .flags = cflags });
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c022_cpp_string_glue.cpp" }, .flags = cflags });
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c023_cpp_nested_structs_glue.cpp" }, .flags = cflags });
-    lib.addCSourceFile(.{ .file = .{ .path = "./test_cases/c024_cpp_bitfields_glue.cpp" }, .flags = cflags });
+    lib.addCSourceFile(.{ .file = b.path("./test_cases/c005_inheritance_glue.cpp"), .flags = cflags });
+    lib.addCSourceFile(.{ .file = b.path("./test_cases/c009_enum_flags_glue.cpp"), .flags = cflags });
+    lib.addCSourceFile(.{ .file = b.path("./test_cases/c011_index_this_glue.cpp"), .flags = cflags });
+    lib.addCSourceFile(.{ .file = b.path("./test_cases/c013_cpp_vector_glue.cpp"), .flags = cflags });
+    lib.addCSourceFile(.{ .file = b.path("./test_cases/c022_cpp_string_glue.cpp"), .flags = cflags });
+    lib.addCSourceFile(.{ .file = b.path("./test_cases/c023_cpp_nested_structs_glue.cpp"), .flags = cflags });
+    lib.addCSourceFile(.{ .file = b.path("./test_cases/c024_cpp_bitfields_glue.cpp"), .flags = cflags });
     test_cases.linkLibrary(lib);
 
-    const cpp_mod = b.addModule("cpp", .{ .root_source_file = .{ .path = "src/cpp.zig" } });
+    const cpp_mod = b.addModule("cpp", .{ .root_source_file = b.path("src/cpp.zig") });
     test_cases.root_module.addImport("cpp", cpp_mod);
 
     const run_test_cases = b.addRunArtifact(test_cases);
