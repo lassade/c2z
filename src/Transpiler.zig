@@ -559,7 +559,9 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         name = v.string;
     } else if (self.scope.tag == .class) {
         is_generated_name = true;
-        name = try fmt.allocPrint(self.allocator, "__{s}{d}", .{
+        // NOTE: Not certain this needs to survive forever but it's not much memory in the grand scope
+        // so using the global arena is fast and simple.
+        name = try fmt.allocPrint(self.arena.allocator(), "__{s}{d}", .{
             if (is_union) "Union" else "Struct",
             self.scope.fields,
         });
@@ -570,7 +572,6 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
         _ = try self.namespace.unnamed_nodes.put(id, value.*);
         return;
     }
-    defer if (is_generated_name) self.allocator.free(name);
 
     const inner = value.object.getPtr("inner");
     if (inner == null) {
