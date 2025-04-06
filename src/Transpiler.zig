@@ -1513,7 +1513,7 @@ fn visitCXXMethodDecl(self: *Self, value: *const json.Value, this_opt: ?[]const 
                 } else {
                     if (operator != null) {
                         // cursed way of extending functionality by externally overloading operators
-                        var it = mem.split(u8, c_call.items, ", ");
+                        var it = mem.splitSequence(u8, c_call.items, ", ");
                         const a = it.next().?;
                         const b = it.next().?;
                         if (mem.eql(u8, operator.?, "[]") or mem.eql(u8, operator.?, "()")) {
@@ -2936,7 +2936,7 @@ fn mangle(self: *Self, name: []const u8, overload: ?usize) ![]u8 {
     var o = tmp.writer();
 
     _ = try o.print("_{d}_", .{if (overload) |i| i else 1});
-    var it = mem.split(u8, self.namespace.full_path.items, "::");
+    var it = mem.splitSequence(u8, self.namespace.full_path.items, "::");
     while (it.next()) |value| {
         if (value.len != 0) _ = try o.print("{s}_", .{value});
     }
@@ -2996,7 +2996,7 @@ fn transpileType(self: *Self, tname: []const u8) ![]u8 {
         return try fmt.allocPrint(self.allocator, "{s}{s}{s}", .{ ptr, constness, inner });
     } else if (mem.indexOf(u8, ttname, "struct at ") != null or
         mem.indexOf(u8, ttname, "union at ") != null) // or
-        // mem.indexOf(u8, ttname, "enum at ") != null)
+    // mem.indexOf(u8, ttname, "enum at ") != null)
     {
         // "qualType": "RootStruct::(anonymous union at bitfieldtest.h:4:5)"
         // "qualType": "RootStruct::(anonymous struct at bitfieldtest.h:25:5)"

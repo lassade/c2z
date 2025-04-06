@@ -29,7 +29,7 @@ pub fn targetSwitch(
 /// optional c enumeration extension functions
 pub fn FlagsMixin(comptime FlagsType: type) type {
     return struct {
-        pub const IntType = @typeInfo(FlagsType).Struct.fields[0].type;
+        pub const IntType = @typeInfo(FlagsType).@"struct".fields[0].type;
         pub inline fn init(flags: IntType) FlagsType {
             return .{ .bits = flags };
         }
