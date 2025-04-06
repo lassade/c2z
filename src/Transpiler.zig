@@ -861,6 +861,11 @@ fn visitCXXRecordDecl(self: *Self, value: *const json.Value) !void {
             self.out = functions.writer();
             try self.visitFriendDecl(item);
             self.out = out;
+        } else if (mem.eql(u8, kind, "AlignedAttr")) {
+            const item_inner = item.object.getPtr("inner");
+            const aligned_value_str = item_inner.?.array.items[0].object.get("value").?.string;
+            const aligned_value = try std.fmt.parseInt(u64, aligned_value_str, 0);
+            try self.out.print("_ : void align({any}), // c2z: struct alignment\n", .{aligned_value});
         } else {
             self.nodes_visited -= 1;
             log.err("unhandled `{s}` in {s} `{s}`", .{ kind, tag, name });
